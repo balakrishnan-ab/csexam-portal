@@ -6,55 +6,15 @@ from datetime import datetime
 # 1. பக்க அமைப்பு
 st.set_page_config(page_title="Exam Portal - GHSS Devanankurichi", layout="wide")
 
-# --- CSS: பெரிய பொத்தான்கள் மற்றும் தலைப்பு ---
+# --- CSS: உயர்தர வடிவமைப்பு ---
 st.markdown("""
     <style>
     .block-container { padding-top: 2rem !important; }
-    
-    /* பள்ளித் தலைப்பு */
-    .main-header {
-        display: flex;
-        justify-content: space-between;
-        align-items: center;
-        background-color: #f0f7ff;
-        padding: 25px;
-        border-radius: 15px;
-        border: 2px solid #1E88E5;
-        margin-bottom: 25px;
-    }
+    .school-header { text-align: center; background-color: #f0f7ff; padding: 25px; border-radius: 15px; border: 2px solid #1E88E5; margin-bottom: 20px; }
     .school-name { color: #0D47A1; font-size: 3rem !important; font-weight: bold; margin: 0; }
-    .exam-detail { font-size: 1.4rem; color: #333; font-weight: bold; }
-    .q-counter-box {
-        background-color: white;
-        border: 3px solid #000;
-        padding: 15px 25px;
-        border-radius: 10px;
-        font-size: 1.8rem;
-        font-weight: bold;
-        text-align: center;
-    }
-
-    /* அனைத்து முக்கிய பொத்தான்களையும் நீளமாக்க (Full Width) */
-    div.stButton > button {
-        width: 100% !important;
-        height: 60px !important; /* உயரம் அதிகரிப்பு */
-        font-size: 1.2rem !important;
-        font-weight: bold !important;
-        border-radius: 10px !important;
-        box-shadow: 0 4px 8px rgba(0,0,0,0.1);
-    }
-
-    /* வினா பலக வட்ட பொத்தான்கள் மட்டும் (சிறியதாக இருக்க) */
-    div[data-testid="stColumn"] button[key*="nav_btn_"] {
-        border-radius: 50% !important;
-        width: 50px !important;
-        height: 50px !important;
-        font-size: 1rem !important;
-        margin: 5px auto !important;
-    }
-
-    .nav-wrapper { display: flex; flex-direction: column; align-items: center; }
-    .status-indicator { width: 12px; height: 12px; border-radius: 50%; margin-bottom: 4px; border: 1px solid #ccc; }
+    .q-counter-box { display: inline-block; background-color: #1E88E5; color: white; padding: 5px 15px; border-radius: 8px; font-size: 1.2rem; margin-left: 20px; vertical-align: middle; }
+    div.stButton > button { width: 100% !important; height: 50px !important; font-weight: bold !important; font-size: 1.1rem !important; border-radius: 10px !important; }
+    .result-card { padding: 15px; border-radius: 10px; margin-bottom: 10px; border-left: 10px solid; background-color: #f9f9f9; }
     </style>
     """, unsafe_allow_html=True)
 
@@ -68,6 +28,7 @@ def get_data(url):
 
 SHEET_URL = "https://docs.google.com/spreadsheets/d/e/2PACX-1vSQwApSEm-2EfhP7PVMuZVBUcrD0XGr3tMXMTpX2j-9m5gB3xPgECBEsXjqTtBmW7lnFcrIVuOycN7V/pub?output=csv"
 
+# செஷன் ஸ்டேட் மேலாண்மை
 if 'page' not in st.session_state: st.session_state.page = 'login'
 if 'user_answers' not in st.session_state: st.session_state.user_answers = {}
 if 'visited' not in st.session_state: st.session_state.visited = set()
@@ -79,7 +40,6 @@ try:
     df = get_data(SHEET_URL)
     if not df.empty:
         total_qs = len(df)
-        
         if st.session_state.shuffled_indices is None:
             indices = list(range(total_qs))
             random.shuffle(indices)
@@ -87,11 +47,10 @@ try:
 
         # --- லாகின் பக்கம் ---
         if st.session_state.page == 'login':
-            st.markdown("<h1 style='text-align:center;'>அரசு மேல்நிலைப்பள்ளி தேவனாங்குறிச்சி</h1>", unsafe_allow_html=True)
+            st.markdown("<h1 style='text-align:center; color:#1E88E5;'>அரசு மேல்நிலைப்பள்ளி தேவனாங்குறிச்சி</h1>", unsafe_allow_html=True)
             col1, col2, col3 = st.columns([1,2,1])
             with col2:
-                name = st.text_input("மாணவர் பெயர்:", key="login_v16")
-                # இந்த பொத்தான் இப்போது நீளமாக இருக்கும்
+                name = st.text_input("மாணவர் பெயர்:", key="main_name")
                 if st.button("தேர்வைத் தொடங்கு ➡️", type="primary"):
                     if name: st.session_state.user_name = name; st.session_state.page = 'quiz'; st.rerun()
 
@@ -103,21 +62,17 @@ try:
             st.session_state.visited.add(idx)
             
             st.markdown(f"""
-            <div class="main-header">
-                <div class="school-info">
-                    <p class="school-name">அரசு மேல்நிலைப்பள்ளி - தேவனாங்குறிச்சி</p>
-                    <p class="exam-detail">அலகுத் தேர்வு - 2026</p>
-                </div>
-                <div class="q-counter-box">வினா {q_ptr + 1} / {total_qs}</div>
+            <div class="school-header">
+                <span class="school-name">அரசு மேல்நிலைப்பள்ளி தேவனாங்குறிச்சி</span>
+                <span class="q-counter-box">வினா {q_ptr + 1} / {total_qs}</span>
+                <p style="margin-top:10px; font-weight:bold;">பாடம்: {row.get('Subject Code', 'கணினி அறிவியல்')} | அலகு: {row.get('Lesson Code', 'L-1')}</p>
             </div>
             """, unsafe_allow_html=True)
 
             col_main, col_nav = st.columns([7, 3])
-            
             with col_main:
-                st.caption(f"மாணவர்: {st.session_state.user_name} | பாடம்: {row.get('Subject Code', 'CS')}")
+                st.caption(f"மாணவர்: {st.session_state.user_name}")
                 st.write(f"### {row['Question Text']}")
-                
                 opts = [str(row['Ans-1']), str(row['Ans-2']), str(row['Ans-3']), str(row['Ans-4'])]
                 if f"opts_{idx}" not in st.session_state:
                     random.shuffle(opts)
@@ -130,7 +85,6 @@ try:
                 st.checkbox("🤔 சந்தேகம் (Mark for Review)", value=(idx in st.session_state.marked), key=f"m_{idx}", on_change=lambda: st.session_state.marked.add(idx) if st.session_state[f"m_{idx}"] else st.session_state.marked.discard(idx))
 
                 st.divider()
-                # பொத்தான்கள் இப்போது மிக நீளமாக இருக்கும்
                 n1, n2, n3 = st.columns([1, 1, 1])
                 with n1:
                     if q_ptr > 0 and st.button("⬅️ முந்தைய"): st.session_state.current_q_idx -= 1; st.rerun()
@@ -152,21 +106,67 @@ try:
                         if ix in st.session_state.marked: dot = "#FF9800"
                         elif ix in st.session_state.user_answers: dot = "#28a745"
                         elif ix in st.session_state.visited: dot = "#2196F3"
-                        st.markdown(f'<div class="nav-wrapper"><div class="status-indicator" style="background-color:{dot};"></div></div>', unsafe_allow_html=True)
+                        st.markdown(f'<div style="text-align:center;"><div style="width:12px; height:12px; border-radius:50%; background-color:{dot}; margin:auto;"></div></div>', unsafe_allow_html=True)
                         if st.button(f"{i+1}", key=f"nav_btn_{i}", type="primary" if i==q_ptr else "secondary"):
                             st.session_state.current_q_idx = i; st.rerun()
 
-        # --- மதிப்பீடு / சான்றிதழ் (வழக்கம் போல) ---
-        elif st.session_state.page == 'choice' or st.session_state.page == 'evaluate':
-             # (மதிப்பீடு மற்றும் சான்றிதழ் கோடிங் இங்கே வரும் - முந்தைய பதிப்பில் இருந்தது போல)
-             if st.session_state.page == 'choice':
-                st.markdown("<div style='text-align:center; padding:30px;'><h2>🎯 பகுதி நிறைவுற்றது</h2>", unsafe_allow_html=True)
-                if st.button("மதிப்பீடு செய் ✅", type="primary"): st.session_state.page = 'evaluate'; st.rerun()
-                if (st.session_state.current_q_idx + 1) < total_qs:
-                    if st.button("அடுத்த பகுதிக்குச் செல் ➡️"): st.session_state.current_q_idx += 1; st.session_state.page = 'quiz'; st.rerun()
-             elif st.session_state.page == 'evaluate':
-                 st.write("மதிப்பீடு விவரங்கள் தயாராகின்றன...")
-                 st.session_state.page = 'evaluate_final' # மதிப்பீட்டுப் பக்கத்திற்கு மாற்றுதல்
-                 st.rerun()
+        # --- இடைநிலைப் பக்கம் (Choice) ---
+        elif st.session_state.page == 'choice':
+            st.markdown("<div style='text-align:center; padding:50px;'><h2>🎯 பகுதி நிறைவுற்றது</h2>", unsafe_allow_html=True)
+            if st.button("மதிப்பீடு செய் (Result) ✅", type="primary"): 
+                st.session_state.page = 'evaluate_view'; st.rerun()
+            if (st.session_state.current_q_idx + 1) < total_qs:
+                if st.button("அடுத்த பகுதிக்குச் செல் ➡️"):
+                    st.session_state.current_q_idx += 1; st.session_state.page = 'quiz'; st.rerun()
+            st.markdown("</div>", unsafe_allow_html=True)
+
+        # --- மதிப்பீடு பக்கம் (Evaluation View) ---
+        elif st.session_state.page == 'evaluate_view':
+            st.header(f"📊 தேர்வு மதிப்பீடு: {st.session_state.user_name}")
+            score = 0
+            limit = st.session_state.current_q_idx + 1
+            for i in range(limit):
+                idx = st.session_state.shuffled_indices[i]
+                u_ans = st.session_state.user_answers.get(idx, "பதிலளிக்கவில்லை")
+                correct = str(df.iloc[idx]['Answer'])
+                is_ok = (str(u_ans) == correct)
+                if is_ok: score += 1
+                
+                clr = "#28a745" if is_ok else "#dc3545"
+                st.markdown(f"""
+                <div class="result-card" style="border-left-color:{clr};">
+                    <b>வினா {i+1}:</b> {df.iloc[idx]['Question Text']}<br>
+                    உங்கள் விடை: {u_ans} | சரியான விடை: <b>{correct}</b>
+                </div>
+                """, unsafe_allow_html=True)
+
+            st.divider()
+            st.subheader(f"தற்போதைய மதிப்பெண்: {score} / {limit}")
+            if limit >= total_qs:
+                if st.button("சான்றிதழ் பெற 📜", type="primary"): st.session_state.page = 'certificate'; st.rerun()
+            else:
+                if st.button("அடுத்த பகுதிக்குத் தொடரவும் ➡️", type="primary"):
+                    st.session_state.current_q_idx += 1; st.session_state.page = 'quiz'; st.rerun()
+
+        # --- சான்றிதழ் பக்கம் ---
+        elif st.session_state.page == 'certificate':
+            score = 0
+            for idx in st.session_state.user_answers:
+                if str(st.session_state.user_answers[idx]) == str(df.iloc[idx]['Answer']): score += 1
+            
+            st.balloons()
+            now = datetime.now().strftime("%d-%m-%Y %I:%M %p")
+            st.markdown(f"""
+            <div style="border:15px double #1E88E5; padding:40px; text-align:center; background:white;">
+                <h1 style="color:#1E88E5;">அரசு மேல்நிலைப்பள்ளி - தேவனாங்குறிச்சி</h1>
+                <p>நாமக்கல் மாவட்டம்</p><hr>
+                <p style="font-size:1.4rem;">மாணவர் <b>{st.session_state.user_name}</b> அவர்கள் இப்பள்ளியின் <b>கணினி அறிவியல் பாடத்தில்</b></p>
+                <p style="font-size:1.4rem;">ஒருமதிப்பெண் தேர்வு எழுதி <b>{now}</b> அன்று</p>
+                <h1 style="color:#d32f2f; font-size:4rem;">{score} / {total_qs}</h1>
+                <p style="font-size:1.2rem;">மதிப்பெண்கள் பெற்றுள்ளார்.</p>
+                <p><i>"வெள்ளத் தனைய மலர்நீட்டம் மாந்தர்தம் உள்ளத் தனையது உயர்வு"</i></p>
+            </div>
+            """, unsafe_allow_html=True)
+            if st.button("🔄 மீண்டும் தேர்வு எழுத"): st.session_state.clear(); st.rerun()
 
 except Exception as e: st.error(f"பிழை: {e}")
