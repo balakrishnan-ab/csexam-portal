@@ -4,7 +4,7 @@ import random
 from datetime import datetime
 
 # 1. பக்க அமைப்பு
-st.set_page_config(page_title="12 கணினி அறிவியர் தேர்வு ", layout="wide")
+st.set_page_config(page_title="தேர்வு மையம்", layout="wide")
 
 # --- CSS: வட்ட வடிவ வினா எண்கள் மற்றும் ஸ்டைல் ---
 st.markdown("""
@@ -171,4 +171,10 @@ try:
                 st.rerun()
         else:
             st.balloons()
-            st.markdown(f"""<div class="certificate-box"><h1>வெற்றிச் சான்றிதழ்</h1><p>மாணவர் <b>{st.session_state.user_name}</b></p><h2>{overall_score} / {total_questions}</h2><p>{datetime.now().strftime('%d-%m-%Y')}</p></div>""", unsafe_allow_
+            st.markdown(f"""<div class="certificate-box"><h1>வெற்றிச் சான்றிதழ்</h1><p>மாணவர் <b>{st.session_state.user_name}</b></p><h2>{overall_score} / {total_questions}</h2><p>{datetime.now().strftime('%d-%m-%Y')}</p></div>""", unsafe_allow_html=True)
+            if st.button("மீண்டும் தேர்வு எழுத 🔄"):
+                st.session_state.clear()
+                st.rerun()
+
+except Exception as e:
+    st.error(f"பிழை: {e}")
