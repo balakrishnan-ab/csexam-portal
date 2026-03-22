@@ -148,4 +148,56 @@ try:
                     if is_current:
                         st.markdown(f'<style>button[key="btn_{i}"] {{ background-color: #007bff !important; color: white !important; border-radius: 50% !important; width: 45px !important; height: 45px !important; font-weight: bold !important; border: 2px solid #0056b3 !important; padding: 0 !important; }}</style>', unsafe_allow_html=True)
                     elif is_answered:
-                        st.markdown(f'<style>button[key="btn_{i}"] {{ background-color: #28a745 !important; color: white !important; border-radius: 50% !important; width: 45px !important; height: 45px !important; font-weight: bold !important; border: 2px solid #1e7e34 !important; padding:
+                        st.markdown(f'<style>button[key="btn_{i}"] {{ background-color: #28a745 !important; color: white !important; border-radius: 50% !important; width: 45px !important; height: 45px !important; font-weight: bold !important; border: 2px solid #1e7e34 !important; padding: 0 !important; }}</style>', unsafe_allow_html=True)
+                    else:
+                        st.markdown(f'<style>button[key="btn_{i}"] {{ border-radius: 50% !important; width: 45px !important; height: 45px !important; font-weight: bold !important; border: 2px solid #ccc !important; padding: 0 !important; }}</style>', unsafe_allow_html=True)
+
+                    if st.button(btn_label, key=f"btn_{i}"):
+                        st.session_state.current_q_idx = i
+                        st.rerun()
+
+    # --- 3. மற்ற பக்கங்கள் (மதிப்பீடு/சான்றிதழ்) ---
+    elif st.session_state.page == 'choice':
+        st.subheader("📍 இந்தப் பகுதி நிறைவுற்றது")
+        c1, c2 = st.columns(2)
+        with c1:
+            if st.button("மதிப்பீடு செய் (Result) ✅", use_container_width=True, type="primary"):
+                st.session_state.page = 'evaluate'
+                st.rerun()
+        with c2:
+            if (st.session_state.current_q_idx + 1) < total_qs:
+                if st.button("அடுத்த பகுதிக்குச் செல் ➡️", use_container_width=True):
+                    st.session_state.current_q_idx += 1
+                    st.session_state.page = 'quiz'
+                    st.rerun()
+            else: st.warning("இதுவே கடைசிப் பகுதி.")
+
+    elif st.session_state.page == 'evaluate':
+        st.header(f"📊 தேர்வு மதிப்பீடு: {st.session_state.user_name}")
+        overall_score = 0
+        limit = st.session_state.current_q_idx + 1
+        for i in range(limit):
+            idx = st.session_state.shuffled_indices[i]
+            u_ans = st.session_state.user_answers.get(idx, "பதிலளிக்கவில்லை")
+            correct = str(df.iloc[idx]['Answer'])
+            is_ok = (u_ans == correct)
+            if is_ok: overall_score += 1
+            with st.expander(f"வினா {i+1}: {'✅ சரி' if is_ok else '❌ தவறு'}"):
+                st.write(f"**கேள்வி:** {df.iloc[idx]['Question Text']}")
+                st.write(f"உங்கள் விடை: {u_ans} | சரியான விடை: {correct}")
+
+        st.divider()
+        if limit < total_qs:
+            if st.button("அடுத்த பகுதிக்குத் தொடரவும் ➡️", type="primary"):
+                st.session_state.current_q_idx += 1
+                st.session_state.page = 'quiz'
+                st.rerun()
+        else:
+            st.balloons()
+            st.markdown(f"""<div class="certificate-box"><h1>வெற்றிச் சான்றிதழ்</h1><p>மாணவர் <b>{st.session_state.user_name}</b></p><h2>{overall_score} / {total_qs}</h2><p>{datetime.now().strftime('%d-%m-%Y')}</p></div>""", unsafe_allow_html=True)
+            if st.button("மீண்டும் தேர்வு எழுத 🔄"):
+                st.session_state.clear()
+                st.rerun()
+
+except Exception as e:
+    st.error(f"பிழை: {e}")
