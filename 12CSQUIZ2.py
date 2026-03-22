@@ -4,7 +4,7 @@ import random
 from datetime import datetime
 
 # 1. பக்க அமைப்பு
-st.set_page_config(page_title="தேர்வு மையம்", layout="wide")
+st.set_page_config(page_title="12 கணினி அறிவியர் தேர்வு ", layout="wide")
 
 # --- CSS: வட்ட வடிவ வினா எண்கள் மற்றும் ஸ்டைல் ---
 st.markdown("""
@@ -40,7 +40,7 @@ def get_data(url):
     return data
 
 # உங்கள் கூகிள் ஷீட் CSV லிங்க்
-SHEET_URL = "https://docs.google.com/spreadsheets/d/e/2PACX-1vT5qK7E_K_z_BvT0y_Q_mX_f_Y_Z_I_I_I_I_I_I_I_I_I_I_I/pub?output=csv" 
+SHEET_URL = "https://docs.google.com/spreadsheets/d/e/2PACX-1vSQwApSEm-2EfhP7PVMuZVBUcrD0XGr3tMXMTpX2j-9m5gB3xPgECBEsXjqTtBmW7lnFcrIVuOycN7V/pub?output=csv" 
 
 # செஷன் ஸ்டேட் மேலாண்மை
 if 'page' not in st.session_state: st.session_state.page = 'login'
