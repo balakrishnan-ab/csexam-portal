@@ -6,18 +6,22 @@ from datetime import datetime
 # 1. பக்க அமைப்பு
 st.set_page_config(page_title="GHSS Devanankurichi - Pro Exam Portal", layout="wide")
 
-# --- CSS: மேம்படுத்தப்பட்ட வண்ணக் குறியீடுகள் ---
+# --- CSS: சான்றிதழ் மற்றும் பலக வடிவமைப்பு ---
 st.markdown("""
     <style>
     .school-header { text-align: center; background-color: #f0f7ff; padding: 20px; border-radius: 10px; border: 2px solid #1E88E5; margin-bottom: 20px; }
     .q-box { border: 1px solid #ddd; padding: 20px; border-radius: 10px; background: white; margin-bottom: 10px; }
     
-    /* வினா பலக பொத்தான்கள் பொதுவானவை */
-    div.stButton > button { width: 100% !important; font-weight: bold !important; border-radius: 8px !important; transition: 0.3s; }
+    /* சான்றிதழ் வடிவமைப்பு - முழுமையாகத் தெரிய */
+    .cert-container {
+        border: 15px double #1E88E5; padding: 30px; text-align: center; 
+        background-color: white; color: #333; margin: 10px auto; max-width: 850px;
+    }
+    .cert-title { color: #1E88E5; font-size: 2.2rem; font-weight: bold; margin-bottom: 5px; }
+    .score-big { font-size: 4rem; font-weight: bold; color: #d32f2f; margin: 20px 0; }
     
-    /* சான்றிதழ் */
-    .certificate-border { border: 10px double #1E88E5; padding: 30px; text-align: center; background: #fff; margin-bottom: 20px; }
-    .review-card { padding: 15px; border-radius: 8px; margin-bottom: 10px; border-left: 8px solid; }
+    /* வினா பலக பொத்தான்கள் */
+    div.stButton > button { width: 100% !important; border-radius: 5px !important; height: 50px !important; }
     </style>
     """, unsafe_allow_html=True)
 
@@ -50,49 +54,42 @@ try:
             name = st.text_input("மாணவர் பெயர்:")
             
             if not df_raw.empty:
-                # பயிற்று மொழி (Medium) - CSV-ல் 'Medium' காலம் இருந்தால் அதிலிருந்து எடுக்கும்
-                if 'Medium' in df_raw.columns:
-                    med_list = sorted(df_raw['Medium'].unique().tolist())
-                else:
-                    med_list = ["தமிழ்", "English"] # காலம் இல்லையெனில் மேனுவல்
+                # பயிற்று மொழி
+                med_list = sorted(df_raw['Medium'].unique().tolist()) if 'Medium' in df_raw.columns else ["தமிழ்", "English"]
+                sel_med = st.selectbox("பயிற்று மொழி (Medium):", med_list)
                 
-                sel_med = st.selectbox("பயிற்று மொழி (Medium) தேர்ந்தெடுக்கவும்:", med_list)
+                # பாடம்
+                df_f = df_raw[df_raw['Medium'] == sel_med] if 'Medium' in df_raw.columns else df_raw
+                sub_list = sorted(df_f['Subject Code'].unique().tolist())
+                sel_sub = st.selectbox("பாடம் (Subject):", sub_list)
                 
-                # பாடம் (Subject)
-                df_filtered = df_raw.copy()
-                if 'Medium' in df_raw.columns:
-                    df_filtered = df_filtered[df_filtered['Medium'] == sel_med]
-                
-                sub_list = sorted(df_filtered['Subject Code'].unique().tolist())
-                sel_sub = st.selectbox("பாடம் (Subject) தேர்ந்தெடுக்கவும்:", sub_list)
-                
-                df_sub = df_filtered[df_filtered['Subject Code'] == sel_sub]
+                df_sub = df_f[df_f['Subject Code'] == sel_sub]
                 unit_list = sorted(df_sub['Lesson Code'].unique().tolist())
-                sel_units = st.multiselect("அலகுகள் (விருப்பமானவை):", unit_list)
+                sel_units = st.multiselect("அலகுகள்:", unit_list)
                 
                 final_df = df_sub.copy()
                 if sel_units: final_df = final_df[final_df['Lesson Code'].isin(sel_units)]
                 
                 max_q = len(final_df)
-                num_q = st.number_input(f"வினாக்கள் எண்ணிக்கை (அதிகபட்சம் {max_q}):", 1, max_q, min(15, max_q))
+                num_q = st.number_input(f"வினாக்கள் எண்ணிக்கை (Max: {max_q}):", 1, max_q, min(15, max_q))
 
                 if st.button("தேர்வைத் தொடங்கு ➡️", type="primary"):
                     if name:
                         st.session_state.user_name = name
                         st.session_state.selected_subject = sel_sub
+                        st.session_state.total_questions_selected = num_q
                         indices = list(range(len(final_df)))
                         random.shuffle(indices)
                         st.session_state.filtered_df = final_df.iloc[indices[:num_q]].reset_index(drop=True)
                         st.session_state.page = 'quiz'
                         st.rerun()
-                    else: st.error("பெயரை உள்ளிடவும்!")
 
     # --- 2. வினாடி வினா பக்கம் ---
     elif st.session_state.page == 'quiz':
         df = st.session_state.filtered_df
         q_idx = st.session_state.current_q_idx
         row = df.iloc[q_idx]
-        st.session_state.visited.add(q_idx) # பார்த்த வினா
+        st.session_state.visited.add(q_idx)
 
         st.markdown(f'<div class="school-header"><h3>{st.session_state.selected_subject} - தேர்வு</h3></div>', unsafe_allow_html=True)
 
@@ -105,14 +102,11 @@ try:
                 random.shuffle(opts)
                 st.session_state[f"opts_{q_idx}"] = opts
             
-            # விடை தேர்வு
             current_ans = st.session_state.user_answers.get(q_idx)
-            ans = st.radio("சரியான விடை:", st.session_state[f"opts_{q_idx}"], key=f"r_{q_idx}", 
+            ans = st.radio("விடை:", st.session_state[f"opts_{q_idx}"], key=f"r_{q_idx}", 
                            index=st.session_state[f"opts_{q_idx}"].index(current_ans) if current_ans in st.session_state[f"opts_{q_idx}"] else None)
-            
-            if ans: st.session_state.user_answers[q_idx] = ans
+            if ans: st.session_state.user_answers[q_ptr := q_idx] = ans
 
-            # சந்தேகம் (Mark for Review)
             is_m = st.checkbox("🚩 சந்தேகம் (Mark for Review)", value=(q_idx in st.session_state.marked), key=f"m_{q_idx}")
             if is_m: st.session_state.marked.add(q_idx)
             else: st.session_state.marked.discard(q_idx)
@@ -124,56 +118,75 @@ try:
             with b2:
                 if q_idx < len(df)-1 and st.button("அடுத்தது ➡️"): st.session_state.current_q_idx += 1; st.rerun()
             with b3:
-                if st.button("🏁 தேர்வை முடி", type="primary"): st.session_state.page = 'result'; st.rerun()
+                if st.button("🏁 முடி (Submit)", type="primary"): st.session_state.page = 'result'; st.rerun()
 
         with n_col:
             st.markdown("##### 🔢 வினா பலகம்")
-            st.markdown("<small>🟢 விடை | 🔵 பார்த்தது | 🟠 சந்தேகம் | ⚪ பார்க்காதது</small>", unsafe_allow_html=True)
-            grid = st.columns(4)
+            grid = st.columns(3) # மொபைலில் 3 சரியாக இருக்கும்
             for i in range(len(df)):
-                # வண்ணத் தர்க்கம் (Priority: Marked > Answered > Visited)
-                bg = "#f8f9fa" # Default (White)
-                txt = "#333"
+                # குறியீடுகள் மற்றும் வண்ணத் தர்க்கம்
+                label = f"{i+1}"
+                bg = "#f8f9fa"; txt = "#333"
                 
                 if i in st.session_state.marked:
-                    bg = "#FF9800"; txt = "white" # Orange
+                    label = f"🚩 {i+1}"; bg = "#FF9800"; txt = "white"
                 elif i in st.session_state.user_answers:
-                    bg = "#28a745"; txt = "white" # Green
+                    label = f"✅ {i+1}"; bg = "#28a745"; txt = "white"
                 elif i in st.session_state.visited:
-                    bg = "#2196F3"; txt = "white" # Blue
-                
-                # தற்போதைய வினா பார்டர்
-                border = "2px solid #000" if i == q_idx else "1px solid #ccc"
+                    label = f"👁️ {i+1}"; bg = "#2196F3"; txt = "white"
+                else:
+                    label = f"⬜ {i+1}"
 
-                with grid[i % 4]:
-                    if st.button(f"{i+1}", key=f"btn_{i}"):
-                        st.session_state.current_q_idx = i
-                        st.rerun()
-                    # நேரடி CSS இன்ஜெக்ஷன் (வண்ணம் மாற இதுவே சிறந்த வழி)
-                    st.markdown(f"""<style>button[key='btn_{i}'] {{ background-color: {bg} !important; color: {txt} !important; border: {border} !important; }}</style>""", unsafe_allow_html=True)
+                with grid[i % 3]:
+                    if st.button(label, key=f"btn_{i}"):
+                        st.session_state.current_q_idx = i; st.rerun()
+                    # வண்ண மாற்றம் குறுக்கிடாமல் இருக்க CSS Injection
+                    st.markdown(f"<style>button[key='btn_{i}'] {{ background-color: {bg} !important; color: {txt} !important; border: {'3px solid black' if i==q_idx else '1px solid #ccc'} !important; }}</style>", unsafe_allow_html=True)
 
-    # --- 3. முடிவு & மறுபார்வை ---
+    # --- 3. முடிவு & சான்றிதழ் ---
     elif st.session_state.page == 'result':
         df = st.session_state.filtered_df
         score = sum(1 for i in range(len(df)) if str(st.session_state.user_answers.get(i)) == str(df.iloc[i]['Answer']))
         st.balloons()
-        st.markdown(f'<div class="certificate-border"><h2>அரசு மேல்நிலைப்பள்ளி தேவனாங்குறிச்சி</h2><hr><h4>மாணவர்: {st.session_state.user_name}</h4><h1>{score} / {len(df)}</h1></div>', unsafe_allow_html=True)
         
+        now = datetime.now().strftime("%d-%m-%Y %I:%M %p")
+        # சான்றிதழ் முழுமையாகத் தெரியும்படி HTML திருத்தம்
+        st.markdown(f"""
+        <div class="cert-container">
+            <p class="cert-title">அரசு மேல்நிலைப்பள்ளி - தேவனாங்குறிச்சி</p>
+            <p style="font-size:1.2rem; margin:0;">நாமக்கல் மாவட்டம்</p>
+            <hr style="border:1px solid #1E88E5; width:80%;">
+            <p style="font-size:1.5rem; margin:20px 0;">மாணவர் <b>{st.session_state.user_name}</b> அவர்கள் இப்பள்ளியின் <b>{st.session_state.selected_subject}</b> பாடத்தில்</p>
+            <p style="font-size:1.3rem;">ஒருமதிப்பெண் தேர்வு எழுதிப் பெற்ற மதிப்பெண்கள்</p>
+            <div class="score-big">{score} / {len(df)}</div>
+            <p style="font-size:1.1rem; color:#555;">தேதி: {now}</p>
+            <div style="margin-top:30px; font-style:italic; color:#666;">
+                "வெள்ளத் தனைய மலர்நீட்டம் மாந்தர்தம் உள்ளத் தனையது உயர்வு"
+            </div>
+        </div>
+        """, unsafe_allow_html=True)
+
+        if st.button("🔍 விடைகளை மறுபார்வை செய்ய (Review)"):
+            st.session_state.page = 'review'; st.rerun()
+        if st.button("🔄 புதிய தேர்வு எழுத"):
+            st.session_state.clear(); st.rerun()
+
+    # --- 4. மறுபார்வை பக்கம் ---
+    elif st.session_state.page == 'review':
+        df = st.session_state.filtered_df
         st.subheader("🔍 வினா வாரியான மறுபார்வை")
         for i in range(len(df)):
             u = st.session_state.user_answers.get(i, "பதிலளிக்கவில்லை")
             c = str(df.iloc[i]['Answer'])
             is_c = (str(u) == c)
+            clr = "#28a745" if is_c else "#dc3545"
+            bgc = "#f4fff6" if is_c else "#fff5f5"
             
-            bc = "border-left: 8px solid " + ("#28a745;" if is_c else "#dc3545;")
-            bgc = "background-color: " + ("#f4fff6;" if is_c else "#fff5f5;")
-            
-            st.markdown(f"""<div class="review-card" style="{bc} {bgc}">
+            st.markdown(f"""<div style="padding:15px; border-radius:10px; margin-bottom:10px; border-left:8px solid {clr}; background-color:{bgc};">
                 <b>வினா {i+1}:</b> {df.iloc[i]['Question Text']}<br>
-                உங்கள் விடை: <span style="color:{'green' if is_c else 'red'}">{u}</span><br>
-                {"" if is_c else f"<span style='color:green'>சரியான விடை: {c}</span>"}
+                உங்கள் விடை: <span style="color:{clr}">{u}</span><br>
+                {"" if is_c else f"<span style='color:#28a745'>சரியான விடை: {c}</span>"}
             </div>""", unsafe_allow_html=True)
-
-        if st.button("🔄 மீண்டும் எழுத"): st.session_state.clear(); st.rerun()
+        if st.button("⬅️ முடிவுகளுக்குச் செல்ல"): st.session_state.page = 'result'; st.rerun()
 
 except Exception as e: st.error(f"Error: {e}")
