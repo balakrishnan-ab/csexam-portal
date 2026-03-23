@@ -137,4 +137,43 @@ try:
                 
                 if i in st.session_state.marked:
                     bg = "#FF9800"; txt = "white" # Orange
-                elif i in
+                elif i in st.session_state.user_answers:
+                    bg = "#28a745"; txt = "white" # Green
+                elif i in st.session_state.visited:
+                    bg = "#2196F3"; txt = "white" # Blue
+                
+                # தற்போதைய வினா பார்டர்
+                border = "2px solid #000" if i == q_idx else "1px solid #ccc"
+
+                with grid[i % 4]:
+                    if st.button(f"{i+1}", key=f"btn_{i}"):
+                        st.session_state.current_q_idx = i
+                        st.rerun()
+                    # நேரடி CSS இன்ஜெக்ஷன் (வண்ணம் மாற இதுவே சிறந்த வழி)
+                    st.markdown(f"""<style>button[key='btn_{i}'] {{ background-color: {bg} !important; color: {txt} !important; border: {border} !important; }}</style>""", unsafe_allow_html=True)
+
+    # --- 3. முடிவு & மறுபார்வை ---
+    elif st.session_state.page == 'result':
+        df = st.session_state.filtered_df
+        score = sum(1 for i in range(len(df)) if str(st.session_state.user_answers.get(i)) == str(df.iloc[i]['Answer']))
+        st.balloons()
+        st.markdown(f'<div class="certificate-border"><h2>அரசு மேல்நிலைப்பள்ளி தேவனாங்குறிச்சி</h2><hr><h4>மாணவர்: {st.session_state.user_name}</h4><h1>{score} / {len(df)}</h1></div>', unsafe_allow_html=True)
+        
+        st.subheader("🔍 வினா வாரியான மறுபார்வை")
+        for i in range(len(df)):
+            u = st.session_state.user_answers.get(i, "பதிலளிக்கவில்லை")
+            c = str(df.iloc[i]['Answer'])
+            is_c = (str(u) == c)
+            
+            bc = "border-left: 8px solid " + ("#28a745;" if is_c else "#dc3545;")
+            bgc = "background-color: " + ("#f4fff6;" if is_c else "#fff5f5;")
+            
+            st.markdown(f"""<div class="review-card" style="{bc} {bgc}">
+                <b>வினா {i+1}:</b> {df.iloc[i]['Question Text']}<br>
+                உங்கள் விடை: <span style="color:{'green' if is_c else 'red'}">{u}</span><br>
+                {"" if is_c else f"<span style='color:green'>சரியான விடை: {c}</span>"}
+            </div>""", unsafe_allow_html=True)
+
+        if st.button("🔄 மீண்டும் எழுத"): st.session_state.clear(); st.rerun()
+
+except Exception as e: st.error(f"Error: {e}")
