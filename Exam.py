@@ -97,4 +97,74 @@ try:
         st.session_state.visited.add(q_idx)
         st.markdown('<div class="school-header"><p class="school-name">அரசு மேல்நிலைப்பள்ளி தேவனாங்குறிச்சி</p></div>', unsafe_allow_html=True)
         
-        m_
+        m_col, n_col = st.columns([7.5, 2.5])
+        with m_col:
+            st.markdown(f'<div class="q-box"><b>வினா {q_idx + 1} / {len(df)}</b><br><h3>{row["Question Text"]}</h3></div>', unsafe_allow_html=True)
+            opts = st.session_state.options_map[q_idx]
+            curr_ans = st.session_state.user_answers.get(q_idx)
+            ans = st.radio("விடை:", opts, key=f"r_{q_idx}", index=opts.index(curr_ans) if curr_ans in opts else None)
+            if ans: st.session_state.user_answers[q_idx] = ans
+            st.checkbox("🚩 சந்தேகம் (Mark for Review)", value=(q_idx in st.session_state.marked), key=f"m_{q_idx}", on_change=lambda: st.session_state.marked.add(q_idx) if st.session_state[f"m_{q_idx}"] else st.session_state.marked.discard(q_idx))
+            st.divider()
+            b1, b2, b3 = st.columns(3)
+            with b1: 
+                if q_idx > 0 and st.button("⬅️ முந்தைய"): st.session_state.current_q_idx -= 1; st.rerun()
+            with b2:
+                if q_idx < len(df)-1 and st.button("அடுத்தது ➡️"): st.session_state.current_q_idx += 1; st.rerun()
+            with b3:
+                if st.button("🏁 முடி (Submit)", type="primary"): st.session_state.page = 'result'; st.rerun()
+        
+        with n_col:
+            st.markdown("<div class='nav-container'>", unsafe_allow_html=True)
+            st.markdown("<p style='text-align:center; font-weight:bold;'>🔢 வினா பலகம்</p>", unsafe_allow_html=True)
+            # 5 காலம்களாகப் பிரித்தல் (5x5 Grid)
+            grid = st.columns(5)
+            for i in range(len(df)):
+                lbl = f"{i+1}"; bg = "#f8f9fa"; txt = "#333"
+                is_m = i in st.session_state.marked; is_a = i in st.session_state.user_answers
+                
+                if is_m and is_a: lbl = f"🚩"; bg = "#673AB7"; txt = "white"
+                elif is_m: lbl = f"🚩"; bg = "#FF9800"; txt = "white"
+                elif is_a: lbl = f"✅"; bg = "#28a745"; txt = "white"
+                elif i in st.session_state.visited: bg = "#2196F3"; txt = "white"
+                
+                with grid[i % 5]:
+                    if st.button(lbl if lbl=="🚩" or lbl=="✅" else f"{i+1}", key=f"btn_{i}"):
+                        st.session_state.current_q_idx = i; st.rerun()
+                    st.markdown(f"<style>button[key='btn_{i}'] {{ background-color: {bg} !important; color: {txt} !important; border: {'2px solid black' if i==q_idx else '1px solid #ccc'} !important; }}</style>", unsafe_allow_html=True)
+            st.markdown("</div>", unsafe_allow_html=True)
+
+    elif st.session_state.page == 'result':
+        df = st.session_state.filtered_df
+        total = len(df)
+        score = sum(1 for i in range(total) if str(st.session_state.user_answers.get(i)) == str(df.iloc[i]['Answer']))
+        if not st.session_state.score_saved:
+            save_score(st.session_state.user_name, st.session_state.selected_std, st.session_state.selected_subject, score, total)
+            st.session_state.score_saved = True
+        
+        percent = (score / total) * 100
+        if percent >= 80: st.snow()
+        elif percent >= 40: st.balloons()
+        
+        st.markdown(f'<div style="border:10px solid #1E88E5; padding:30px; text-align:center; background-color:white;"><h2>அரசு மேல்நிலைப்பள்ளி - தேவனாங்குறிச்சி</h2><hr><h4>{st.session_state.user_name}</h4><h1 style="font-size:3.5rem; color:#d32f2f;">{score} / {total}</h1></div>', unsafe_allow_html=True)
+        col_res1, col_res2 = st.columns(2)
+        with col_res1:
+            if st.button("🆕 புதிய தேர்வு"): st.session_state.clear(); st.session_state.page = 'login'; st.rerun()
+        with col_res2:
+            if st.button("🔍 மறுபார்வை"): st.session_state.page = 'review'; st.rerun()
+
+    elif st.session_state.page == 'review':
+        df = st.session_state.filtered_df
+        st.markdown("### 🔍 வினா வாரியான மறுபார்வை")
+        for i in range(len(df)):
+            row = df.iloc[i]; u_ans = st.session_state.user_answers.get(i, "பதிலளிக்கவில்லை"); c_ans = str(row['Answer'])
+            st.markdown(f"**வினா {i+1}: {row['Question Text']}**")
+            for j in range(1, 5):
+                opt = str(row[f'Ans-{j}']); css = "option-box"
+                if opt == c_ans: css += " opt-correct"
+                elif opt == u_ans and u_ans != c_ans: css += " opt-wrong"
+                st.markdown(f'<div class="{css}">{opt}</div>', unsafe_allow_html=True)
+            st.divider()
+        if st.button("⬅️ திரும்பு"): st.session_state.page = 'result'; st.rerun()
+
+except Exception as e: st.error(f"பிழை: {e}")
