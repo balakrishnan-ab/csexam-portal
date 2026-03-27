@@ -141,4 +141,13 @@ try:
         st.markdown("### 🔍 வினா வாரியான மறுபார்வை")
         for i in range(len(df)):
             row = df.iloc[i]; u_ans = st.session_state.user_answers.get(i, "பதிலளிக்கவில்லை"); c_ans = str(row['Answer'])
-            st.markdown(f"
+            st.markdown(f"**வினா {i+1}: {row['Question Text']}**")
+            for j in range(1, 5):
+                opt = str(row[f'Ans-{j}']); css = "option-box"
+                if opt == c_ans: css += " opt-correct"
+                elif opt == u_ans and u_ans != c_ans: css += " opt-wrong"
+                st.markdown(f'<div class="{css}">{opt}</div>', unsafe_allow_html=True)
+            st.divider()
+        if st.button("⬅️ திரும்பு"): st.session_state.page = 'result'; st.rerun()
+
+except Exception as e: st.error(f"பிழை: {e}")
