@@ -74,4 +74,93 @@ try:
                 
                 if lesson_col:
                     lesson_list = sorted(df_sub[lesson_col].unique().tolist())
-                    sel_lessons = st
+                    sel_lessons = st.multiselect("அலகுகள் (Lessons) - அனைத்திற்கும் காலியாக விடவும்:", lesson_list)
+                    if sel_lessons:
+                        final_df = df_sub[df_sub[lesson_col].isin(sel_lessons)]
+                
+                # 4. வினாக்கள் எண்ணிக்கை
+                num_q = st.number_input(f"வினாக்கள் எண்ணிக்கை (அதிகபட்சம் {len(final_df)}):", 1, len(final_df), min(len(final_df), 25))
+                
+                if st.button("தேர்வைத் தொடங்கு ➡️", type="primary") and name:
+                    st.session_state.user_name, st.session_state.selected_std, st.session_state.selected_subject = name, sel_std, sel_sub
+                    st.session_state.filtered_df = final_df.sample(n=num_q).reset_index(drop=True)
+                    st.session_state.options_map = {i: random.sample([str(st.session_state.filtered_df.iloc[i][f'Ans-{j}']) for j in range(1,5)], 4) for i in range(len(st.session_state.filtered_df))}
+                    st.session_state.score_saved = False
+                    st.session_state.page = 'quiz'; st.rerun()
+
+    # --- 2. வினாடி வினா ---
+    elif st.session_state.page == 'quiz':
+        df, q_idx = st.session_state.filtered_df, st.session_state.current_q_idx
+        row = df.iloc[q_idx]
+        st.session_state.visited.add(q_idx)
+        st.markdown('<div class="school-header"><p class="school-name">அரசு மேல்நிலைப்பள்ளி தேவனாங்குறிச்சி</p></div>', unsafe_allow_html=True)
+        
+        m_col, n_col = st.columns([7.5, 2.5])
+        with m_col:
+            st.markdown(f'<div class="q-box"><b>வினா {q_idx + 1} / {len(df)}</b><br><h3>{row["Question Text"]}</h3></div>', unsafe_allow_html=True)
+            opts = st.session_state.options_map[q_idx]
+            curr_ans = st.session_state.user_answers.get(q_idx)
+            ans = st.radio("விடை:", opts, key=f"r_{q_idx}", index=opts.index(curr_ans) if curr_ans in opts else None)
+            if ans: st.session_state.user_answers[q_idx] = ans
+            st.checkbox("🚩 சந்தேகம்", value=(q_idx in st.session_state.marked), key=f"m_{q_idx}", on_change=lambda: st.session_state.marked.add(q_idx) if st.session_state[f"m_{q_idx}"] else st.session_state.marked.discard(q_idx))
+            st.divider()
+            b1, b2, b3 = st.columns(3)
+            with b1: 
+                if q_idx > 0 and st.button("⬅️ முந்தைய"): st.session_state.current_q_idx -= 1; st.rerun()
+            with b2:
+                if q_idx < len(df)-1 and st.button("அடுத்தது ➡️"): st.session_state.current_q_idx += 1; st.rerun()
+            with b3:
+                if st.button("🏁 முடி (Submit)", type="primary"): st.session_state.page = 'result'; st.rerun()
+        
+        with n_col:
+            grid = st.columns(5)
+            for i in range(len(df)):
+                lbl = f"{i+1}"; bg = "#f8f9fa"; txt = "#333"
+                if i in st.session_state.marked: lbl = "🚩"; bg = "#FF9800"; txt = "white"
+                elif i in st.session_state.user_answers: lbl = "✅"; bg = "#28a745"; txt = "white"
+                elif i in st.session_state.visited: bg = "#2196F3"; txt = "white"
+                with grid[i % 5]:
+                    if st.button(lbl if lbl in ["🚩","✅"] else f"{i+1}", key=f"btn_{i}"):
+                        st.session_state.current_q_idx = i; st.rerun()
+                    st.markdown(f"<style>button[key='btn_{i}'] {{ background-color: {bg} !important; color: {txt} !important; border: {'3px solid black' if i==q_idx else '1px solid #ccc'} !important; }}</style>", unsafe_allow_html=True)
+
+    # --- 3. முடிவு ---
+    elif st.session_state.page == 'result':
+        df = st.session_state.filtered_df
+        score = sum(1 for i in range(len(df)) if str(st.session_state.user_answers.get(i)) == str(df.iloc[i]['Answer']))
+        if not st.session_state.score_saved:
+            save_score(st.session_state.user_name, st.session_state.selected_std, st.session_state.selected_subject, score, len(df))
+            st.session_state.score_saved = True
+        
+        st.markdown(f'<div style="border:10px solid #1E88E5; padding:30px; text-align:center; background-color:white;"><h2>அரசு மேல்நிலைப்பள்ளி - தேவனாங்குறிச்சி</h2><hr><h1>{score} / {len(df)}</h1></div>', unsafe_allow_html=True)
+        
+        c1, c2, c3 = st.columns(3)
+        with c1:
+            if st.button("🔄 அதே வினாக்களை மீண்டும் எழுத"):
+                st.session_state.user_answers = {}; st.session_state.visited = set(); st.session_state.marked = set()
+                st.session_state.current_q_idx = 0; st.session_state.score_saved = False
+                st.session_state.page = 'quiz'; st.rerun()
+        with c2:
+            if st.button("🆕 புதிய தேர்வு"):
+                un = st.session_state.user_name; st.session_state.clear(); st.session_state.user_name = un
+                st.session_state.page = 'login'; st.rerun()
+        with c3:
+            if st.button("🔍 மறுபார்வை"): st.session_state.page = 'review'; st.rerun()
+
+    # --- 4. மறுபார்வை ---
+    elif st.session_state.page == 'review':
+        df = st.session_state.filtered_df
+        st.markdown("### 🔍 வினா வாரியான மறுபார்வை")
+        for i in range(len(df)):
+            row = df.iloc[i]; u_ans = st.session_state.user_answers.get(i); c_ans = str(row['Answer'])
+            st.markdown(f"**வினா {i+1}: {row['Question Text']}**")
+            if u_ans is None: st.warning("⚠️ நீங்கள் பதிலளிக்கவில்லை")
+            for j in range(1, 5):
+                opt = str(row[f'Ans-{j}']); css = "option-box"
+                if opt == c_ans: css += " opt-correct"
+                elif u_ans is not None and opt == str(u_ans) and str(u_ans) != c_ans: css += " opt-wrong"
+                st.markdown(f'<div class="{css}">{opt}</div>', unsafe_allow_html=True)
+            st.divider()
+        if st.button("⬅️ திரும்பு"): st.session_state.page = 'result'; st.rerun()
+
+except Exception as e: st.error(f"பிழை: {e}")
