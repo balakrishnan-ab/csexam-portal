@@ -5,7 +5,7 @@ import requests
 from datetime import datetime
 
 # 1. பக்க அமைப்பு
-st.set_page_config(page_title="GHSS Devanankurichi - Pro Exam Portal", layout="wide")
+st.set_page_config(page_title="GHSS Devanankurichi - Exam Portal", layout="wide")
 
 # --- CSS: பள்ளி பெயர், கொண்டாட்டம் மற்றும் மறுபார்வை வடிவமைப்பு ---
 st.markdown("""
@@ -13,22 +13,19 @@ st.markdown("""
     .school-header { text-align: center; background-color: #f0f7ff; padding: 25px; border-radius: 12px; border: 2px solid #1E88E5; margin-bottom: 20px; }
     .school-name { color: #0D47A1; font-size: 2.5rem !important; font-weight: bold; margin: 0; }
     .q-box { border: 1px solid #ddd; padding: 20px; border-radius: 10px; background: white; margin-bottom: 10px; }
-    
-    /* மறுபார்வை விருப்பங்கள் */
     .option-box { padding: 12px; border-radius: 8px; margin: 6px 0; border: 1px solid #ddd; font-size: 1.1rem; }
-    .opt-correct { background-color: #d4edda; border-color: #28a745; color: #155724; font-weight: bold; border-left: 10px solid #28a745; }
-    .opt-wrong { background-color: #f8d7da; border-color: #dc3545; color: #721c24; font-weight: bold; border-left: 10px solid #dc3545; }
-    .opt-normal { background-color: #f8f9fa; }
-    
-    div.stButton > button { width: 100% !important; border-radius: 8px !important; height: 55px !important; font-weight: bold !important; font-size: 1.1rem !important; }
+    .opt-correct { background-color: #d4edda; border-left: 10px solid #28a745; color: #155724; font-weight: bold; }
+    .opt-wrong { background-color: #f8d7da; border-left: 10px solid #dc3545; color: #721c24; font-weight: bold; }
+    div.stButton > button { width: 100% !important; border-radius: 8px !important; height: 55px !important; font-weight: bold !important; }
     </style>
     """, unsafe_allow_html=True)
 
-# --- மதிப்பெண் சேமிக்கும் செயல்பாடு ---
-def save_score(name, subject, score, total):
+# --- மதிப்பெண் சேமிக்கும் செயல்பாடு (Standard பயன்படுத்தப்பட்டுள்ளது) ---
+def save_score(name, std, subject, score, total):
     API_URL = "https://sheetdb.io/api/v1/w7ktpqhwxaiy9" 
     data = {
         "Name": name,
+        "Standard": std, # வகுப்பு விவரம்
         "Datetime": datetime.now().strftime("%d-%m-%Y %H:%M"),
         "Subject": subject,
         "Score": score,
@@ -52,8 +49,6 @@ SHEET_URL = "https://docs.google.com/spreadsheets/d/e/2PACX-1vSQwApSEm-2EfhP7PVM
 # செஷன் ஸ்டேட்
 if 'page' not in st.session_state: st.session_state.page = 'login'
 if 'user_answers' not in st.session_state: st.session_state.user_answers = {}
-if 'visited' not in st.session_state: st.session_state.visited = set()
-if 'marked' not in st.session_state: st.session_state.marked = set()
 if 'current_q_idx' not in st.session_state: st.session_state.current_q_idx = 0
 if 'options_map' not in st.session_state: st.session_state.options_map = {}
 if 'score_saved' not in st.session_state: st.session_state.score_saved = False
@@ -68,18 +63,29 @@ try:
         with col2:
             st.subheader("🎓 மாணவர் லாகின்")
             name = st.text_input("மாணவர் பெயர்:", value=st.session_state.get('user_name', ''))
+            
             if not df_raw.empty:
-                med_list = sorted(df_raw['Medium'].unique().tolist()) if 'Medium' in df_raw.columns else ["தமிழ்"]
+                # Standard (வகுப்பு) தேர்வு - உங்கள் ஷீட்டில் உள்ள 'Standard' காலம்
+                std_list = sorted(df_raw['Standard'].unique().tolist()) if 'Standard' in df_raw.columns else ["10", "12"]
+                sel_std = st.selectbox("வகுப்பு (Standard):", std_list)
+                
+                # தேர்வு செய்த வகுப்பிற்குரிய தரவுகள்
+                df_std = df_raw[df_raw['Standard'].astype(str) == str(sel_std)] if 'Standard' in df_raw.columns else df_raw
+                
+                # பயிற்று மொழி
+                med_list = sorted(df_std['Medium'].unique().tolist()) if 'Medium' in df_std.columns else ["தமிழ்"]
                 sel_med = st.selectbox("பயிற்று மொழி:", med_list)
-                df_f = df_raw[df_raw['Medium'] == sel_med] if 'Medium' in df_raw.columns else df_raw
-                sub_list = sorted(df_f['Subject Code'].unique().tolist())
+                df_med = df_std[df_std['Medium'] == sel_med] if 'Medium' in df_std.columns else df_std
+                
+                # பாடம்
+                sub_list = sorted(df_med['Subject Code'].unique().tolist())
                 sel_sub = st.selectbox("பாடம்:", sub_list)
-                df_sub = df_f[df_f['Subject Code'] == sel_sub]
+                df_sub = df_med[df_med['Subject Code'] == sel_sub]
                 
                 num_q = st.number_input(f"வினாக்கள் எண்ணிக்கை (Max: {len(df_sub)}):", 1, len(df_sub), min(25, len(df_sub)))
                 
                 if st.button("தேர்வைத் தொடங்கு ➡️", type="primary") and name:
-                    st.session_state.user_name, st.session_state.selected_subject = name, sel_sub
+                    st.session_state.user_name, st.session_state.selected_std, st.session_state.selected_subject = name, sel_std, sel_sub
                     st.session_state.filtered_df = df_sub.sample(n=num_q).reset_index(drop=True)
                     st.session_state.options_map = {}
                     for i in range(len(st.session_state.filtered_df)):
@@ -94,11 +100,10 @@ try:
     elif st.session_state.page == 'quiz':
         df, q_idx = st.session_state.filtered_df, st.session_state.current_q_idx
         row = df.iloc[q_idx]
-        st.session_state.visited.add(q_idx)
         st.markdown('<div class="school-header"><p class="school-name">அரசு மேல்நிலைப்பள்ளி தேவனாங்குறிச்சி</p></div>', unsafe_allow_html=True)
         m_col, n_col = st.columns([7, 3])
         with m_col:
-            st.markdown(f'<div class="q-box"><b>வினா {q_idx + 1} / {len(df)}</b><br><h3>{row["Question Text"]}</h3></div>', unsafe_allow_html=True)
+            st.markdown(f'<div class="q-box"><b>வகுப்பு {st.session_state.selected_std} | வினா {q_idx + 1} / {len(df)}</b><br><h3>{row["Question Text"]}</h3></div>', unsafe_allow_html=True)
             opts = st.session_state.options_map[q_idx]
             curr_ans = st.session_state.user_answers.get(q_idx)
             ans = st.radio("விடை:", opts, key=f"r_{q_idx}", index=opts.index(curr_ans) if curr_ans in opts else None)
@@ -126,17 +131,14 @@ try:
         percent = (score / total) * 100
         
         if not st.session_state.score_saved:
-            save_score(st.session_state.user_name, st.session_state.selected_subject, score, total)
+            save_score(st.session_state.user_name, st.session_state.selected_std, st.session_state.selected_subject, score, total)
             st.session_state.score_saved = True
 
-        if percent >= 80:
-            st.snow(); msg, clr = "மிகவும் சிறப்பு! 🌸", "green"
-        elif percent >= 40:
-            st.balloons(); msg, clr = "நல்ல முயற்சி! 🎈", "#1E88E5"
-        else:
-            st.warning("மீண்டும் முயற்சி செய்க! 📚"); msg, clr = "கவனம் தேவை! ⚠️", "#d32f2f"
+        if percent >= 80: st.snow(); msg, clr = "மிகவும் சிறப்பு! 🌸", "green"
+        elif percent >= 40: st.balloons(); msg, clr = "நல்ல முயற்சி! 🎈", "#1E88E5"
+        else: st.warning("மீண்டும் முயற்சி செய்க! 📚"); msg, clr = "கவனம் தேவை! ⚠️", "#d32f2f"
 
-        st.markdown(f'<div style="border:10px solid {clr}; padding:30px; text-align:center; background-color:white;"><h2>அரசு மேல்நிலைப்பள்ளி - தேவனாங்குறிச்சி</h2><hr><h4>{st.session_state.user_name}</h4><h1 style="font-size:3.5rem; color:{clr};">{score} / {total}</h1><h3>{msg}</h3><p style="color:green;">உங்கள் மதிப்பெண் ஆசிரியருக்கு அனுப்பப்பட்டது! ✅</p></div>', unsafe_allow_html=True)
+        st.markdown(f'<div style="border:10px solid {clr}; padding:30px; text-align:center; background-color:white;"><h2>அரசு மேல்நிலைப்பள்ளி - தேவனாங்குறிச்சி</h2><hr><h4>{st.session_state.user_name} (வகுப்பு: {st.session_state.selected_std})</h4><h1 style="font-size:3.5rem; color:{clr};">{score} / {total}</h1><h3>{msg}</h3></div>', unsafe_allow_html=True)
         
         c1, c2 = st.columns(2)
         with c1:
@@ -149,16 +151,13 @@ try:
         df = st.session_state.filtered_df
         st.markdown("### 🔍 விடைகளைச் சரிபார்க்க (Detailed Review)")
         for i in range(len(df)):
-            row = df.iloc[i]
-            u_ans = st.session_state.user_answers.get(i, "பதிலளிக்கவில்லை")
-            c_ans = str(row['Answer'])
+            row = df.iloc[i]; u_ans = st.session_state.user_answers.get(i, "பதிலளிக்கவில்லை"); c_ans = str(row['Answer'])
             st.markdown(f"**வினா {i+1}: {row['Question Text']}**")
             for opt_key in ['Ans-1', 'Ans-2', 'Ans-3', 'Ans-4']:
-                opt_val = str(row[opt_key])
-                css = "opt-normal"
-                if opt_val == c_ans: css = "opt-correct"
-                elif opt_val == u_ans and u_ans != c_ans: css = "opt-wrong"
-                st.markdown(f'<div class="option-box {css}">{opt_val}</div>', unsafe_allow_html=True)
+                opt_val = str(row[opt_key]); css = "option-box opt-normal"
+                if opt_val == c_ans: css = "option-box opt-correct"
+                elif opt_val == u_ans and u_ans != c_ans: css = "option-box opt-wrong"
+                st.markdown(f'<div class="{css}">{opt_val}</div>', unsafe_allow_html=True)
             st.divider()
         if st.button("⬅️ திரும்பு"): st.session_state.page = 'result'; st.rerun()
 
