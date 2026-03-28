@@ -17,34 +17,33 @@ st.markdown("""
     .opt-correct { background-color: #d4edda; border-left: 10px solid #28a745; font-weight: bold; }
     .opt-wrong { background-color: #f8d7da; border-left: 10px solid #dc3545; font-weight: bold; }
     div[data-testid="stColumn"] button { padding: 5px !important; height: 40px !important; width: 100% !important; }
+    .lesson-tag { background-color: #E3F2FD; color: #1565C0; padding: 3px 10px; border-radius: 5px; font-size: 0.85rem; font-weight: bold; border: 1px solid #BBDEFB; }
     </style>
     """, unsafe_allow_html=True)
 
-# --- மதிப்பெண் சேமிக்கும் செயல்பாடு (முழுமையாகச் சரிசெய்யப்பட்டது) ---
+# --- மதிப்பெண் சேமிக்கும் செயல்பாடு (மேம்படுத்தப்பட்டது) ---
 def save_score(name, std, subject, score, total):
+    # உங்கள் SheetDB API URL
     API_URL = "https://sheetdb.io/api/v1/w7ktpqhwxaiy9" 
     
-    # உங்கள் ஷீட்டில் உள்ள தலைப்புகள் அப்படியே இருக்க வேண்டும்
-    payload = {
-        "data": [
-            {
-                "name": name,              # சிறிய 'n'
-                "Standard": str(std),      # பெரிய 'S'
-                "Datetime": datetime.now().strftime("%d-%m-%Y %H:%M"),
-                "Subject": subject,
-                "Score": str(score),
-                "Total": str(total)
-            }
-        ]
+    # தரவு அனுப்புதல்
+    data_to_send = {
+        "name": str(name),
+        "Standard": str(std),
+        "Datetime": datetime.now().strftime("%d-%m-%Y %H:%M"),
+        "Subject": str(subject),
+        "Score": str(score),
+        "Total": str(total)
     }
     
     try:
-        # 5 வினாடிகள் வரை காத்திருந்து முயற்சிக்கும் (Timeout)
-        response = requests.post(API_URL, json=payload, timeout=5)
-        if response.status_code == 201:
+        # SheetDB-க்கு POST ரிக்வெஸ்ட்
+        response = requests.post(API_URL, json=data_to_send, timeout=10)
+        # SheetDB பொதுவாக 201 தரும், சில சமயம் 200 தரும்
+        if response.status_code in [200, 201]:
             return True, "வெற்றி"
         else:
-            return False, f"பிழை குறியீடு: {response.status_code}"
+            return False, f"Status: {response.status_code}, Text: {response.text}"
     except Exception as e:
         return False, str(e)
 
@@ -75,7 +74,7 @@ try:
         col1, col2, col3 = st.columns([1,2,1])
         with col2:
             st.subheader("🎓 மாணவர் லாகின்")
-            name_input = st.text_input("மாணவர் பெயர்:")
+            u_name = st.text_input("மாணவர் பெயர்:")
             
             if not df_raw.empty:
                 std_list = sorted(df_raw['Standard'].unique().tolist())
@@ -86,9 +85,11 @@ try:
                 sel_sub = st.selectbox("பாடம்:", sub_list)
                 df_sub = df_std[df_std['Subject Code'] == sel_sub]
                 
-                lesson_col = 'Lesson Code' if 'Lesson Code' in df_sub.columns else 'Lesson'
-                lesson_list = sorted(df_sub[lesson_col].unique().tolist())
+                # அலகு (Lesson) தேர்வு
+                lesson_col = 'Lesson Code' if 'Lesson Code' in df_sub.columns else ('Lesson' if 'Lesson' in df_sub.columns else None)
+                lesson_list = sorted(df_sub[lesson_col].unique().tolist()) if lesson_col else []
                 sel_lessons = st.multiselect("அலகுகள் (Lessons):", lesson_list)
+                
                 pool = df_sub[df_sub[lesson_col].isin(sel_lessons)] if sel_lessons else df_sub
                 
                 remaining = [idx for idx in pool.index if idx not in st.session_state.seen_ids]
@@ -98,8 +99,8 @@ try:
 
                 num_q = st.number_input(f"புதிய வினாக்கள் (மீதம்: {len(remaining)}):", 1, len(remaining), min(len(remaining), 10))
                 
-                if st.button("தேர்வைத் தொடங்கு ➡️", type="primary") and name_input:
-                    st.session_state.user_name = name_input
+                if st.button("தேர்வைத் தொடங்கு ➡️", type="primary") and u_name:
+                    st.session_state.user_name = u_name
                     st.session_state.selected_std, st.session_state.selected_subject = sel_std, sel_sub
                     current_selection = random.sample(remaining, num_q)
                     st.session_state.filtered_df = pool.loc[current_selection].reset_index(drop=True)
@@ -135,47 +136,4 @@ try:
             grid = st.columns(5)
             for i in range(len(df)):
                 lbl = "✅" if i in st.session_state.user_answers else ("🚩" if i in st.session_state.marked else f"{i+1}")
-                bg = "#28a745" if i in st.session_state.user_answers else ("#FF9800" if i in st.session_state.marked else "#f8f9fa")
-                with grid[i % 5]:
-                    if st.button(lbl, key=f"btn_{i}"): st.session_state.current_q_idx = i; st.rerun()
-                    st.markdown(f"<style>button[key='btn_{i}'] {{ background-color: {bg} !important; color: {'white' if bg!='#f8f9fa' else '#333'} !important; }}</style>", unsafe_allow_html=True)
-
-    # --- 3. முடிவு பக்கம் ---
-    elif st.session_state.page == 'result':
-        df = st.session_state.filtered_df
-        total = len(df)
-        score = sum(1 for i in range(total) if str(st.session_state.user_answers.get(i)) == str(df.iloc[i]['Answer']))
-        
-        if not st.session_state.get('score_saved', False):
-            success, msg = save_score(st.session_state.user_name, st.session_state.selected_std, st.session_state.selected_subject, score, total)
-            st.session_state.score_saved = True
-            if success: st.success("மதிப்பெண் சேமிக்கப்பட்டது! ✅")
-            else: st.error(f"சேமிப்பதில் சிக்கல்: {msg}")
-
-        st.markdown(f'<div style="border:10px solid #1E88E5; padding:30px; text-align:center; background-color:white;"><h2>அரசு மேல்நிலைப்பள்ளி - தேவனாங்குறிச்சி</h2><hr><h1>மதிப்பெண்: {score} / {total}</h1></div>', unsafe_allow_html=True)
-        c1, c2, c3 = st.columns(3)
-        with c1:
-            if st.button("🔄 மீண்டும் (அதே வினாக்கள்)"):
-                st.session_state.user_answers, st.session_state.visited, st.session_state.marked = {}, set(), set()
-                st.session_state.current_q_idx, st.session_state.score_saved, st.session_state.page = 0, False, 'quiz'; st.rerun()
-        with c2:
-            if st.button("🆕 புதிய வினாக்கள்"):
-                st.session_state.page = 'login'; st.rerun()
-        with c3:
-            if st.button("🔍 மறுபார்வை"): st.session_state.page = 'review'; st.rerun()
-
-    # --- 4. மறுபார்வை பக்கம் ---
-    elif st.session_state.page == 'review':
-        df = st.session_state.filtered_df
-        for i in range(len(df)):
-            row = df.iloc[i]; u_ans = st.session_state.user_answers.get(i); c_ans = str(row['Answer'])
-            st.markdown(f"**வினா {i+1}: {row['Question Text']}**")
-            for j in range(1, 5):
-                opt = str(row[f'Ans-{j}']); css = "option-box"
-                if opt == c_ans: css += " opt-correct"
-                elif u_ans is not None and opt == str(u_ans) and str(u_ans) != c_ans: css += " opt-wrong"
-                st.markdown(f'<div class="{css}">{opt}</div>', unsafe_allow_html=True)
-            st.divider()
-        if st.button("⬅️ திரும்பு"): st.session_state.page = 'result'; st.rerun()
-
-except Exception as e: st.error(f"பிழை: {e}")
+                bg = "#28A745" if i in st.session_state
