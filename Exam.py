@@ -20,22 +20,33 @@ st.markdown("""
     </style>
     """, unsafe_allow_html=True)
 
-# --- மதிப்பெண் சேமிக்கும் செயல்பாடு ---
+# --- மதிப்பெண் சேமிக்கும் செயல்பாடு (முழுமையாகச் சரிசெய்யப்பட்டது) ---
 def save_score(name, std, subject, score, total):
     API_URL = "https://sheetdb.io/api/v1/w7ktpqhwxaiy9" 
-    data = {
-        "name": name,
-        "Standard": str(std),
-        "Datetime": datetime.now().strftime("%d-%m-%Y %H:%M"),
-        "Subject": subject,
-        "Score": score,
-        "Total": total
+    
+    # உங்கள் ஷீட்டில் உள்ள தலைப்புகள் அப்படியே இருக்க வேண்டும்
+    payload = {
+        "data": [
+            {
+                "name": name,              # சிறிய 'n'
+                "Standard": str(std),      # பெரிய 'S'
+                "Datetime": datetime.now().strftime("%d-%m-%Y %H:%M"),
+                "Subject": subject,
+                "Score": str(score),
+                "Total": str(total)
+            }
+        ]
     }
+    
     try:
-        response = requests.post(API_URL, json={"data": [data]})
-        return response.status_code == 201
-    except:
-        return False
+        # 5 வினாடிகள் வரை காத்திருந்து முயற்சிக்கும் (Timeout)
+        response = requests.post(API_URL, json=payload, timeout=5)
+        if response.status_code == 201:
+            return True, "வெற்றி"
+        else:
+            return False, f"பிழை குறியீடு: {response.status_code}"
+    except Exception as e:
+        return False, str(e)
 
 @st.cache_data(ttl=60)
 def get_data(url):
@@ -64,36 +75,33 @@ try:
         col1, col2, col3 = st.columns([1,2,1])
         with col2:
             st.subheader("🎓 மாணவர் லாகின்")
-            name_input = st.text_input("மாணவர் பெயர்:", value=st.session_state.get('user_name', ''))
+            name_input = st.text_input("மாணவர் பெயர்:")
             
             if not df_raw.empty:
                 std_list = sorted(df_raw['Standard'].unique().tolist())
                 sel_std = st.selectbox("வகுப்பு:", std_list)
                 df_std = df_raw[df_raw['Standard'].astype(str) == str(sel_std)]
-                med_list = sorted(df_std['Medium'].unique().tolist())
-                sel_med = st.selectbox("பயிற்று மொழி:", med_list)
-                df_med = df_std[df_std['Medium'] == sel_med]
-                sub_list = sorted(df_med['Subject Code'].unique().tolist())
+                
+                sub_list = sorted(df_std['Subject Code'].unique().tolist())
                 sel_sub = st.selectbox("பாடம்:", sub_list)
-                df_sub = df_med[df_med['Subject Code'] == sel_sub]
+                df_sub = df_std[df_std['Subject Code'] == sel_sub]
                 
                 lesson_col = 'Lesson Code' if 'Lesson Code' in df_sub.columns else 'Lesson'
                 lesson_list = sorted(df_sub[lesson_col].unique().tolist())
                 sel_lessons = st.multiselect("அலகுகள் (Lessons):", lesson_list)
                 pool = df_sub[df_sub[lesson_col].isin(sel_lessons)] if sel_lessons else df_sub
                 
-                remaining_indices = [idx for idx in pool.index if idx not in st.session_state.seen_ids]
-                if not remaining_indices:
-                    st.warning("அனைத்து வினாக்களையும் முடித்துவிட்டீர்கள்! மீண்டும் ஆரம்பத்தில் இருந்து வரும்.")
+                remaining = [idx for idx in pool.index if idx not in st.session_state.seen_ids]
+                if not remaining:
                     st.session_state.seen_ids = set()
-                    remaining_indices = list(pool.index)
+                    remaining = list(pool.index)
 
-                num_q = st.number_input(f"புதிய வினாக்கள் (மீதம்: {len(remaining_indices)}):", 1, len(remaining_indices), min(len(remaining_indices), 25))
+                num_q = st.number_input(f"புதிய வினாக்கள் (மீதம்: {len(remaining)}):", 1, len(remaining), min(len(remaining), 10))
                 
                 if st.button("தேர்வைத் தொடங்கு ➡️", type="primary") and name_input:
                     st.session_state.user_name = name_input
                     st.session_state.selected_std, st.session_state.selected_subject = sel_std, sel_sub
-                    current_selection = random.sample(remaining_indices, num_q)
+                    current_selection = random.sample(remaining, num_q)
                     st.session_state.filtered_df = pool.loc[current_selection].reset_index(drop=True)
                     for idx in current_selection: st.session_state.seen_ids.add(idx)
                     st.session_state.options_map = {i: random.sample([str(st.session_state.filtered_df.iloc[i][f'Ans-{j}']) for j in range(1,5)], 4) for i in range(len(st.session_state.filtered_df))}
@@ -137,11 +145,12 @@ try:
         df = st.session_state.filtered_df
         total = len(df)
         score = sum(1 for i in range(total) if str(st.session_state.user_answers.get(i)) == str(df.iloc[i]['Answer']))
+        
         if not st.session_state.get('score_saved', False):
-            success = save_score(st.session_state.user_name, st.session_state.selected_std, st.session_state.selected_subject, score, total)
+            success, msg = save_score(st.session_state.user_name, st.session_state.selected_std, st.session_state.selected_subject, score, total)
             st.session_state.score_saved = True
             if success: st.success("மதிப்பெண் சேமிக்கப்பட்டது! ✅")
-            else: st.error("மதிப்பெண் சேமிப்பதில் சிக்கல்.")
+            else: st.error(f"சேமிப்பதில் சிக்கல்: {msg}")
 
         st.markdown(f'<div style="border:10px solid #1E88E5; padding:30px; text-align:center; background-color:white;"><h2>அரசு மேல்நிலைப்பள்ளி - தேவனாங்குறிச்சி</h2><hr><h1>மதிப்பெண்: {score} / {total}</h1></div>', unsafe_allow_html=True)
         c1, c2, c3 = st.columns(3)
@@ -149,7 +158,7 @@ try:
             if st.button("🔄 மீண்டும் (அதே வினாக்கள்)"):
                 st.session_state.user_answers, st.session_state.visited, st.session_state.marked = {}, set(), set()
                 st.session_state.current_q_idx, st.session_state.score_saved, st.session_state.page = 0, False, 'quiz'; st.rerun()
-        with c2: # பிழை நீக்கப்பட்ட பகுதி
+        with c2:
             if st.button("🆕 புதிய வினாக்கள்"):
                 st.session_state.page = 'login'; st.rerun()
         with c3:
