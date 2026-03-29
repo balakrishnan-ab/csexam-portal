@@ -1,4 +1,26 @@
-import streamlit as st
+# --- மதிப்பெண் சேமிக்கும் செயல்பாடு ---
+def save_score(name, std, subject, score, total):
+    API_URL = "https://sheetdb.io/api/v1/w7ktpqhwxaiy9" 
+    
+    # தலைப்புகள் உங்கள் ஷீட்டில் உள்ளவாறே (Case Sensitive) இருக்க வேண்டும்
+    payload = {
+        "data": [
+            {
+                "name": str(name),
+                "Standard": str(std),
+                "Datetime": datetime.now().strftime("%d-%m-%Y %H:%M"),
+                "Subject": str(subject),
+                "Score": str(score),
+                "Total": str(total)
+            }
+        ]
+    }
+    try:
+        response = requests.post(API_URL, json=payload, timeout=10)
+        # 201 என்பது வெற்றிகரமாகச் சேமிக்கப்பட்டதைக் குறிக்கும்
+        return response.status_code in [200, 201], response.text
+    except Exception as e:
+        return False, str(e)import streamlit as st
 import pandas as pd
 import random
 import requests
