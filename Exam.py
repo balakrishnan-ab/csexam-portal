@@ -5,41 +5,44 @@ import requests
 from datetime import datetime
 
 # 1. பக்க அமைப்பு
-st.set_page_config(page_title="GHSS Devanankurichi - Pro Exam Portal", layout="wide")
+st.set_page_config(page_title="GHSS Devanankurichi - Exam Portal", layout="wide")
 
-# --- CSS வடிவமைப்பு: குறியீடுகள் மற்றும் பலகம் ---
+# --- CSS: குறியீடுகள் மற்றும் வடிவமைப்பு ---
 st.markdown("""
     <style>
     .school-header { text-align: center; background-color: #f0f7ff; padding: 15px; border-radius: 12px; border: 2px solid #1E88E5; margin-bottom: 20px; }
     .school-name { color: #0D47A1; font-size: 2rem !important; font-weight: bold; margin: 0; }
     .q-box { border: 1px solid #ddd; padding: 20px; border-radius: 10px; background: white; margin-bottom: 10px; }
     
-    /* வினா பலக பொத்தான்கள் வடிவமைப்பு */
+    /* வினா பலக பொத்தான்கள் */
     div[data-testid="stColumn"] button {
         padding: 2px !important;
         height: 48px !important;
         width: 100% !important;
-        font-size: 0.85rem !important;
-        border-radius: 6px !important;
+        font-size: 0.8rem !important;
+        font-weight: bold !important;
     }
     
     .option-box { padding: 12px; border-radius: 8px; margin: 6px 0; border: 1px solid #ddd; }
     .opt-correct { background-color: #d4edda; border-left: 10px solid #28a745; font-weight: bold; }
     .opt-wrong { background-color: #f8d7da; border-left: 10px solid #dc3545; font-weight: bold; }
-    .lesson-tag { background-color: #E3F2FD; color: #1565C0; padding: 3px 10px; border-radius: 5px; font-size: 0.85rem; font-weight: bold; margin-bottom: 5px; display: inline-block; }
     </style>
     """, unsafe_allow_html=True)
 
 # --- மதிப்பெண் சேமிக்கும் செயல்பாடு ---
-def save_score(name, std, subject, score, total):
+def save_score(name, std, subject, correct, total, attempted):
     API_URL = "https://sheetdb.io/api/v1/w7ktpqhwxaiy9" 
     payload = {
-        "data": [{"name": str(name), "Standard": str(std), "Datetime": datetime.now().strftime("%d-%m-%Y %H:%M"), "Subject": str(subject), "Score": str(score), "Total": str(total)}]
+        "data": [{
+            "name": str(name), "Standard": str(std), "Datetime": datetime.now().strftime("%d-%m-%Y %H:%M"),
+            "Subject": str(subject), "Total qus": str(total), "Attan": str(attempted),
+            "Correct": str(correct), "Wrong": str(attempted - correct), "Score": f"{(correct/total)*100:.1f}%"
+        }]
     }
     try:
         response = requests.post(API_URL, json=payload, timeout=10)
-        return response.status_code in [200, 201], response.text
-    except Exception as e: return False, str(e)
+        return response.status_code in [200, 201]
+    except: return False
 
 @st.cache_data(ttl=60)
 def get_data(url):
@@ -83,7 +86,7 @@ try:
                 
                 rem = [idx for idx in pool.index if idx not in st.session_state.seen_ids]
                 if not rem: st.session_state.seen_ids = set(); rem = list(pool.index)
-                num_q = st.number_input(f"வினாக்கள் (மீதம்: {len(rem)}):", 1, len(rem), min(len(rem), 25))
+                num_q = st.number_input(f"புதிய வினாக்கள் எண்ணிக்கை:", 1, len(rem), min(len(rem), 25))
                 
                 if st.button("தேர்வைத் தொடங்கு ➡️", type="primary") and u_name:
                     st.session_state.user_name, st.session_state.selected_std, st.session_state.selected_subject = u_name, sel_std, sel_sub
@@ -104,7 +107,7 @@ try:
             opts = st.session_state.options_map[q_idx]; curr_ans = st.session_state.user_answers.get(q_idx)
             ans = st.radio("விடை:", opts, key=f"r_{q_idx}", index=opts.index(curr_ans) if curr_ans in opts else None)
             if ans: st.session_state.user_answers[q_idx] = ans
-            st.checkbox("🚩 சந்தேகம்", value=(q_idx in st.session_state.marked), key=f"m_{q_idx}", on_change=lambda: st.session_state.marked.add(q_idx) if st.session_state[f"m_{q_idx}"] else st.session_state.marked.discard(q_idx))
+            st.checkbox("🚩 சந்தேகம் (Review)", value=(q_idx in st.session_state.marked), key=f"m_{q_idx}", on_change=lambda: st.session_state.marked.add(q_idx) if st.session_state[f"m_{q_idx}"] else st.session_state.marked.discard(q_idx))
             st.divider()
             b1, b2, b3 = st.columns(3)
             with b1: 
@@ -115,19 +118,19 @@ try:
                 if st.button("🏁 முடி (Submit)", type="primary"): st.session_state.page = 'result'; st.rerun()
         
         with n_col:
-            st.markdown("<p style='text-align:center; font-weight:bold; margin-bottom:5px;'>🔢 வினா பலகம்</p>", unsafe_allow_html=True)
+            st.markdown("<p style='text-align:center; font-weight:bold;'>🔢 வினா பலகம்</p>", unsafe_allow_html=True)
             grid = st.columns(5)
             for i in range(len(df)):
-                is_marked = i in st.session_state.marked
-                is_answered = i in st.session_state.user_answers
-                is_visited = i in st.session_state.visited
+                is_m = i in st.session_state.marked
+                is_a = i in st.session_state.user_answers
+                is_v = i in st.session_state.visited
                 
-                # நீங்கள் கேட்ட வண்ணங்கள் மற்றும் குறியீடுகள்
-                if is_marked and is_answered: lbl = f"💜🚩{i+1}"; bg = "#673AB7"; txt = "white"
-                elif is_marked: lbl = f"🟠🚩{i+1}"; bg = "#FF9800"; txt = "white"
-                elif is_answered: lbl = f"✅{i+1}"; bg = "#28A745"; txt = "white"
-                elif is_visited: lbl = f"🔵{i+1}"; bg = "#2196F3"; txt = "white"
-                else: lbl = f"{i+1}"; bg = "#F8F9FA"; txt = "#333"
+                # நீங்கள் கேட்ட வண்ணக் குறியீடுகள்
+                if is_m and is_a: lbl, bg, txt = f"💜🚩{i+1}", "#673AB7", "white"
+                elif is_m: lbl, bg, txt = f"🟠🚩{i+1}", "#FF9800", "white"
+                elif is_a: lbl, bg, txt = f"✅{i+1}", "#28A745", "white"
+                elif is_v: lbl, bg, txt = f"🔵{i+1}", "#2196F3", "white"
+                else: lbl, bg, txt = f"{i+1}", "#F8F9FA", "#333"
                 
                 with grid[i % 5]:
                     if st.button(lbl, key=f"btn_{i}"): st.session_state.current_q_idx = i; st.rerun()
@@ -135,13 +138,13 @@ try:
 
     elif st.session_state.page == 'result':
         df = st.session_state.filtered_df; total = len(df)
-        score = sum(1 for i in range(total) if str(st.session_state.user_answers.get(i)) == str(df.iloc[i]['Answer']))
+        attempted = len(st.session_state.user_answers)
+        correct = sum(1 for i in range(total) if str(st.session_state.user_answers.get(i)) == str(df.iloc[i]['Answer']))
         if not st.session_state.get('score_saved', False):
-            success, err = save_score(st.session_state.user_name, st.session_state.selected_std, st.session_state.selected_subject, score, total)
+            success = save_score(st.session_state.user_name, st.session_state.selected_std, st.session_state.selected_subject, correct, total, attempted)
             st.session_state.score_saved = True
-            if success: st.success("மதிப்பெண் வெற்றிகரமாகச் சேமிக்கப்பட்டது! ✅")
-            else: st.error(f"சேமிப்பதில் சிக்கல்: {err}")
-        st.markdown(f'<div style="border:10px solid #1E88E5; padding:30px; text-align:center; background-color:white;"><h2>அரசு மேல்நிலைப்பள்ளி - தேவனாங்குறிச்சி</h2><hr><h1>மதிப்பெண்: {score} / {total}</h1></div>', unsafe_allow_html=True)
+            if success: st.success("மதிப்பெண் சேமிக்கப்பட்டது! ✅")
+        st.markdown(f'<div style="border:10px solid #1E88E5; padding:30px; text-align:center; background-color:white;"><h2>அரசு மேல்நிலைப்பள்ளி - தேவனாங்குறிச்சி</h2><hr><h1>சரியானவை: {correct} / {total}</h1></div>', unsafe_allow_html=True)
         c1, c2, c3 = st.columns(3)
         with c1:
             if st.button("🔄 மீண்டும் (அதே வினாக்கள்)"):
@@ -154,11 +157,8 @@ try:
 
     elif st.session_state.page == 'review':
         df = st.session_state.filtered_df; st.markdown("### 🔍 வினா வாரியான மறுபார்வை")
-        l_col = 'Lesson Code' if 'Lesson Code' in df.columns else ('Lesson' if 'Lesson' in df.columns else None)
         for i in range(len(df)):
             row = df.iloc[i]; u_ans = st.session_state.user_answers.get(i); c_ans = str(row['Answer'])
-            l_val = row[l_col] if l_col else "N/A"
-            st.markdown(f"<span class='lesson-tag'>அலகு: {l_val}</span>", unsafe_allow_html=True)
             st.markdown(f"**வினா {i+1}: {row['Question Text']}**")
             for j in range(1, 5):
                 opt = str(row[f'Ans-{j}']); css = "option-box"
