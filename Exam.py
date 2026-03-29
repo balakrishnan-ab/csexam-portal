@@ -5,19 +5,28 @@ import requests
 from datetime import datetime
 
 # 1. பக்க அமைப்பு
-st.set_page_config(page_title="GHSS Devanankurichi - Exam Portal", layout="wide")
+st.set_page_config(page_title="GHSS Devanankurichi - Pro Exam Portal", layout="wide")
 
-# --- CSS வடிவமைப்பு ---
+# --- CSS வடிவமைப்பு: குறியீடுகள் மற்றும் பலகம் ---
 st.markdown("""
     <style>
     .school-header { text-align: center; background-color: #f0f7ff; padding: 15px; border-radius: 12px; border: 2px solid #1E88E5; margin-bottom: 20px; }
     .school-name { color: #0D47A1; font-size: 2rem !important; font-weight: bold; margin: 0; }
     .q-box { border: 1px solid #ddd; padding: 20px; border-radius: 10px; background: white; margin-bottom: 10px; }
+    
+    /* வினா பலக பொத்தான்கள் வடிவமைப்பு */
+    div[data-testid="stColumn"] button {
+        padding: 2px !important;
+        height: 48px !important;
+        width: 100% !important;
+        font-size: 0.85rem !important;
+        border-radius: 6px !important;
+    }
+    
     .option-box { padding: 12px; border-radius: 8px; margin: 6px 0; border: 1px solid #ddd; }
     .opt-correct { background-color: #d4edda; border-left: 10px solid #28a745; font-weight: bold; }
     .opt-wrong { background-color: #f8d7da; border-left: 10px solid #dc3545; font-weight: bold; }
-    div[data-testid="stColumn"] button { padding: 2px !important; height: 40px !important; width: 100% !important; font-size: 0.8rem !important; }
-    .lesson-tag { background-color: #E3F2FD; color: #1565C0; padding: 3px 10px; border-radius: 5px; font-size: 0.85rem; font-weight: bold; border: 1px solid #BBDEFB; margin-bottom: 5px; display: inline-block; }
+    .lesson-tag { background-color: #E3F2FD; color: #1565C0; padding: 3px 10px; border-radius: 5px; font-size: 0.85rem; font-weight: bold; margin-bottom: 5px; display: inline-block; }
     </style>
     """, unsafe_allow_html=True)
 
@@ -25,22 +34,12 @@ st.markdown("""
 def save_score(name, std, subject, score, total):
     API_URL = "https://sheetdb.io/api/v1/w7ktpqhwxaiy9" 
     payload = {
-        "data": [
-            {
-                "name": str(name),
-                "Standard": str(std),
-                "Datetime": datetime.now().strftime("%d-%m-%Y %H:%M"),
-                "Subject": str(subject),
-                "Score": str(score),
-                "Total": str(total)
-            }
-        ]
+        "data": [{"name": str(name), "Standard": str(std), "Datetime": datetime.now().strftime("%d-%m-%Y %H:%M"), "Subject": str(subject), "Score": str(score), "Total": str(total)}]
     }
     try:
         response = requests.post(API_URL, json=payload, timeout=10)
         return response.status_code in [200, 201], response.text
-    except Exception as e:
-        return False, str(e)
+    except Exception as e: return False, str(e)
 
 @st.cache_data(ttl=60)
 def get_data(url):
@@ -93,8 +92,7 @@ try:
                     for idx in cur_sel: st.session_state.seen_ids.add(idx)
                     st.session_state.options_map = {i: random.sample([str(st.session_state.filtered_df.iloc[i][f'Ans-{j}']) for j in range(1,5)], 4) for i in range(len(st.session_state.filtered_df))}
                     st.session_state.user_answers, st.session_state.visited, st.session_state.marked = {}, set(), set()
-                    st.session_state.current_q_idx, st.session_state.score_saved = 0, False
-                    st.session_state.page = 'quiz'; st.rerun()
+                    st.session_state.current_q_idx, st.session_state.score_saved, st.session_state.page = 0, False, 'quiz'; st.rerun()
 
     elif st.session_state.page == 'quiz':
         df, q_idx = st.session_state.filtered_df, st.session_state.current_q_idx
@@ -115,13 +113,22 @@ try:
                 if q_idx < len(df)-1 and st.button("அடுத்தது ➡️"): st.session_state.current_q_idx += 1; st.rerun()
             with b3:
                 if st.button("🏁 முடி (Submit)", type="primary"): st.session_state.page = 'result'; st.rerun()
+        
         with n_col:
-            st.markdown("<p style='text-align:center; font-weight:bold;'>🔢 வினா பலகம்</p>", unsafe_allow_html=True)
+            st.markdown("<p style='text-align:center; font-weight:bold; margin-bottom:5px;'>🔢 வினா பலகம்</p>", unsafe_allow_html=True)
             grid = st.columns(5)
             for i in range(len(df)):
-                lbl = "✅" if i in st.session_state.user_answers else ("🚩" if i in st.session_state.marked else f"{i+1}")
-                bg = "#28A745" if i in st.session_state.user_answers else ("#FF9800" if i in st.session_state.marked else "#F8F9FA")
-                txt = "white" if bg != "#F8F9FA" else "#333"
+                is_marked = i in st.session_state.marked
+                is_answered = i in st.session_state.user_answers
+                is_visited = i in st.session_state.visited
+                
+                # நீங்கள் கேட்ட வண்ணங்கள் மற்றும் குறியீடுகள்
+                if is_marked and is_answered: lbl = f"💜🚩{i+1}"; bg = "#673AB7"; txt = "white"
+                elif is_marked: lbl = f"🟠🚩{i+1}"; bg = "#FF9800"; txt = "white"
+                elif is_answered: lbl = f"✅{i+1}"; bg = "#28A745"; txt = "white"
+                elif is_visited: lbl = f"🔵{i+1}"; bg = "#2196F3"; txt = "white"
+                else: lbl = f"{i+1}"; bg = "#F8F9FA"; txt = "#333"
+                
                 with grid[i % 5]:
                     if st.button(lbl, key=f"btn_{i}"): st.session_state.current_q_idx = i; st.rerun()
                     st.markdown(f"<style>button[key='btn_{i}'] {{ background-color: {bg} !important; color: {txt} !important; border: {'2px solid black' if i==q_idx else '1px solid #CCC'} !important; }}</style>", unsafe_allow_html=True)
@@ -133,7 +140,7 @@ try:
             success, err = save_score(st.session_state.user_name, st.session_state.selected_std, st.session_state.selected_subject, score, total)
             st.session_state.score_saved = True
             if success: st.success("மதிப்பெண் வெற்றிகரமாகச் சேமிக்கப்பட்டது! ✅")
-            else: st.error(f"சேமிப்பதில் சிக்கல் (Error 400): {err}")
+            else: st.error(f"சேமிப்பதில் சிக்கல்: {err}")
         st.markdown(f'<div style="border:10px solid #1E88E5; padding:30px; text-align:center; background-color:white;"><h2>அரசு மேல்நிலைப்பள்ளி - தேவனாங்குறிச்சி</h2><hr><h1>மதிப்பெண்: {score} / {total}</h1></div>', unsafe_allow_html=True)
         c1, c2, c3 = st.columns(3)
         with c1:
