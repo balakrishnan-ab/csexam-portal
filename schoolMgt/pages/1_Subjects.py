@@ -25,14 +25,32 @@ response = requests.get(API_URL)
 data = response.json() if response.status_code == 200 else []
 
 if data:
-    df = pd.DataFrame(data)
-    st.table(df[['subject_name', 'eval_type']])
-    
-    # நீக்கும் வசதி
-    del_sub = st.selectbox("🗑️ நீக்க வேண்டிய பாடத்தைத் தேர்வு செய்க:", [d['subject_name'] for d in data])
-    if st.button("🗑️ பாடத்தை நீக்கு", type="primary"):
-        requests.delete(f"{API_URL}/id/{del_sub}")
-        st.warning(f"{del_sub} நீக்கப்பட்டது!")
-        st.rerun()
+    # தலைப்பு வரிசை (Header Row)
+    h_col1, h_col2, h_col3 = st.columns([3, 2, 2])
+    h_col1.markdown("**பாடத்தின் பெயர்**")
+    h_col2.markdown("**மதிப்பீட்டு முறை**")
+    h_col3.markdown("**செயல்கள்**")
+    st.divider()
+
+    for sub in data:
+        col1, col2, col3 = st.columns([3, 2, 2])
+        
+        # பாட விவரங்கள்
+        col1.text(sub.get('subject_name', ''))
+        col2.text(sub.get('eval_type', ''))
+        
+        # வலது ஓரத்தில் குறும்படங்கள்
+        action_cols = col3.columns(2)
+        
+        # 📝 பதிப்பி (Edit) பட்டன்
+        if action_cols[0].button("📝", key=f"edit_{sub['subject_name']}", help="திருத்த"):
+            st.info(f"{sub['subject_name']} - விவரங்களை மேலே உள்ள பெட்டியில் மாற்றி மீண்டும் சேமிக்கவும்.")
+            # குறிப்பு: இங்கு திருத்துவதற்கான தரவுகளை மேலே உள்ள input பெட்டிகளுக்கு கொண்டு செல்லலாம்
+            
+        # 🗑️ நீக்கு (Delete) பட்டன்
+        if action_cols[1].button("🗑️", key=f"del_{sub['subject_name']}", help="நீக்க"):
+            requests.delete(f"{API_URL}/id/{sub['subject_name']}")
+            st.warning(f"{sub['subject_name']} நீக்கப்பட்டது!")
+            st.rerun()
 else:
     st.info("பாடங்கள் இன்னும் சேர்க்கப்படவில்லை.")
