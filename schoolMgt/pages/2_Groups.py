@@ -1,70 +1,53 @@
 import streamlit as st
 import requests
 
-# API URLs
 SUB_API = "https://sheetdb.io/api/v1/sb3mxuvdynqos?sheet=Subjects"
 GROUP_API = "https://sheetdb.io/api/v1/sb3mxuvdynqos?sheet=Groups"
 
-# போன் திரைக்கு ஏற்ற அமைப்பு
-st.set_page_config(page_title="Group Master", layout="centered")
+st.set_page_config(page_title="Groups", layout="wide")
 
 st.markdown("""
     <style>
-    .stButton>button { width: 100%; border-radius: 10px; height: 3em; }
-    .group-card { 
-        border: 1px solid #ddd; padding: 15px; border-radius: 10px; 
-        margin-bottom: 10px; background-color: #f9f9f9;
-    }
+    .fixed-table { width: 100%; border-collapse: collapse; font-size: 13px; table-layout: fixed; }
+    .fixed-table th, .fixed-table td { border-bottom: 1px solid #eee; padding: 12px 4px; text-align: left; }
+    .fixed-table th { background-color: #f1f3f5; }
+    .sub-text { font-size: 11px; color: #666; display: block; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
     </style>
     """, unsafe_allow_html=True)
 
-st.title("🧬 பாடப்பிரிவு உருவாக்கம்")
+st.title("🧬 பாடப்பிரிவு மேலாண்மை")
 
-# 1. பாடங்களைப் பெறுதல்
+# புதிய பிரிவு சேர்க்கை
 try:
-    sub_data = requests.get(SUB_API).json()
-    sub_list = [s['subject_name'] for s in sub_data] if isinstance(sub_data, list) else []
-except:
-    sub_list = []
+    subs = requests.get(SUB_API).json()
+    sub_list = [s['subject_name'] for s in subs]
+except: sub_list = []
 
-# 2. புதிய பாடப்பிரிவை உருவாக்குதல் (Input Area)
-with st.container():
-    st.subheader("➕ புதிய பிரிவு")
-    g_name = st.text_input("பிரிவின் பெயர்", placeholder="எ.கா: 12-CS")
-    selected_subs = st.multiselect("பாடங்களைத் தேர்வு செய்க", sub_list)
-    
-    if st.button("💾 பிரிவைச் சேமி"):
+with st.expander("➕ புதிய பிரிவு உருவாக்க", expanded=False):
+    g_name = st.text_input("பிரிவு பெயர்")
+    selected_subs = st.multiselect("பாடங்கள் (அதிகபட்சம் 6)", sub_list)
+    if st.button("💾 பிரிவைச் சேமி", use_container_width=True):
         if g_name and selected_subs:
-            payload = {"group_name": g_name, "subjects": ", ".join(selected_subs)}
-            res = requests.post(GROUP_API, json={"data": [payload]})
-            if res.status_code == 201:
-                st.success("சேமிக்கப்பட்டது!")
-                st.rerun()
-        else:
-            st.warning("விவரங்களை நிரப்பவும்!")
+            requests.post(GROUP_API, json={"data": [{"group_name": g_name, "subjects": ", ".join(selected_subs)}]})
+            st.rerun()
 
 st.divider()
 
-# 3. மொபைல் வியூ பட்டியல் (Card View)
-st.subheader("📋 உள்ள பாடப்பிரிவுகள்")
+# அட்டவணை
 try:
     g_data = requests.get(GROUP_API).json()
-    if g_data and isinstance(g_data, list):
+    if g_data:
+        html = """<table class="fixed-table"><tr><th style="width: 30%;">பிரிவு</th><th style="width: 55%;">பாடங்கள்</th><th style="width: 15%;">நீக்க</th></tr>"""
         for g in g_data:
-            # ஒவ்வொரு பிரிவும் ஒரு பெட்டி (Card) போலத் தெரியும்
-            with st.container():
-                st.markdown(f"""
-                <div class="group-card">
-                    <b>பிரிவு:</b> {g.get('group_name', '')}<br>
-                    <small><b>பாடங்கள்:</b> {g.get('subjects', '')}</small>
-                </div>
-                """, unsafe_allow_html=True)
-                
-                # நீக்குதல் பட்டன் (Card-க்கு கீழே)
-                if st.button(f"🗑️ {g['group_name']} நீக்கு", key=f"del_{g['group_name']}"):
-                    requests.delete(f"{GROUP_API}/group_name/{g['group_name']}")
-                    st.rerun()
-    else:
-        st.info("பிரிவுகள் ஏதுமில்லை.")
-except:
-    st.info("தரவுகள் இல்லை.")
+            gn = g.get('group_name', '')
+            gs = g.get('subjects', '')
+            html += f"""<tr><td><b>{gn}</b></td><td><span class="sub-text">{gs}</span></td>
+            <td><a href="?del_grp={gn}" target="_self" style="text-decoration:none; background:#ff4b4b; color:white; padding:3px 8px; border-radius:4px; font-size:11px;">🗑️</a></td></tr>"""
+        html += "</table>"
+        st.markdown(html, unsafe_allow_html=True)
+
+        if "del_grp" in st.query_params:
+            requests.delete(f"{GROUP_API}/group_name/{st.query_params['del_grp']}")
+            st.query_params.clear()
+            st.rerun()
+except: st.info("பிரிவுகள் ஏதுமில்லை.")
