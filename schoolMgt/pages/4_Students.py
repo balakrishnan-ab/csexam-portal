@@ -27,15 +27,19 @@ try:
     class_list = [c['class_name'] for c in classes] if isinstance(classes, list) else []
 except: class_list = []
 
-# 2. மாணவர் சேர்க்கை (Entry)
+# 2. மாணவர் சேர்க்கை
 with st.expander("➕ புதிய மாணவர் / Excel பதிவேற்றம்", expanded=False):
-    tab1, tab2 = st.tabs(["தனிச் சேர்க்கை", "Excel மூலம்"])
+    tab1, tab2 = st.tabs(["தனிச் சேர்க்கை", "Excel மூலம் மொத்தமாக"])
     
     with tab1:
         s_name = st.text_input("மாணவர் பெயர்")
         c1, c2 = st.columns(2)
         s_emis = c1.text_input("EMIS எண்")
-        s_gen = c2.selectbox("பாலினம்", ["Female", "Male", "Other"])
+        
+        # திரையில் தமிழ், தரவுத்தளத்தில் ஆங்கிலம்
+        gender_map = {"மாணவர்": "Male", "மாணவி": "Female"}
+        s_gen_display = c2.selectbox("பாலினம்", list(gender_map.keys()))
+        s_gen_value = gender_map[s_gen_display]
         
         c3, c4 = st.columns(2)
         s_phone = c3.text_input("போன் எண்")
@@ -45,28 +49,26 @@ with st.expander("➕ புதிய மாணவர் / Excel பதிவே
             if s_name and s_class:
                 payload = {
                     "emis_no": s_emis, "student_name": s_name, 
-                    "Gender": s_gen, "class_name": s_class, "phone_no": s_phone
+                    "Gender": s_gen_value, "class_name": s_class, "phone_no": s_phone
                 }
                 requests.post(STUDENT_API, json={"data": [payload]})
                 st.success("மாணவர் சேர்க்கப்பட்டார்!")
                 st.rerun()
 
     with tab2:
-        st.info("Excel-ல் 'emis_no', 'student_name', 'Gender', 'phone_no' தலைப்புகள் இருக்க வேண்டும்.")
-        upl_class = st.selectbox("எந்த வகுப்புக்கு ஏற்ற வேண்டும்?", class_list, key="bulk_entry")
-        uploaded_file = st.file_uploader("கோப்பைத் தேர்ந்தெடுக்கவும்", type=['csv', 'xlsx'])
+        st.info("Excel-ல் 'emis_no', 'student_name', 'Gender' (Male/Female), 'class_name' இருக்க வேண்டும்.")
+        uploaded_file = st.file_uploader("அனைத்து வகுப்பு மாணவர் பட்டியலை பதிவேற்றவும்", type=['csv', 'xlsx'])
         if uploaded_file and st.button("🚀 மொத்தமாகப் பதிவேற்று"):
             df = pd.read_csv(uploaded_file) if uploaded_file.name.endswith('.csv') else pd.read_excel(uploaded_file)
-            df['class_name'] = upl_class
             requests.post(STUDENT_API, json={"data": df.to_dict(orient='records')})
-            st.success("அனைத்து மாணவர்களும் சேர்க்கப்பட்டனர்!")
+            st.success(f"{len(df)} மாணவர்கள் பதிவேற்றப்பட்டனர்!")
             st.rerun()
 
 st.divider()
 
 # 3. மாணவர் பட்டியல்
 st.subheader("📋 மாணவர் பட்டியல்")
-view_cls = st.selectbox("வகுப்பைத் தேர்வு செய்க", ["அனைத்தும்"] + class_list)
+view_cls = st.selectbox("வகுப்பைத் தேர்வு செய்க", ["அனைத்து வகுப்புகள்"] + class_list)
 
 try:
     students = requests.get(STUDENT_API).json()
@@ -76,21 +78,24 @@ try:
             <tr>
                 <th style="width: 45%;">பெயர்</th>
                 <th style="width: 20%;">பாலினம்</th>
-                <th style="width: 20%;">EMIS</th>
+                <th style="width: 20%;">வகுப்பு</th>
                 <th style="width: 15%;">நீக்க</th>
             </tr>"""
         
         for s in students:
-            if view_cls == "அனைத்தும்" or s.get('class_name') == view_cls:
+            if view_cls == "அனைத்து வகுப்புகள்" or s.get('class_name') == view_cls:
                 n_val = s.get('student_name', '')
-                g_val = s.get('Gender', '')
+                # காட்டும்போது மீண்டும் தமிழில் காட்டுகிறோம்
+                g_raw = s.get('Gender', '')
+                g_display = "மாணவர்" if g_raw == "Male" else "மாணவி" if g_raw == "Female" else g_raw
+                c_val = s.get('class_name', '')
                 e_val = s.get('emis_no', '')
                 
                 html_code += f"""
                 <tr>
                     <td><b>{n_val}</b></td>
-                    <td>{g_val}</td>
-                    <td><small>{e_val}</small></td>
+                    <td>{g_display}</td>
+                    <td>{c_val}</td>
                     <td>
                         <a href="?delete_std={e_val}" target="_self" 
                            style="text-decoration:none; background:#ff4b4b; color:white; padding:3px 8px; border-radius:4px; font-size:10px;">🗑️</a>
