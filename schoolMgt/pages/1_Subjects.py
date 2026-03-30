@@ -1,56 +1,48 @@
 import streamlit as st
 import requests
-import pandas as pd
 
 API_URL = "https://sheetdb.io/api/v1/sb3mxuvdynqos?sheet=Subjects"
 
-st.title("📚 பாடம் மேலாண்மை (Subject Master)")
+st.set_page_config(page_title="Subjects", layout="wide")
 
-# 1. உள்ளீடு பகுதி
-with st.expander("➕ புதிய பாடம் சேர்க்க / திருத்த", expanded=True):
-    col1, col2 = st.columns(2)
-    s_name = col1.text_input("பாடத்தின் பெயர்", placeholder="எ.கா: தமிழ்")
-    e_type = col2.selectbox("மதிப்பீட்டு முறை", ["90 + 10", "70 + 20 + 10"])
-    
-    if st.button("💾 பாடத்தைச் சேமி"):
-        if s_name:
-            new_data = {"id": s_name, "subject_name": s_name, "eval_type": e_type}
-            requests.post(API_URL, json={"data": [new_data]})
-            st.success(f"{s_name} வெற்றிகரமாகச் சேமிக்கப்பட்டது!")
+# மொபைல் மற்றும் டெஸ்க்டாப் இரண்டிற்கும் ஏற்ற CSS
+st.markdown("""
+    <style>
+    .fixed-table { width: 100%; border-collapse: collapse; font-size: 14px; table-layout: fixed; }
+    .fixed-table th, .fixed-table td { border-bottom: 1px solid #eee; padding: 12px 5px; text-align: left; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+    .fixed-table th { background-color: #f1f3f5; font-weight: bold; }
+    </style>
+    """, unsafe_allow_html=True)
+
+st.title("📚 பாடங்கள் மேலாண்மை")
+
+# புதிய பாடம் சேர்க்கை
+with st.expander("➕ புதிய பாடம் சேர்க்க", expanded=False):
+    sub_name = st.text_input("பாடத்தின் பெயர்")
+    eval_type = st.selectbox("மதிப்பீட்டு முறை", ["Internal & External", "Only Internal"])
+    if st.button("💾 பாடத்தைச் சேமி", use_container_width=True):
+        if sub_name:
+            requests.post(API_URL, json={"data": [{"subject_name": sub_name, "eval_type": eval_type}]})
             st.rerun()
 
-# 2. தரவுகளைப் பட்டியலிடுதல்
-st.subheader("📋 பாடங்களின் பட்டியல்")
-response = requests.get(API_URL)
-data = response.json() if response.status_code == 200 else []
+st.divider()
 
-if data:
-    # தலைப்பு வரிசை (Header Row)
-    h_col1, h_col2, h_col3 = st.columns([3, 2, 2])
-    h_col1.markdown("**பாடத்தின் பெயர்**")
-    h_col2.markdown("**மதிப்பீட்டு முறை**")
-    h_col3.markdown("**செயல்கள்**")
-    st.divider()
+# அட்டவணை
+try:
+    data = requests.get(API_URL).json()
+    if data:
+        html = """<table class="fixed-table"><tr><th style="width: 50%;">பாடம்</th><th style="width: 35%;">முறை</th><th style="width: 15%;">நீக்க</th></tr>"""
+        for item in data:
+            s_val = item.get('subject_name', '')
+            e_val = item.get('eval_type', '').split()[0] # 'Internal' எனச் சுருக்க
+            html += f"""<tr><td><b>{s_val}</b></td><td>{e_val}</td>
+            <td><a href="?delete_sub={s_val}" target="_self" style="text-decoration:none; background:#ff4b4b; color:white; padding:3px 8px; border-radius:4px; font-size:11px;">🗑️</a></td></tr>"""
+        html += "</table>"
+        st.markdown(html, unsafe_allow_html=True)
 
-    for sub in data:
-        col1, col2, col3 = st.columns([3, 2, 2])
-        
-        # பாட விவரங்கள்
-        col1.text(sub.get('subject_name', ''))
-        col2.text(sub.get('eval_type', ''))
-        
-        # வலது ஓரத்தில் குறும்படங்கள்
-        action_cols = col3.columns(2)
-        
-        # 📝 பதிப்பி (Edit) பட்டன்
-        if action_cols[0].button("📝", key=f"edit_{sub['subject_name']}", help="திருத்த"):
-            st.info(f"{sub['subject_name']} - விவரங்களை மேலே உள்ள பெட்டியில் மாற்றி மீண்டும் சேமிக்கவும்.")
-            # குறிப்பு: இங்கு திருத்துவதற்கான தரவுகளை மேலே உள்ள input பெட்டிகளுக்கு கொண்டு செல்லலாம்
-            
-        # 🗑️ நீக்கு (Delete) பட்டன்
-        if action_cols[1].button("🗑️", key=f"del_{sub['subject_name']}", help="நீக்க"):
-            requests.delete(f"{API_URL}/id/{sub['subject_name']}")
-            st.warning(f"{sub['subject_name']} நீக்கப்பட்டது!")
+        # நீக்குதல் லாஜிக்
+        if "delete_sub" in st.query_params:
+            requests.delete(f"{API_URL}/subject_name/{st.query_params['delete_sub']}")
+            st.query_params.clear()
             st.rerun()
-else:
-    st.info("பாடங்கள் இன்னும் சேர்க்கப்படவில்லை.")
+except: st.info("பாடங்கள் ஏதுமில்லை.")
