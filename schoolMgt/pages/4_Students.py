@@ -35,7 +35,7 @@ with st.expander("➕ புதிய மாணவர் / Excel பதிவே
         s_name = st.text_input("மாணவர் பெயர்")
         c1, c2 = st.columns(2)
         s_emis = c1.text_input("EMIS எண்")
-        s_gen = c2.selectbox("பாலினம்", ["மாணவர்", "மாணவி", "இதர"])
+        s_gen = c2.selectbox("பாலினம்", ["Female", "Male", "Other"])
         
         c3, c4 = st.columns(2)
         s_phone = c3.text_input("போன் எண்")
