@@ -106,3 +106,24 @@ try:
                 if "70" in eval_type:
                     c = st.columns([1.2, 1, 1, 1])
                     c[0].markdown(f"<p class='std-name'>{row['student_name']}</p>", unsafe_allow_html=True)
+                    t = c[1].text_input("T", key=f"t_{row['emis_no']}", label_visibility="collapsed")
+                    p = c[2].text_input("P", value="20" if fill_p else "", key=f"p_{row['emis_no']}", label_visibility="collapsed")
+                    i = c[3].text_input("I", value="10" if fill_i else "", key=f"i_{row['emis_no']}", label_visibility="collapsed")
+                    save_list.append({"emis_no": row['emis_no'], "T": t, "P": p, "I": i})
+                else:
+                    c = st.columns([1.2, 1, 1])
+                    c[0].markdown(f"<p class='std-name'>{row['student_name']}</p>", unsafe_allow_html=True)
+                    e = c[1].text_input("E", key=f"e_{row['emis_no']}", label_visibility="collapsed")
+                    i = c[2].text_input("I", value="10" if fill_i else "", key=f"i_{row['emis_no']}", label_visibility="collapsed")
+                    save_list.append({"emis_no": row['emis_no'], "T": e, "P": "", "I": i})
+
+            if st.form_submit_button("🚀 சேமி (Submit)", use_container_width=True):
+                for item in save_list:
+                    payload = {
+                        "exam_id": sel_exam, "class_name": sel_class, "emis_no": item['emis_no'],
+                        f"{col_prefix}_T": item['T'], f"{col_prefix}_P": item['P'], f"{col_prefix}_I": item['I']
+                    }
+                    requests.patch(f"{MARK_API}/emis_no/{item['emis_no']}", json={"data": payload})
+                st.success("வெற்றிகரமாகச் சேமிக்கப்பட்டது!")
+    else: st.info("மாணவர்கள் இல்லை.")
+except: st.error("பிழை!")
