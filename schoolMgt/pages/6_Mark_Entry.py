@@ -12,30 +12,30 @@ MARK_API = "https://sheetdb.io/api/v1/sb3mxuvdynqos?sheet=Marks"
 
 st.set_page_config(page_title="Mark Entry", layout="wide")
 
-# CSS - பெட்டிகளை மிகச்சிறியதாக்கி ஒரே வரியில் கொண்டு வருதல்
+# CSS - பெட்டிகளை மிக நெருக்கமாகக் கொண்டு வருதல்
 st.markdown("""
     <style>
-    /* மொபைல் திரையில் Columns மடியாமல் இருக்க */
+    /* காலம்களுக்கு இடையிலான இடைவெளியைக் குறைத்தல் */
     [data-testid="column"] {
         flex: 1 1 0% !important;
         min-width: 0px !important;
-        padding: 0px 2px !important;
+        padding: 0px 1px !important;
     }
-    /* இன்புட் பாக்ஸ் அளவை 3 இலக்கங்களுக்கு ஏற்ப சுருக்குதல் */
+    /* இன்புட் பாக்ஸ் ஸ்டைல் */
     div[data-testid="stTextInput"] > div > div > input {
         padding: 4px 2px !important;
         font-size: 14px !important;
         text-align: center !important;
-        width: 45px !important; /* பெட்டியின் அகலம் மிகச்சிறியதாக */
-        height: 30px !important;
+        height: 32px !important;
     }
-    /* பெயரின் அளவை மட்டும் கவனித்தல் */
+    /* மாணவர் பெயர் ஸ்டைல் */
     .std-name {
         font-size: 13px !important;
         white-space: nowrap;
         overflow: hidden;
         text-overflow: ellipsis;
-        margin-top: 5px;
+        margin-top: 6px;
+        color: #333;
     }
     </style>
     """, unsafe_allow_html=True)
@@ -57,6 +57,7 @@ col_a, col_b = st.columns(2)
 sel_exam = col_a.selectbox("தேர்வு", exams)
 sel_class = col_b.selectbox("வகுப்பு", class_list)
 
+# பாடப்பிரிவு மற்றும் பாடங்களைக் கண்டறிதல்
 target_group = next((c['group_name'] for c in classes_data if c['class_name'] == sel_class), "")
 group_info = next((g for g in groups_data if g['group_name'] == target_group), None)
 
@@ -75,7 +76,7 @@ cf1, cf2 = st.columns(2)
 fill_i = cf1.checkbox("I (10) அனைவருக்கும்")
 fill_p = cf2.checkbox("P (20) அனைவருக்கும்") if "70" in eval_type else False
 
-# 3. காம்பாக்ட் மார்க் என்ட்ரி
+# 3. மார்க் என்ட்ரி (Table Like View)
 try:
     students = requests.get(STUDENT_API).json()
     df_f = pd.DataFrame(students)
@@ -83,12 +84,12 @@ try:
 
     if not df_f.empty:
         with st.form("compact_form"):
-            # தலைப்பு - மிக நெருக்கமான காலம்கள்
+            # தலைப்பு வரிசை
             if "70" in eval_type:
-                h = st.columns([3, 1, 1, 1])
+                h = st.columns([2.5, 1, 1, 1])
                 h[0].write("**பெயர்**"); h[1].write("**E70**"); h[2].write("**P20**"); h[3].write("**I10**")
             else:
-                h = st.columns([4, 1.2, 1.2])
+                h = st.columns([2.5, 1, 1])
                 h[0].write("**பெயர்**"); h[1].write("**E90**"); h[2].write("**I10**")
             
             st.markdown("---")
@@ -96,14 +97,14 @@ try:
             save_list = []
             for _, row in df_f.iterrows():
                 if "70" in eval_type:
-                    c = st.columns([3, 1, 1, 1])
+                    c = st.columns([2.5, 1, 1, 1])
                     c[0].markdown(f"<p class='std-name'>{row['student_name']}</p>", unsafe_allow_html=True)
                     t = c[1].text_input("T", key=f"t_{row['emis_no']}", label_visibility="collapsed")
                     p = c[2].text_input("P", value="20" if fill_p else "", key=f"p_{row['emis_no']}", label_visibility="collapsed")
                     i = c[3].text_input("I", value="10" if fill_i else "", key=f"i_{row['emis_no']}", label_visibility="collapsed")
                     save_list.append({"emis_no": row['emis_no'], "T": t, "P": p, "I": i})
                 else:
-                    c = st.columns([4, 1.2, 1.2])
+                    c = st.columns([2.5, 1, 1])
                     c[0].markdown(f"<p class='std-name'>{row['student_name']}</p>", unsafe_allow_html=True)
                     e = c[1].text_input("E", key=f"e_{row['emis_no']}", label_visibility="collapsed")
                     i = c[2].text_input("I", value="10" if fill_i else "", key=f"i_{row['emis_no']}", label_visibility="collapsed")
@@ -115,6 +116,7 @@ try:
                         "exam_id": sel_exam, "class_name": sel_class, "emis_no": item['emis_no'],
                         f"{col_prefix}_T": item['T'], f"{col_prefix}_P": item['P'], f"{col_prefix}_I": item['I']
                     }
+                    # Update செய்யும் பகுதி
                     requests.patch(f"{MARK_API}/emis_no/{item['emis_no']}", json={"data": payload})
                 st.success("வெற்றிகரமாகச் சேமிக்கப்பட்டது!")
     else: st.info("மாணவர்கள் இல்லை.")
