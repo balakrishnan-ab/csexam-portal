@@ -12,16 +12,17 @@ MARK_API = "https://sheetdb.io/api/v1/sb3mxuvdynqos?sheet=Marks"
 
 st.set_page_config(page_title="Mark Entry", layout="wide")
 
-# CSS - பெயருக்கு 30% மற்றும் பெட்டிகளுக்கு 15% அளவில் சுருக்குதல்
+# CSS - இடைவெளியை மிகத் துல்லியமாகக் குறைத்தல்
 st.markdown("""
     <style>
-    /* காலம்களை மிக நெருக்கமாக மாற்றுதல் */
+    /* காலம்களுக்கு இடையிலான இடைவெளியை (Gap) 0 ஆக்குதல் */
     [data-testid="column"] {
         flex: 1 1 0% !important;
         min-width: 0px !important;
         padding: 0px 1px !important;
+        gap: 0px !important;
     }
-    /* இன்புட் பாக்ஸ் அளவை 15% இடத்திற்குள் சுருக்குதல் */
+    /* இன்புட் பாக்ஸ் அகலத்தை 3 இலக்கங்களுக்கு ஏற்ப சுருக்குதல் */
     div[data-testid="stTextInput"] > div > div > input {
         padding: 4px 1px !important;
         font-size: 14px !important;
@@ -29,7 +30,7 @@ st.markdown("""
         height: 30px !important;
         width: 100% !important;
     }
-    /* மாணவர் பெயர் ஸ்டைல் - 30% இடத்திற்குள் */
+    /* பெயரின் அளவைச் சுருக்கி பெட்டிக்கு மிக அருகில் கொண்டு வருதல் */
     .std-name {
         font-size: 12px !important;
         white-space: nowrap;
@@ -38,7 +39,10 @@ st.markdown("""
         margin-top: 6px;
         color: #333;
         font-weight: bold;
+        text-align: left;
     }
+    /* வரிசைகளுக்கு இடையே உள்ள இடைவெளியைக் குறைத்தல் */
+    .stForm > div { gap: 0.5rem !important; }
     </style>
     """, unsafe_allow_html=True)
 
@@ -53,7 +57,7 @@ try:
     subjects_data = requests.get(SUB_API).json()
     class_list = [c['class_name'] for c in classes_data]
 except:
-    st.error("API தரவுகளைப் பெறுவதில் பிழை!")
+    st.error("API தரவு பிழை!")
     st.stop()
 
 col_a, col_b = st.columns(2)
@@ -74,12 +78,12 @@ else: st.stop()
 
 st.divider()
 
-# 2. ஸ்மார்ட் ஃபில் (Smart Fill)
+# 2. ஸ்மார்ட் ஃபில்
 cf1, cf2 = st.columns(2)
 fill_i = cf1.checkbox("I (10) அனைவருக்கும்")
 fill_p = cf2.checkbox("P (20) அனைவருக்கும்") if "70" in eval_type else False
 
-# 3. காம்பாக்ட் மார்க் என்ட்ரி (30% - 15% - 15% - 15% விகிதம்)
+# 3. அல்ட்ரா காம்பாக்ட் என்ட்ரி
 try:
     students_res = requests.get(STUDENT_API).json()
     df_f = pd.DataFrame(students_res)
@@ -87,12 +91,12 @@ try:
 
     if not df_f.empty:
         with st.form("ultra_compact_form"):
-            # விகிதம் [2, 1, 1, 1] - பெயர் 2 பங்கு, மற்றவை 1 பங்கு (தோராயமாக 30% - 15% - 15% - 15%)
+            # விகிதம் [1.2, 1, 1, 1] - பெயர் மிகக் குறைந்த இடம், பெட்டிகள் உடனே தொடங்கும்
             if "70" in eval_type:
-                h = st.columns([2, 1, 1, 1])
+                h = st.columns([1.2, 1, 1, 1])
                 h[0].write("**பெயர்**"); h[1].write("**E70**"); h[2].write("**P20**"); h[3].write("**I10**")
             else:
-                h = st.columns([2, 1, 1])
+                h = st.columns([1.2, 1, 1])
                 h[0].write("**பெயர்**"); h[1].write("**E90**"); h[2].write("**I10**")
             
             st.markdown("---")
@@ -100,26 +104,5 @@ try:
             save_list = []
             for _, row in df_f.iterrows():
                 if "70" in eval_type:
-                    c = st.columns([2, 1, 1, 1])
+                    c = st.columns([1.2, 1, 1, 1])
                     c[0].markdown(f"<p class='std-name'>{row['student_name']}</p>", unsafe_allow_html=True)
-                    t = c[1].text_input("T", key=f"t_{row['emis_no']}", label_visibility="collapsed")
-                    p = c[2].text_input("P", value="20" if fill_p else "", key=f"p_{row['emis_no']}", label_visibility="collapsed")
-                    i = c[3].text_input("I", value="10" if fill_i else "", key=f"i_{row['emis_no']}", label_visibility="collapsed")
-                    save_list.append({"emis_no": row['emis_no'], "T": t, "P": p, "I": i})
-                else:
-                    c = st.columns([2, 1, 1])
-                    c[0].markdown(f"<p class='std-name'>{row['student_name']}</p>", unsafe_allow_html=True)
-                    e = c[1].text_input("E", key=f"e_{row['emis_no']}", label_visibility="collapsed")
-                    i = c[2].text_input("I", value="10" if fill_i else "", key=f"i_{row['emis_no']}", label_visibility="collapsed")
-                    save_list.append({"emis_no": row['emis_no'], "T": e, "P": "", "I": i})
-
-            if st.form_submit_button("🚀 சேமி (Submit)", use_container_width=True):
-                for item in save_list:
-                    payload = {
-                        "exam_id": sel_exam, "class_name": sel_class, "emis_no": item['emis_no'],
-                        f"{col_prefix}_T": item['T'], f"{col_prefix}_P": item['P'], f"{col_prefix}_I": item['I']
-                    }
-                    requests.patch(f"{MARK_API}/emis_no/{item['emis_no']}", json={"data": payload})
-                st.success("வெற்றிகரமாகச் சேமிக்கப்பட்டது!")
-    else: st.info("மாணவர்கள் இல்லை.")
-except: st.error("பிழை!")
