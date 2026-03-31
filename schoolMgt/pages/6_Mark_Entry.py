@@ -12,18 +12,19 @@ MARK_API = "https://sheetdb.io/api/v1/sb3mxuvdynqos?sheet=Marks"
 
 st.set_page_config(page_title="Mark Entry", layout="wide")
 
-# CSS - பெட்டிகள் மிகச் சிறியதாகவும் ஒரே வரியிலும் இருக்க
+# CSS - டேபிளை மொபைலில் கச்சிதமாக்க
 st.markdown("""
     <style>
-    div[data-testid="stColumn"] { padding: 0px 2px !important; }
-    input { font-size: 14px !important; padding: 5px !important; text-align: center; }
-    .stMarkdown p { font-size: 13px !important; margin-bottom: 0px; }
+    .mark-table { width: 100%; border-collapse: collapse; margin-top: 10px; }
+    .mark-table th, .mark-table td { border-bottom: 1px solid #ddd; padding: 8px 4px; text-align: left; }
+    .mark-table th { background-color: #f8f9fa; font-size: 12px; }
+    .mark-input { width: 50px; padding: 5px; text-align: center; border: 1px solid #ccc; border-radius: 4px; }
     </style>
     """, unsafe_allow_html=True)
 
 st.title("✍️ மதிப்பெண் உள்ளீடு")
 
-# 1. அடிப்படைத் தரவுகள்
+# 1. தரவுகளைப் பெறுதல்
 try:
     exams = [e['exam_name'] for e in requests.get(EXAM_API).json()]
     classes_data = requests.get(CLASS_API).json()
@@ -31,13 +32,14 @@ try:
     subjects_data = requests.get(SUB_API).json()
     class_list = [c['class_name'] for c in classes_data]
 except:
-    st.error("API பிழை!")
+    st.error("API Error!")
     st.stop()
 
 col_a, col_b = st.columns(2)
 sel_exam = col_a.selectbox("தேர்வு", exams)
 sel_class = col_b.selectbox("வகுப்பு", class_list)
 
+# பாடப்பிரிவு மற்றும் பாடங்களைக் கண்டறிதல்
 target_group = next((c['group_name'] for c in classes_data if c['class_name'] == sel_class), "")
 group_info = next((g for g in groups_data if g['group_name'] == target_group), None)
 
@@ -62,36 +64,38 @@ fill_p = False
 if "70" in eval_type:
     fill_p = c_fill2.checkbox("P (20) அனைவருக்கும்")
 
-# 3. மார்க் என்ட்ரி படிவம்
+# 3. மார்க் என்ட்ரி பகுதி
 try:
     students = requests.get(STUDENT_API).json()
     df_f = pd.DataFrame(students)
     df_f = df_f[df_f['class_name'] == sel_class].sort_values(by=['Gender', 'student_name'])
 
     if not df_f.empty:
+        # Streamlit-ன் form-ஐப் பயன்படுத்தியே HTML அமைப்பைக் கொண்டு வருகிறோம்
         with st.form("marks_form"):
-            # தலைப்பு வரிசை
+            # Table Header
             if "70" in eval_type:
-                h_n, h_t, h_p, h_i = st.columns([3, 1, 1, 1])
-                h_n.write("**பெயர்**"); h_t.write("**E(70)**"); h_p.write("**P(20)**"); h_i.write("**I(10)**")
+                h1, h2, h3, h4 = st.columns([3, 1, 1, 1])
+                h1.write("**மாணவர் பெயர்**"); h2.write("**E(70)**"); h3.write("**P(20)**"); h4.write("**I(10)**")
             else:
-                h_n, h_e, h_i = st.columns([3, 1, 1])
-                h_n.write("**பெயர்**"); h_e.write("**E(90)**"); h_i.write("**I(10)**")
+                h1, h2, h3 = st.columns([3, 1, 1])
+                h1.write("**மாணவர் பெயர்**"); h2.write("**E(90)**"); h3.write("**I(10)**")
             
             st.markdown("---")
             
             results = []
             for _, row in df_f.iterrows():
+                # இங்கு columns-க்கு சிறிய விகிதங்களைக் கொடுப்பதால் மொபைலில் மடியாது
                 if "70" in eval_type:
-                    c1, c2, c3, c4 = st.columns([3, 1, 1, 1])
-                    c1.write(row['student_name'])
+                    c1, c2, c3, c4 = st.columns([3.5, 1, 1, 1])
+                    c1.markdown(f"<p style='margin-top:10px;'>{row['student_name']}</p>", unsafe_allow_html=True)
                     t = c2.text_input("T", key=f"t_{row['emis_no']}", label_visibility="collapsed")
                     p = c3.text_input("P", value="20" if fill_p else "", key=f"p_{row['emis_no']}", label_visibility="collapsed")
                     i = c4.text_input("I", value="10" if fill_i else "", key=f"i_{row['emis_no']}", label_visibility="collapsed")
                     results.append({"emis_no": row['emis_no'], "T": t, "P": p, "I": i})
                 else:
-                    c1, c2, c3 = st.columns([3, 1, 1])
-                    c1.write(row['student_name'])
+                    c1, c2, c3 = st.columns([4, 1.2, 1.2])
+                    c1.markdown(f"<p style='margin-top:10px;'>{row['student_name']}</p>", unsafe_allow_html=True)
                     e = c2.text_input("E", key=f"e_{row['emis_no']}", label_visibility="collapsed")
                     i = c3.text_input("I", value="10" if fill_i else "", key=f"i_{row['emis_no']}", label_visibility="collapsed")
                     results.append({"emis_no": row['emis_no'], "T": e, "P": "", "I": i})
@@ -102,7 +106,7 @@ try:
                         "exam_id": sel_exam, "class_name": sel_class, "emis_no": res['emis_no'],
                         f"{col_prefix}_T": res['T'], f"{col_prefix}_P": res['P'], f"{col_prefix}_I": res['I']
                     }
-                    # Patch: ஏற்கனவே EMIS இருந்தால் மாற்றிவிடும் (Update)
+                    # Update (Patch) - EMIS எண் அடையாளமாகப் பயன்படுத்தப்படுகிறது
                     requests.patch(f"{MARK_API}/emis_no/{res['emis_no']}", json={"data": payload})
                 st.success("வெற்றிகரமாகச் சேமிக்கப்பட்டது!")
     else: st.info("மாணவர்கள் இல்லை.")
