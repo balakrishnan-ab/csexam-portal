@@ -11,13 +11,12 @@ st.title("👨‍🎓 மாணவர்கள்")
 
 # 1. மாணவர் பட்டியலைப் பெறுதல்
 try:
-    # follow_redirects=True என்பது கூகுள் ஸ்கிரிப்டிற்கு மிகவும் அவசியம்
-    res = requests.get(f"{BASE_URL}?sheet=Students", follow_redirects=True)
+    # allow_redirects=True என்பதுதான் சரியான வார்த்தை
+    res = requests.get(f"{BASE_URL}?sheet=Students", allow_redirects=True)
     if res.status_code == 200:
         data = res.json()
-        if data:
+        if isinstance(data, list) and data:
             df = pd.DataFrame(data)
-            # முக்கியமான தகவல்களை மட்டும் காட்ட (விருப்பப்பட்டால்)
             st.dataframe(df, use_container_width=True)
         else:
             st.info("மாணவர் பட்டியலில் தரவுகள் ஏதுமில்லை.")
@@ -50,12 +49,9 @@ with st.form("add_student_form", clear_on_submit=True):
                 "class_name": cname
             }
             try:
-                # மாணவர் தாளில் (Students Sheet) சேமித்தல்
-                res_post = requests.post(f"{BASE_URL}?sheet=Students", json={"data": [payload]}, follow_redirects=True)
-                
-                # மதிப்பெண் தாளில் (Marks Sheet) ஒரு காலியான வரியை உருவாக்குதல்
-                mark_payload = {"emis_no": emis, "class_name": cname}
-                requests.post(f"{BASE_URL}?sheet=Marks", json={"data": [mark_payload]}, follow_redirects=True)
+                # allow_redirects=True என்பதை இங்கும் மாற்றியுள்ளேன்
+                requests.post(f"{BASE_URL}?sheet=Students", json={"data": [payload]}, allow_redirects=True)
+                requests.post(f"{BASE_URL}?sheet=Marks", json={"data": [{"emis_no": emis, "class_name": cname}]}, allow_redirects=True)
                 
                 st.success(f"மாணவர் {name} வெற்றிகரமாகச் சேர்க்கப்பட்டார்!")
                 st.rerun()
