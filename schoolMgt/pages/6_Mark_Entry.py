@@ -1,9 +1,12 @@
 import streamlit as st
-import requests
-import pandas as pd
-# 🔗 இதோ அந்த மந்திர வரி:
-from Constants import BASE_URL 
+import sys
+import os
 
+# 🛠️ மெயின் ஃபோல்டரைத் தேடும் பாதையில் (Path) சேர்த்தல்
+sys.path.append(os.path.dirname(os.path.abspath(__file__)))
+
+# இப்போது Constants கோப்பை அழைக்கிறோம்
+from Constants import BASE_URL
 # ... மீதி உள்ள பழைய குறியீடுகள் அப்படியே இருக்கட்டும் ...from Constants import BASE_URL 
 
 # ... மீதி உள்ள பழைய குறியீடுகள் அப்படியே இருக்கட்டும் ... பக்கத்தின் கட்டமைப்பு
