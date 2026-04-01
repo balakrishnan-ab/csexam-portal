@@ -6,6 +6,7 @@ import pandas as pd
 BASE_URL = st.secrets["BASE_URL"]
 st.set_page_config(page_title="Mark Entry", layout="wide")
 
+
 # ⚡ தரவுகளைப் பெறுதல்
 @st.cache_data(ttl=60)
 def fetch_all():
