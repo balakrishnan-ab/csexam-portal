@@ -84,3 +84,21 @@ if students:
                     t = cols[1].text_input("T", key=f"t_{row['emis_no']}", label_visibility="collapsed")
                     p = cols[2].text_input("P", value="20" if auto_p else "", key=f"p_{row['emis_no']}", label_visibility="collapsed")
                     i = cols[3].text_input("I", value="10" if auto_i else "", key=f"i_{row['emis_no']}", label_visibility="collapsed")
+                    save_data.append({"exam_id": sel_exam, "emis_no": row['emis_no'], f"{col_prefix}_T": t, f"{col_prefix}_P": p, f"{col_prefix}_I": i})
+                else:
+                    e = cols[1].text_input("E", key=f"e_{row['emis_no']}", label_visibility="collapsed")
+                    i = cols[2].text_input("I", value="10" if auto_i else "", key=f"i_{row['emis_no']}", label_visibility="collapsed")
+                    save_data.append({"exam_id": sel_exam, "emis_no": row['emis_no'], f"{col_prefix}_T": e, f"{col_prefix}_I": i})
+
+            st.write("")
+            if st.form_submit_button("🚀 அனைத்து மதிப்பெண்களையும் சேமி", use_container_width=True):
+                with st.spinner("சேமிக்கப்படுகிறது..."):
+                    # காலி மதிப்பெண்களைத் தவிர்த்துவிட்டுச் சேமித்தல்
+                    for data in save_data:
+                        requests.post(f"{BASE_URL}?sheet=Marks", json={"data": [data]}, allow_redirects=True)
+                    st.success("வெற்றிகரமாகச் சேமிக்கப்பட்டது!")
+                    st.balloons()
+    else:
+        st.info("இந்த வகுப்பில் மாணவர்கள் இல்லை.")
+else:
+    st.info("மாணவர்கள் பட்டியல் காலியாக உள்ளது.")
