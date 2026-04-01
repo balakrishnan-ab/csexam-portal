@@ -1,11 +1,12 @@
 import streamlit as st
 import requests
 import pandas as pd
+# 🔗 இதோ அந்த மந்திர வரி:
+from Constants import BASE_URL 
 
-# 🔗 மெயினில் இருந்து URL-ஐ எடுத்துக்கொள்வது
-BASE_URL = st.session_state.get("BASE_URL", "https://script.google.com/macros/s/AKfycbxcCywCOjo9On8r3xpfyswIzkeroo6PGApMyjEaChLfsVEMwHQNfyBEXs2sqrd51zEN5w/exec")
+# ... மீதி உள்ள பழைய குறியீடுகள் அப்படியே இருக்கட்டும் ...from Constants import BASE_URL 
 
-# பக்கத்தின் கட்டமைப்பு
+# ... மீதி உள்ள பழைய குறியீடுகள் அப்படியே இருக்கட்டும் ... பக்கத்தின் கட்டமைப்பு
 st.set_page_config(page_title="School Management System", layout="wide")
 st.set_page_config(page_title="Mark Entry", layout="wide")
 
