@@ -2,10 +2,12 @@ import streamlit as st
 import requests
 import pandas as pd
 
+# கூகுள் ஸ்கிரிப்ட் URL
 BASE_URL = "https://script.google.com/macros/s/AKfycbzgqCZ6f-kwO46eZPWb_Tr7gz-JdLQSSOL8kVLzRbhPIrinmdQrGiNjNHYIYANNPO8xYg/exec"
 
 st.set_page_config(page_title="Mark Entry", layout="wide")
 
+# ⚡ தரவுகளைப் பெறுதல்
 @st.cache_data(ttl=60)
 def fetch_all():
     try:
@@ -22,7 +24,7 @@ st.title("✍️ மதிப்பெண் உள்ளீடு")
 exams, classes, groups, subjects, students = fetch_all()
 if not exams or not classes: st.stop()
 
-# 1. தேர்வு, வகுப்பு மற்றும் பாடத் தேர்வு (இவை வெளியே இருப்பதால் உடனே மாறும்)
+# 1. தேர்வு, வகுப்பு மற்றும் பாடத் தேர்வு
 c1, c2 = st.columns(2)
 sel_exam = c1.selectbox("தேர்வு", [e['exam_name'] for e in exams])
 sel_class = c2.selectbox("வகுப்பு", [c['class_name'] for c in classes])
@@ -41,60 +43,60 @@ else: st.stop()
 
 st.divider()
 
+# ---------------------------------------------------------
+# 🛡️ மிக முக்கியமான பகுதி: மின்னல் வேகத் தேர்வு (Tick)
+# ---------------------------------------------------------
 if students:
     df = pd.DataFrame(students)
     df_f = df[df['class_name'] == sel_class].sort_values(by=['Gender', 'student_name'], ascending=[True, True])
     
     if not df_f.empty:
-        # 🚀 முக்கிய மாற்றம்: இந்த 3 பெட்டிகளும் படிவத்திற்கு (Form) வெளியே உள்ளன
-        st.write("### ⚙️ விரைவுத் தேர்வு")
-        col_m1, col_m2, col_m3 = st.columns(3)
+        # 1. மாஸ்டர் செக்பாக்ஸ்கள் (Form-க்கு வெளியே இருந்தால் மட்டுமே உடனே மாறும்)
+        m1, m2, m3 = st.columns(3)
         
-        # இவை வெளியே இருப்பதால், இதை மாற்றியவுடன் பக்கம் Refresh ஆகி கீழே உள்ள பெட்டிகளை மாற்றும்
-        m_sel = col_m1.checkbox("அனைவரையும் தேர்வு செய்க / நீக்குக", key="master_sel")
-        m_int = col_m2.checkbox("அனைவருக்கும் Internal (10) வழங்குக", key="master_int")
-        m_prac = col_m3.checkbox("அனைவருக்கும் Practical (20) வழங்குக", key="master_prac") if "70" in eval_type else False
+        # 'on_change' அல்லது 'key' தேவையில்லை, இந்த முறையைப் பின்பற்றுங்கள்:
+        is_all_selected = m1.checkbox("அனைவரையும் தேர்வு செய்க / நீக்குக")
+        is_int_all = m2.checkbox("அனைவருக்கும் Internal (10) வழங்குக")
+        is_prac_all = m3.checkbox("அனைவருக்கும் Practical (20) வழங்குக") if "70" in eval_type else False
 
         # 2. மதிப்பெண் படிவம்
-        with st.form("marks_entry_form"):
+        with st.form("final_marks_form"):
             save_data = []
             
             # அட்டவணை தலைப்புகள்
-            cols_h = st.columns([0.5, 2, 1, 1, 1]) if "70" in eval_type else st.columns([0.5, 2, 1, 1])
-            cols_h[0].write("**தேர்வு**"); cols_h[1].write("**மாணவர் பெயர்**")
+            h_cols = st.columns([0.5, 2, 1, 1, 1]) if "70" in eval_type else st.columns([0.5, 2, 1, 1])
+            h_cols[0].write("**தேர்வு**"); h_cols[1].write("**மாணவர் பெயர்**")
             
             for index, row in df_f.iterrows():
                 cols = st.columns([0.5, 2, 1, 1, 1]) if "70" in eval_type else st.columns([0.5, 2, 1, 1])
                 
-                # மேலே உள்ள master_sel-ஐ நேரடியாக இங்கே பொருத்துகிறோம்
-                is_sel = cols[0].checkbox(" ", value=m_sel, key=f"chk_{row['emis_no']}", label_visibility="collapsed")
-                cols[1].write(f"**{row['student_name']}**")
+                # ⚡ இங்கேயே 'value' கொடுக்கப்படுவதால், மெயின் செக்பாக்ஸ் மாற்றியவுடன் இது மாறும்
+                student_tick = cols[0].checkbox(" ", value=is_all_selected, key=f"tick_{row['emis_no']}", label_visibility="collapsed")
+                cols[1].write(f"{row['student_name']}")
                 
                 if "70" in eval_type:
                     t = cols[2].text_input("Theory", key=f"t_{row['emis_no']}", label_visibility="collapsed")
-                    # டிக் இருந்தால் மட்டுமே மதிப்பெண் நிரப்பப்படும்
-                    p_val = "20" if (m_prac and is_sel) else ""
-                    i_val = "10" if (m_int and is_sel) else ""
+                    # டிக் இருந்தால் மட்டுமே மதிப்பெண்
+                    p_val = "20" if (is_prac_all and student_tick) else ""
+                    i_val = "10" if (is_int_all and student_tick) else ""
                     
                     p = cols[3].text_input("Prac", value=p_val, key=f"p_{row['emis_no']}", label_visibility="collapsed")
                     i = cols[4].text_input("Int", value=i_val, key=f"i_{row['emis_no']}", label_visibility="collapsed")
                     
-                    if is_sel:
+                    if student_tick:
                         save_data.append({"action": "upsert", "exam_id": sel_exam, "emis_no": row['emis_no'], f"{col_prefix}_T": t, f"{col_prefix}_P": p, f"{col_prefix}_I": i})
                 else:
                     e = cols[2].text_input("Exam", key=f"e_{row['emis_no']}", label_visibility="collapsed")
-                    i_val = "10" if (m_int and is_sel) else ""
+                    i_val = "10" if (is_int_all and student_tick) else ""
                     i = cols[3].text_input("Int", value=i_val, key=f"i_{row['emis_no']}", label_visibility="collapsed")
                     
-                    if is_sel:
+                    if student_tick:
                         save_data.append({"action": "upsert", "exam_id": sel_exam, "emis_no": row['emis_no'], f"{col_prefix}_T": e, f"{col_prefix}_I": i})
 
-            st.write("")
-            if st.form_submit_button("🚀 மதிப்பெண்களைப் சேமி (Submit)", use_container_width=True):
+            if st.form_submit_button("🚀 மதிப்பெண்களைச் சேமி", use_container_width=True):
                 if not save_data:
                     st.warning("முதலில் மாணவர்களைத் தேர்வு செய்யவும்!")
                 else:
-                    with st.spinner("சீட்டில் சேமிக்கப்படுகிறது..."):
-                        requests.post(f"{BASE_URL}?sheet=Marks", json={"data": save_data}, allow_redirects=True)
-                        st.success("வெற்றிகரமாகச் சேமிக்கப்பட்டது!")
-                        st.rerun()
+                    requests.post(f"{BASE_URL}?sheet=Marks", json={"data": save_data}, allow_redirects=True)
+                    st.success("வெற்றிகரமாகச் சேமிக்கப்பட்டது!")
+                    st.rerun()
