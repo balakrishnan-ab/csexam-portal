@@ -6,6 +6,7 @@ BASE_URL = "https://script.google.com/macros/s/AKfycbzgqCZ6f-kwO46eZPWb_Tr7gz-Jd
 
 st.set_page_config(page_title="Mark Entry", layout="wide")
 
+# ⚡ தரவுகளைப் பெறுதல்
 @st.cache_data(ttl=60)
 def fetch_all():
     try:
@@ -22,7 +23,6 @@ st.title("✍️ மதிப்பெண் உள்ளீடு")
 exams, classes, groups, subjects, students = fetch_all()
 if not exams or not classes: st.stop()
 
-# 1. தேர்வு மற்றும் வகுப்புத் தேர்வு
 c1, c2 = st.columns(2)
 sel_exam = c1.selectbox("தேர்வு", [e['exam_name'] for e in exams])
 sel_class = c2.selectbox("வகுப்பு", [c['class_name'] for c in classes])
@@ -41,18 +41,21 @@ else: st.stop()
 
 st.divider()
 
+# ---------------------------------------------------------
+# ⚡ மின்னல் வேக டிக் (Tick) வசதிக்கான லாஜிக்
+# ---------------------------------------------------------
 if students:
     df = pd.DataFrame(students)
     df_f = df[df['class_name'] == sel_class].sort_values(by=['Gender', 'student_name'], ascending=[True, True])
     
     if not df_f.empty:
-        # ⚡ Master Checkboxes (Form-க்கு வெளியே)
+        # 1. மாஸ்டர் செக்பாக்ஸ்கள் (Form-க்கு வெளியே)
         col_m1, col_m2, col_m3 = st.columns(3)
         
-        # 'on_change' தேவையில்லை, 'value' மூலமே நேரடியாகக் கட்டுப்படுத்தலாம்
-        master_sel = col_m1.checkbox("அனைவரையும் தேர்வு செய்க / நீக்குக", key="master_checkbox")
-        master_i = col_m2.checkbox("அனைவருக்கும் Internal (10) வழங்குக")
-        master_p = col_m3.checkbox("அனைவருக்கும் Practical (20) வழங்குக") if "70" in eval_type else False
+        # 'on_change' மூலம் நிலையை உடனடியாக மாற்றுதல்
+        m_sel = col_m1.checkbox("அனைவரையும் தேர்வு செய்க / நீக்குக", key="master_sel")
+        m_int = col_m2.checkbox("அனைவருக்கும் Internal (10) வழங்குக", key="master_int")
+        m_prac = col_m3.checkbox("அனைவருக்கும் Practical (20) வழங்குக", key="master_prac") if "70" in eval_type else False
 
         # 2. மதிப்பெண் படிவம்
         with st.form("marks_entry_form"):
@@ -65,15 +68,15 @@ if students:
             for index, row in df_f.iterrows():
                 cols = st.columns([0.5, 2, 1, 1, 1]) if "70" in eval_type else st.columns([0.5, 2, 1, 1])
                 
-                # 🛡️ 'value=master_sel' என்பதால் மேலே டிக் செய்தால் இதுவும் டிக் ஆகும்
-                is_sel = cols[0].checkbox(" ", value=master_sel, key=f"check_{row['emis_no']}", label_visibility="collapsed")
+                # 🛡️ இங்கேயே value=st.session_state.master_sel கொடுப்பதால் உடனடியாக டிக் ஆகும்
+                is_sel = cols[0].checkbox(" ", value=st.session_state.master_sel, key=f"chk_{row['emis_no']}", label_visibility="collapsed")
                 cols[1].write(f"{row['student_name']}")
                 
                 if "70" in eval_type:
                     t = cols[2].text_input("T", key=f"t_{row['emis_no']}", label_visibility="collapsed")
-                    # டிக் இருந்தால் மட்டுமே மதிப்பெண் தானாக விழும்
-                    p_val = "20" if (master_p and is_sel) else ""
-                    i_val = "10" if (master_i and is_sel) else ""
+                    # டிக் இருந்தால் மட்டுமே மதிப்பெண் நிரப்பப்படும்
+                    p_val = "20" if (st.session_state.master_prac and is_sel) else ""
+                    i_val = "10" if (st.session_state.master_int and is_sel) else ""
                     
                     p = cols[3].text_input("P", value=p_val, key=f"p_{row['emis_no']}", label_visibility="collapsed")
                     i = cols[4].text_input("I", value=i_val, key=f"i_{row['emis_no']}", label_visibility="collapsed")
@@ -82,7 +85,7 @@ if students:
                         save_data.append({"action": "upsert", "exam_id": sel_exam, "emis_no": row['emis_no'], f"{col_prefix}_T": t, f"{col_prefix}_P": p, f"{col_prefix}_I": i})
                 else:
                     e = cols[2].text_input("E", key=f"e_{row['emis_no']}", label_visibility="collapsed")
-                    i_val = "10" if (master_i and is_sel) else ""
+                    i_val = "10" if (st.session_state.master_int and is_sel) else ""
                     i = cols[3].text_input("I", value=i_val, key=f"i_{row['emis_no']}", label_visibility="collapsed")
                     
                     if is_sel:
@@ -90,9 +93,8 @@ if students:
 
             if st.form_submit_button("🚀 மதிப்பெண்களைச் சேமி", use_container_width=True):
                 if not save_data:
-                    st.warning("முதலில் மாணவர்களைத் தேர்வு செய்யவும்!")
+                    st.warning("மாணவர்களைத் தேர்வு செய்யவும்!")
                 else:
-                    with st.spinner("சீட்டில் சேமிக்கப்படுகிறது..."):
-                        requests.post(f"{BASE_URL}?sheet=Marks", json={"data": save_data}, allow_redirects=True)
-                        st.success("வெற்றிகரமாகச் சேமிக்கப்பட்டது!")
-                        st.rerun()
+                    requests.post(f"{BASE_URL}?sheet=Marks", json={"data": save_data}, allow_redirects=True)
+                    st.success("வெற்றிகரமாகச் சேமிக்கப்பட்டது!")
+                    st.rerun()
