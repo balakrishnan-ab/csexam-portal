@@ -1,71 +1,86 @@
 import streamlit as st
 import requests
+import pandas as pd
 
-SUB_API = "https://sheetdb.io/api/v1/sb3mxuvdynqos?sheet=Subjects"
-GROUP_API = "https://sheetdb.io/api/v1/sb3mxuvdynqos?sheet=Groups"
+# கூகுள் ஸ்கிரிப்ட் URL
+BASE_URL = "https://script.google.com/macros/s/AKfycbzgqCZ6f-kwO46eZPWb_Tr7gz-JdLQSSOL8kVLzRbhPIrinmdQrGiNjNHYIYANNPO8xYg/exec"
 
-st.set_page_config(page_title="Groups", layout="wide")
+st.set_page_config(page_title="Groups Management", layout="wide")
 
-st.markdown("""
-    <style>
-    .fixed-table { width: 100%; border-collapse: collapse; font-size: 14px; table-layout: fixed; }
-    .fixed-table th, .fixed-table td { 
-        border-bottom: 1px solid #eee; 
-        padding: 10px 5px; 
-        text-align: left; 
-        word-wrap: break-word; /* பாடங்கள் மடிந்து வர இது உதவும் */
-        vertical-align: middle;
-    }
-    .fixed-table th { background-color: #f1f3f5; font-weight: bold; }
-    .sub-list { font-size: 12px; color: #333; line-height: 1.4; }
-    </style>
-    """, unsafe_allow_html=True)
+# ⚡ வேகமான தரவு சேமிப்பு (Caching)
+@st.cache_data(ttl=300)
+def fetch_groups():
+    try:
+        res = requests.get(f"{BASE_URL}?sheet=Groups", allow_redirects=True)
+        return res.json()
+    except:
+        return []
 
-st.title("🧬 பாடப்பிரிவு மேலாண்மை")
+st.title("👥 பாடப்பிரிவுகள் மேலாண்மை")
 
-# புதிய பிரிவு சேர்க்கை
-try:
-    subs = requests.get(SUB_API).json()
-    sub_list = [s['subject_name'] for s in subs]
-except: sub_list = []
-
-with st.expander("➕ புதிய பிரிவு உருவாக்க", expanded=False):
-    g_name = st.text_input("பிரிவு பெயர்")
-    selected_subs = st.multiselect("பாடங்களைத் தேர்ந்தெடுக்கவும்", sub_list)
-    if st.button("💾 பிரிவைச் சேமி", use_container_width=True):
-        if g_name and selected_subs:
-            requests.post(GROUP_API, json={"data": [{"group_name": g_name, "subjects": ", ".join(selected_subs)}]})
+# 1. புதிய பாடப்பிரிவு சேர்க்கும் படிவம்
+with st.form("add_group_form", clear_on_submit=True):
+    st.subheader("🆕 புதிய பாடப்பிரிவு (Group)")
+    gname = st.text_input("பாடப்பிரிவு பெயர் (எ.கா: SCIENCE)").upper().strip()
+    subjects = st.text_area("பாடங்கள் (பாடங்களுக்கு இடையே கமா (,) இடவும்)").upper()
+    
+    if st.form_submit_button("💾 பாடப்பிரிவைச் சேமி"):
+        if gname and subjects:
+            payload = {"group_name": gname, "subjects": subjects}
+            requests.post(f"{BASE_URL}?sheet=Groups", json={"data": [payload]}, allow_redirects=True)
+            st.success(f"பாடப்பிரிவு '{gname}' வெற்றிகரமாகச் சேர்க்கப்பட்டது!")
+            st.cache_data.clear()
             st.rerun()
 
 st.divider()
 
-# அட்டவணை
-try:
-    g_data = requests.get(GROUP_API).json()
-    if g_data:
-        # பாடங்களுக்கு அதிக இடம் (60%) ஒதுக்கப்பட்டுள்ளது
-        html = """<table class="fixed-table">
-            <tr>
-                <th style="width: 25%;">பிரிவு</th>
-                <th style="width: 60%;">பாடங்கள்</th>
-                <th style="width: 15%;">நீக்க</th>
-            </tr>"""
-        for g in g_data:
-            gn = g.get('group_name', '')
-            gs = g.get('subjects', '')
-            html += f"""
-            <tr>
-                <td><b>{gn}</b></td>
-                <td><span class="sub-list">{gs}</span></td>
-                <td style="text-align:center;">
-                    <a href="?del_grp={gn}" target="_self" style="text-decoration:none; background:#ff4b4b; color:white; padding:5px 10px; border-radius:4px; font-size:12px;">🗑️</a>
-                </td>
-            </tr>"""
-        html += "</table>"
-        st.markdown(html, unsafe_allow_html=True)
+# 2. பாடப்பிரிவுகள் பட்டியல் (ID மறைக்கப்பட்டது)
+groups_data = fetch_groups()
+if groups_data:
+    df = pd.DataFrame(groups_data)
+    df_sorted = df.sort_values(by='group_name').reset_index(drop=True)
+    df_sorted.index = df_sorted.index + 1
+    df_sorted.index.name = "S.No"
+    
+    st.subheader("📋 பாடப்பிரிவுகள் பட்டியல்")
+    # 🛡️ 'id' காலத்தை மறைத்துவிட்டுத் தேவையானவற்றை மட்டும் காட்டுதல்
+    st.dataframe(df_sorted[['group_name', 'subjects']], use_container_width=True)
 
-        if "del_grp" in st.query_params:
-            requests.delete(f"{GROUP_API}/group_name/{st.query_params['del_grp']}")
-            st.query_params.clear()
-            st.rerun()
-except: st.info("பிரிவுகள் ஏதுமில்லை.")
+    st.divider()
+
+    # 3. திருத்துதல் மற்றும் நீக்குதல் (Edit & Delete)
+    st.subheader("⚙️ பாடப்பிரிவை மாற்றியமைக்க / நீக்க")
+    
+    g_list = ["-- பாடப்பிரிவைத் தேர்வு செய்க --"] + df_sorted['group_name'].tolist()
+    selected_group = st.selectbox("மேலாண்மை செய்ய வேண்டிய பாடப்பிரிவு:", g_list)
+
+    if selected_group != "-- பாடப்பிரிவைத் தேர்வு செய்க --":
+        # பழைய தரவுகளை எடுத்தல்
+        old_data = df[df['group_name'] == selected_group].iloc[0]
+        
+        col1, col2 = st.columns(2)
+        with col1:
+            st.write("📝 திருத்துதல் (Edit)")
+            new_gname = st.text_input("புதிய பெயர்:", value=old_data['group_name']).upper()
+            new_subjects = st.text_area("புதிய பாடங்கள் பட்டியல்:", value=old_data['subjects']).upper()
+            
+            if st.button("🆙 திருத்து (Update)"):
+                update_url = f"{BASE_URL}?sheet=Groups&action=update&old_group={selected_group}"
+                payload = {"group_name": new_gname, "subjects": new_subjects}
+                requests.post(update_url, json={"data": [payload]}, allow_redirects=True)
+                st.success("மாற்றப்பட்டது!")
+                st.cache_data.clear()
+                st.rerun()
+
+        with col2:
+            st.write("⚠️ எச்சரிக்கை")
+            confirm_del = st.checkbox(f"நான் {selected_group}-ஐ நீக்க விரும்புகிறேன்")
+            if confirm_del:
+                if st.button(f"❌ {selected_group}-ஐ நீக்கு", type="primary"):
+                    del_url = f"{BASE_URL}?sheet=Groups&action=delete&group_name={selected_group}"
+                    requests.post(del_url, allow_redirects=True)
+                    st.warning("நீக்கப்பட்டது!")
+                    st.cache_data.clear()
+                    st.rerun()
+else:
+    st.info("பாடப்பிரிவுகள் இன்னும் சேர்க்கப்படவில்லை.")
