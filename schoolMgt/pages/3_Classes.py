@@ -1,92 +1,99 @@
 import streamlit as st
 import requests
+import pandas as pd
 
-CLASS_API = "https://sheetdb.io/api/v1/sb3mxuvdynqos?sheet=Classes"
-GROUP_API = "https://sheetdb.io/api/v1/sb3mxuvdynqos?sheet=Groups"
+# கூகுள் ஸ்கிரிப்ட் URL
+BASE_URL = "https://script.google.com/macros/s/AKfycbzgqCZ6f-kwO46eZPWb_Tr7gz-JdLQSSOL8kVLzRbhPIrinmdQrGiNjNHYIYANNPO8xYg/exec"
 
-st.set_page_config(page_title="Classes", layout="wide")
+st.set_page_config(page_title="Classes Management", layout="wide")
 
-# --- மொபைலில் ஒரே வரியில் தெரிய வைக்கும் CSS ---
-st.markdown("""
-    <style>
-    .mobile-fixed-table {
-        width: 100%;
-        border-collapse: collapse;
-        font-size: 13px;
-    }
-    .mobile-fixed-table th, .mobile-fixed-table td {
-        border-bottom: 1px solid #eee;
-        padding: 10px 4px;
-        text-align: left;
-    }
-    .mobile-fixed-table th { background-color: #f1f3f5; }
-    </style>
-    """, unsafe_allow_html=True)
-
-st.title("🏫 வகுப்பு மேலாண்மை")
-
-# 1. புதிய வகுப்பு சேர்க்கை
-with st.expander("➕ புதிய வகுப்பு", expanded=False):
-    c_name = st.text_input("வகுப்பு பெயர்")
+# ⚡ தரவுகளை வேகமாகப் பெறுதல் (Caching)
+@st.cache_data(ttl=300)
+def fetch_data(sheet_name):
     try:
-        groups = requests.get(GROUP_API).json()
-        group_list = [g['group_name'] for g in groups]
-    except: group_list = []
-    c_group = st.selectbox("பிரிவு", group_list)
-    c_med = st.radio("மொழி", ["தமிழ்", "ஆங்கிலம்"], horizontal=True)
-    if st.button("💾 சேமி", use_container_width=True):
-        if c_name:
-            requests.post(CLASS_API, json={"data": [{"class_name": c_name, "group_name": c_group, "medium": c_med}]})
-            st.rerun()
+        res = requests.get(f"{BASE_URL}?sheet={sheet_name}", allow_redirects=True)
+        return res.json()
+    except:
+        return []
+
+st.title("🏫 வகுப்புகள் மேலாண்மை")
+
+# தேவையான தரவுகளைப் பெறுதல்
+classes_data = fetch_data("Classes")
+groups_data = fetch_data("Groups")
+
+# பாடப்பிரிவுகளை மட்டும் ஒரு பட்டியலாக மாற்றுதல்
+group_list = [g['group_name'] for g in groups_data] if groups_data else []
+
+# 1. புதிய வகுப்பு சேர்க்கும் படிவம்
+with st.form("add_class_form", clear_on_submit=True):
+    st.subheader("🆕 புதிய வகுப்பு சேர்க்கை")
+    cname = st.text_input("வகுப்பு பெயர் (எ.கா: 12-A1)").upper().strip()
+    
+    # பாடப்பிரிவைத் தேர்வு செய்யும் வசதி (Dropdown)
+    selected_group = st.selectbox("பாடப்பிரிவைத் தேர்ந்தெடுக்கவும் (Select Group):", group_list)
+    
+    if st.form_submit_button("💾 வகுப்பைச் சேமி"):
+        if cname and selected_group:
+            payload = {"class_name": cname, "group_name": selected_group}
+            try:
+                requests.post(f"{BASE_URL}?sheet=Classes", json={"data": [payload]}, allow_redirects=True)
+                st.success(f"வகுப்பு '{cname}' வெற்றிகரமாகச் சேர்க்கப்பட்டது!")
+                st.cache_data.clear()
+                st.rerun()
+            except Exception as e:
+                st.error(f"பிழை: {e}")
+        else:
+            st.warning("வகுப்பு பெயர் மற்றும் பாடப்பிரிவைத் தேர்ந்தெடுக்கவும்.")
 
 st.divider()
 
-# 2. அட்டவணைப் பகுதி
-st.subheader("📋 வகுப்புகள்")
+# 2. வகுப்புகள் பட்டியல் (ID மறைக்கப்பட்டது)
+if classes_data:
+    df = pd.DataFrame(classes_data)
+    # அகர வரிசைப்படி அடுடுதல்
+    df_sorted = df.sort_values(by='class_name').reset_index(drop=True)
+    df_sorted.index = df_sorted.index + 1
+    df_sorted.index.name = "S.No"
+    
+    st.subheader("📋 வகுப்புகள் பட்டியல்")
+    # 🛡️ 'id' காலத்தை மறைத்துவிட்டுத் தேவையானவற்றை மட்டும் காட்டுதல்
+    st.dataframe(df_sorted[['class_name', 'group_name']], use_container_width=True)
 
-try:
-    c_data = requests.get(CLASS_API).json()
-    if c_data:
-        # முழு அட்டவணையை ஒரு பெரிய String-ஆக உருவாக்குகிறோம் (இது மிக முக்கியம்)
-        html_code = """
-        <table class="mobile-fixed-table">
-            <tr>
-                <th style="width: 25%;">வகுப்பு</th>
-                <th style="width: 35%;">பிரிவு</th>
-                <th style="width: 25%;">மொழி</th>
-                <th style="width: 15%;">நீக்க</th>
-            </tr>"""
+    st.divider()
+
+    # 3. திருத்துதல் மற்றும் நீக்குதல் (Edit & Delete)
+    st.subheader("⚙️ வகுப்பை மாற்றியமைக்க / நீக்க")
+    
+    c_list = ["-- வகுப்பைத் தேர்வு செய்க --"] + df_sorted['class_name'].tolist()
+    sel_class = st.selectbox("நிர்வகிக்க வேண்டிய வகுப்பு:", c_list)
+
+    if sel_class != "-- வகுப்பைத் தேர்வு செய்க --":
+        old_data = df[df['class_name'] == sel_class].iloc[0]
         
-        for cls in c_data:
-            c_val = cls.get('class_name', '')
-            g_val = cls.get('group_name', '')
-            m_val = cls.get('medium', '')
+        col1, col2 = st.columns(2)
+        with col1:
+            st.write("📝 திருத்துதல் (Edit)")
+            new_cname = st.text_input("புதிய வகுப்பு பெயர்:", value=old_data['class_name']).upper()
+            new_gname = st.selectbox("புதிய பாடப்பிரிவு:", group_list, 
+                                    index=group_list.index(old_data['group_name']) if old_data['group_name'] in group_list else 0)
             
-            # ஒவ்வொரு வரியையும் இந்த String-உடன் இணைக்கிறோம்
-            html_code += f"""
-            <tr>
-                <td><b>{c_val}</b></td>
-                <td><small>{g_val}</small></td>
-                <td>{m_val}</td>
-                <td>
-                    <a href="?delete={c_val}" target="_self" 
-                       style="text-decoration:none; background:#ff4b4b; color:white; padding:2px 8px; border-radius:4px; font-size:10px;">🗑️</a>
-                </td>
-            </tr>"""
-        
-        html_code += "</table>"
-        
-        # இப்போது அந்த மொத்த String-ஐயும் திரையில் காட்டுகிறோம்
-        st.markdown(html_code, unsafe_allow_html=True)
+            if st.button("🆙 திருத்து (Update)"):
+                update_url = f"{BASE_URL}?sheet=Classes&action=update&old_class={sel_class}"
+                payload = {"class_name": new_cname, "group_name": new_gname}
+                requests.post(update_url, json={"data": [payload]}, allow_redirects=True)
+                st.success("வகுப்பு விவரங்கள் மாற்றப்பட்டது!")
+                st.cache_data.clear()
+                st.rerun()
 
-        # நீக்குதல் லாஜிக்
-        query = st.query_params
-        if "delete" in query:
-            del_id = query["delete"]
-            requests.delete(f"{CLASS_API}/class_name/{del_id}")
-            st.query_params.clear()
-            st.rerun()
-    else:
-        st.info("வகுப்புகள் ஏதுமில்லை.")
-except Exception as e:
-    st.error(f"பிழை: {e}")
+        with col2:
+            st.write("⚠️ நீக்குதல் (Delete)")
+            if st.checkbox(f"நான் {sel_class}-ஐ நீக்க விரும்புகிறேன்"):
+                if st.button(f"❌ {sel_class}-ஐ நீக்கு", type="primary"):
+                    del_url = f"{BASE_URL}?sheet=Classes&action=delete&class_name={sel_class}"
+                    requests.post(del_url, allow_redirects=True)
+                    st.warning("வகுப்பு நீக்கப்பட்டது!")
+                    st.cache_data.clear()
+                    st.rerun()
+else:
+    st.info("வகுப்புகள் இன்னும் சேர்க்கப்படவில்லை.")
