@@ -46,37 +46,32 @@ if students:
     df_f = df[df['class_name'] == sel_class].sort_values(by=['Gender', 'student_name'], ascending=[True, True])
     
     if not df_f.empty:
-        # ⚡ முதன்மைத் தேர்வு பெட்டிகள் (Master Checkboxes)
-        # இவை Form-க்கு வெளியே இருப்பதால் உடனடியாக வேலை செய்யும்
+        # ⚡ Master Checkboxes (Form-க்கு வெளியே)
         col_m1, col_m2, col_m3 = st.columns(3)
         
-        # 1. அனைவரையும் தேர்வு செய்ய / நீக்க
-        master_sel = col_m1.checkbox("அனைவரையும் தேர்வு செய்க / நீக்குக", key="master_sel")
-        
-        # 2. மதிப்பெண்கள் வழங்க
-        master_i = col_m2.checkbox("அனைவருக்கும் Internal (10) வழங்குக", key="master_i")
-        master_p = False
-        if "70" in eval_type:
-            master_p = col_m3.checkbox("அனைவருக்கும் Practical (20) வழங்குக", key="master_p")
+        # 'on_change' தேவையில்லை, 'value' மூலமே நேரடியாகக் கட்டுப்படுத்தலாம்
+        master_sel = col_m1.checkbox("அனைவரையும் தேர்வு செய்க / நீக்குக", key="master_checkbox")
+        master_i = col_m2.checkbox("அனைவருக்கும் Internal (10) வழங்குக")
+        master_p = col_m3.checkbox("அனைவருக்கும் Practical (20) வழங்குக") if "70" in eval_type else False
 
-        # 3. மதிப்பெண் படிவம்
+        # 2. மதிப்பெண் படிவம்
         with st.form("marks_entry_form"):
             save_data = []
             
-            # அட்டவணை தலைப்புகள்
-            h = st.columns([0.5, 2, 1, 1, 1]) if "70" in eval_type else st.columns([0.5, 2, 1, 1])
-            h[0].write("**தேர்வு**"); h[1].write("**மாணவர் பெயர்**")
+            # தலைப்புகள்
+            cols_h = st.columns([0.5, 2, 1, 1, 1]) if "70" in eval_type else st.columns([0.5, 2, 1, 1])
+            cols_h[0].write("**தேர்வு**"); cols_h[1].write("**மாணவர் பெயர்**")
             
-            for _, row in df_f.iterrows():
+            for index, row in df_f.iterrows():
                 cols = st.columns([0.5, 2, 1, 1, 1]) if "70" in eval_type else st.columns([0.5, 2, 1, 1])
                 
-                # Master Checkbox-ன் நிலையைப் பொறுத்து இவை மாறும்
-                is_sel = cols[0].checkbox(" ", value=master_sel, key=f"s_{row['emis_no']}", label_visibility="collapsed")
+                # 🛡️ 'value=master_sel' என்பதால் மேலே டிக் செய்தால் இதுவும் டிக் ஆகும்
+                is_sel = cols[0].checkbox(" ", value=master_sel, key=f"check_{row['emis_no']}", label_visibility="collapsed")
                 cols[1].write(f"{row['student_name']}")
                 
                 if "70" in eval_type:
                     t = cols[2].text_input("T", key=f"t_{row['emis_no']}", label_visibility="collapsed")
-                    # டிக் இருந்தால் மட்டுமே மதிப்பெண் தெரியும், இல்லையென்றால் காலியாகும்
+                    # டிக் இருந்தால் மட்டுமே மதிப்பெண் தானாக விழும்
                     p_val = "20" if (master_p and is_sel) else ""
                     i_val = "10" if (master_i and is_sel) else ""
                     
@@ -95,9 +90,9 @@ if students:
 
             if st.form_submit_button("🚀 மதிப்பெண்களைச் சேமி", use_container_width=True):
                 if not save_data:
-                    st.warning("தயவுசெய்து மாணவர்களைத் தேர்வு செய்யவும்!")
+                    st.warning("முதலில் மாணவர்களைத் தேர்வு செய்யவும்!")
                 else:
-                    with st.spinner("சேமிக்கப்படுகிறது..."):
+                    with st.spinner("சீட்டில் சேமிக்கப்படுகிறது..."):
                         requests.post(f"{BASE_URL}?sheet=Marks", json={"data": save_data}, allow_redirects=True)
                         st.success("வெற்றிகரமாகச் சேமிக்கப்பட்டது!")
                         st.rerun()
