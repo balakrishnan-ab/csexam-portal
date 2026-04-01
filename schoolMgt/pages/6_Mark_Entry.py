@@ -7,7 +7,7 @@ BASE_URL = "https://script.google.com/macros/s/AKfycbzgqCZ6f-kwO46eZPWb_Tr7gz-Jd
 
 st.set_page_config(page_title="Mark Entry", layout="wide")
 
-# ⚡ வேகமான தரவு சேமிப்பு (Caching)
+# ⚡ வேகமான தரவு சேமிப்பு
 @st.cache_data(ttl=60)
 def fetch_all_data():
     try:
@@ -22,7 +22,6 @@ def fetch_all_data():
 
 st.title("✍️ மதிப்பெண் உள்ளீடு (Mark Entry)")
 
-# தரவுகளைப் பெறுதல்
 exams, classes, groups, subjects, students = fetch_all_data()
 
 if not exams or not classes:
@@ -34,20 +33,14 @@ c1, c2 = st.columns(2)
 sel_exam = c1.selectbox("தேர்வைத் தேர்ந்தெடுக்கவும்:", [e['exam_name'] for e in exams])
 sel_class = c2.selectbox("வகுப்பைத் தேர்ந்தெடுக்கவும்:", [c['class_name'] for c in classes])
 
-# வகுப்பு வாரியான பாடப்பிரிவு மற்றும் பாடங்களைக் கண்டறிதல்
 target_group = next((c['group_name'] for c in classes if c['class_name'] == sel_class), "")
 group_info = next((g for g in groups if g['group_name'] == target_group), None)
 
 if group_info:
-    # கமாவால் பிரிக்கப்பட்ட பாடங்களைப் பட்டியலாக மாற்றுதல்
     assigned_subjects = [s.strip() for s in str(group_info['subjects']).split(',')]
     sel_sub = st.selectbox("பாடத்தைத் தேர்ந்தெடுக்கவும்:", assigned_subjects)
-    
-    # சீட்டில் எந்தக் காலத்தில் (Column) சேமிக்க வேண்டும் என்பதைக் கண்டறிதல்
     sub_idx = assigned_subjects.index(sel_sub) + 1
     col_prefix = f"Sub{sub_idx}"
-    
-    # பாடத்தின் மதிப்பீட்டு முறை (90+10 அல்லது 70+20+10)
     sub_info = next((s for s in subjects if s['subject_name'] == sel_sub), {"eval_type": "90 + 10"})
     eval_type = sub_info['eval_type']
 else:
@@ -59,19 +52,18 @@ st.divider()
 # 2. மாணவர் பட்டியல் மற்றும் மதிப்பெண் படிவம்
 if students:
     df = pd.DataFrame(students)
-    # வகுப்பு மற்றும் பாலினம் வாரியாக வரிசைப்படுத்துதல் (பெண்கள் முதலில்)
     df_filtered = df[df['class_name'] == sel_class].sort_values(by=['Gender', 'student_name'], ascending=[True, True])
     
     if not df_filtered.empty:
         # ⚡ விரைவாக மதிப்பெண் இட Checkbox வசதி
         f1, f2 = st.columns(2)
-        auto_i = f1.checkbox("அனைவருக்கும் 'I' (10) வழங்குக")
-        auto_p = f2.checkbox("அனைவருக்கும் 'P' (20) வழங்குக") if "70" in eval_type else False
+        # Checkbox கிளிக் செய்ததும் மதிப்பெண்களை உடனே காட்ட on_change பயன்படுத்தலாம் அல்லது நேரடியாக value-வில் கொடுக்கலாம்
+        auto_i = f1.checkbox("அனைவருக்கும் 'Internal' (10) வழங்குக")
+        auto_p = f2.checkbox("அனைவருக்கும் 'Practical' (20) வழங்குக") if "70" in eval_type else False
 
         with st.form("marks_entry_form"):
             save_data = []
             st.markdown("---")
-            # தலைப்புகள்
             h = st.columns([2, 1, 1, 1]) if "70" in eval_type else st.columns([2, 1, 1])
             h[0].write("**மாணவர் பெயர்**")
             if "70" in eval_type:
@@ -85,24 +77,10 @@ if students:
             # ஒவ்வொரு மாணவருக்கும் உள்ளீடு பெட்டிகள்
             for _, row in df_filtered.iterrows():
                 cols = st.columns([2, 1, 1, 1]) if "70" in eval_type else st.columns([2, 1, 1])
-                cols[0].write(f"{row['student_name']}")
+                cols[0].write(f"**{row['student_name']}**")
                 
+                # 'value' பகுதியில் checkbox நிலையைப் பொறுத்து மதிப்பெண் தானாக அமையும்
                 if "70" in eval_type:
                     t = cols[1].text_input("T", key=f"t_{row['emis_no']}", label_visibility="collapsed")
                     p = cols[2].text_input("P", value="20" if auto_p else "", key=f"p_{row['emis_no']}", label_visibility="collapsed")
                     i = cols[3].text_input("I", value="10" if auto_i else "", key=f"i_{row['emis_no']}", label_visibility="collapsed")
-                    save_data.append({"exam_id": sel_exam, "emis_no": row['emis_no'], f"{col_prefix}_T": t, f"{col_prefix}_P": p, f"{col_prefix}_I": i})
-                else:
-                    e = cols[1].text_input("E", key=f"e_{row['emis_no']}", label_visibility="collapsed")
-                    i = cols[2].text_input("I", value="10" if auto_i else "", key=f"i_{row['emis_no']}", label_visibility="collapsed")
-                    save_data.append({"exam_id": sel_exam, "emis_no": row['emis_no'], f"{col_prefix}_T": e, f"{col_prefix}_I": i})
-
-            if st.form_submit_button("🚀 மதிப்பெண்களைச் சேமி", use_container_width=True):
-                with st.spinner("சேமிக்கப்படுகிறது..."):
-                    for data in save_data:
-                        requests.post(f"{BASE_URL}?sheet=Marks", json={"data": [data]}, allow_redirects=True)
-                    st.success("அனைத்து மதிப்பெண்களும் வெற்றிகரமாகச் சேமிக்கப்பட்டது!")
-    else:
-        st.info("இந்த வகுப்பில் மாணவர்கள் இல்லை.")
-else:
-    st.info("மாணவர்கள் பட்டியல் காலியாக உள்ளது.")
