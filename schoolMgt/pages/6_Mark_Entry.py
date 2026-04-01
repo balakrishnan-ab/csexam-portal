@@ -17,12 +17,10 @@ def fetch_all_data():
         return e, c, g, s, st_list
     except: return [], [], [], [], []
 
-st.title("✍️ மதிப்பெண் உள்ளீடு")
+st.title("✍️ மதிப்பெண் திருத்தம் மற்றும் உள்ளீடு")
 
 exams, classes, groups, subjects, students = fetch_all_data()
-
-if not exams or not classes:
-    st.stop()
+if not exams or not classes: st.stop()
 
 c1, c2 = st.columns(2)
 sel_exam = c1.selectbox("தேர்வு", [e['exam_name'] for e in exams])
@@ -47,45 +45,53 @@ if students:
     df_filtered = df[df['class_name'] == sel_class].sort_values(by=['Gender', 'student_name'], ascending=[True, True])
     
     if not df_filtered.empty:
-        # ⚡ முக்கிய மாற்றம்: இவை Form-க்கு வெளியே இருக்க வேண்டும்
-        f1, f2 = st.columns(2)
-        auto_i = f1.checkbox("அனைவருக்கும் 'Internal' (10) வழங்குக")
-        auto_p = f2.checkbox("அனைவருக்கும் 'Practical' (20) வழங்குக") if "70" in eval_type else False
+        # ஒட்டுமொத்த தேர்வுக்கான பட்டன்கள்
+        f1, f2, f3 = st.columns(3)
+        select_all = f1.toggle("அனைத்து மாணவர்களையும் தேர்வு செய்க")
+        auto_i = f2.checkbox("தேர்வு செய்தோருக்கு 'Internal' (10) வழங்குக")
+        auto_p = f3.checkbox("தேர்வு செய்தோருக்கு 'Practical' (20) வழங்குக") if "70" in eval_type else False
 
-        # Form தொடங்குகிறது
         with st.form("marks_entry_form"):
             save_data = []
             
-            # தலைப்புகள்
-            h = st.columns([2, 1, 1, 1]) if "70" in eval_type else st.columns([2, 1, 1])
-            h[0].write("**மாணவர் பெயர்**")
+            # தலைப்புகள் (கூடுதல் காலனாக 'தேர்வு' சேர்க்கப்பட்டுள்ளது)
+            h = st.columns([0.5, 2, 1, 1, 1]) if "70" in eval_type else st.columns([0.5, 2, 1, 1])
+            h[0].write("**தேர்வு**")
+            h[1].write("**மாணவர் பெயர்**")
             if "70" in eval_type:
-                h[1].write("**Theory (70)**")
-                h[2].write("**Prac (20)**")
-                h[3].write("**Int (10)**")
+                h[2].write("**Theory**")
+                h[3].write("**Prac**")
+                h[4].write("**Int**")
             else:
-                h[1].write("**Exam (90)**")
-                h[2].write("**Int (10)**")
+                h[2].write("**Exam**")
+                h[3].write("**Int**")
 
             for _, row in df_filtered.iterrows():
-                cols = st.columns([2, 1, 1, 1]) if "70" in eval_type else st.columns([2, 1, 1])
-                cols[0].write(f"{row['student_name']}")
+                cols = st.columns([0.5, 2, 1, 1, 1]) if "70" in eval_type else st.columns([0.5, 2, 1, 1])
                 
-                # value பகுதியில் auto_i மற்றும் auto_p சரியாகப் பொருத்தப்பட்டுள்ளது
+                # 1. ஒவ்வொரு மாணவருக்கும் தனி செக்பாக்ஸ்
+                is_selected = cols[0].checkbox(" ", value=select_all, key=f"sel_{row['emis_no']}", label_visibility="collapsed")
+                cols[1].write(f"{row['student_name']}")
+                
                 if "70" in eval_type:
-                    t_val = st.session_state.get(f"t_{row['emis_no']}", "")
-                    t = cols[1].text_input("T", value=t_val, key=f"t_{row['emis_no']}", label_visibility="collapsed")
-                    p = cols[2].text_input("P", value="20" if auto_p else "", key=f"p_{row['emis_no']}", label_visibility="collapsed")
-                    i = cols[3].text_input("I", value="10" if auto_i else "", key=f"i_{row['emis_no']}", label_visibility="collapsed")
-                    save_data.append({"exam_id": sel_exam, "emis_no": row['emis_no'], f"{col_prefix}_T": t, f"{col_prefix}_P": p, f"{col_prefix}_I": i})
+                    t = cols[2].text_input("T", key=f"t_{row['emis_no']}", label_visibility="collapsed")
+                    p = cols[3].text_input("P", value="20" if (auto_p and is_selected) else "", key=f"p_{row['emis_no']}", label_visibility="collapsed")
+                    i = cols[4].text_input("I", value="10" if (auto_i and is_selected) else "", key=f"i_{row['emis_no']}", label_visibility="collapsed")
+                    
+                    if is_selected: # தேர்வு செய்யப்பட்ட மாணவர் மட்டும் பட்டியலில் சேர்வர்
+                        save_data.append({"action": "upsert", "exam_id": sel_exam, "emis_no": row['emis_no'], f"{col_prefix}_T": t, f"{col_prefix}_P": p, f"{col_prefix}_I": i})
                 else:
-                    e_val = st.session_state.get(f"e_{row['emis_no']}", "")
-                    e = cols[1].text_input("E", value=e_val, key=f"e_{row['emis_no']}", label_visibility="collapsed")
-                    i = cols[2].text_input("I", value="10" if auto_i else "", key=f"i_{row['emis_no']}", label_visibility="collapsed")
-                    save_data.append({"exam_id": sel_exam, "emis_no": row['emis_no'], f"{col_prefix}_T": e, f"{col_prefix}_I": i})
+                    e = cols[2].text_input("E", key=f"e_{row['emis_no']}", label_visibility="collapsed")
+                    i = cols[3].text_input("I", value="10" if (auto_i and is_selected) else "", key=f"i_{row['emis_no']}", label_visibility="collapsed")
+                    
+                    if is_selected:
+                        save_data.append({"action": "upsert", "exam_id": sel_exam, "emis_no": row['emis_no'], f"{col_prefix}_T": e, f"{col_prefix}_I": i})
 
-            if st.form_submit_button("🚀 சேமி (Submit)", use_container_width=True):
-                for data in save_data:
-                    requests.post(f"{BASE_URL}?sheet=Marks", json={"data": [data]}, allow_redirects=True)
-                st.success("வெற்றிகரமாகச் சேமிக்கப்பட்டது!")
-                st.balloons()
+            if st.form_submit_button("🚀 தேர்வு செய்த மாணவர் மதிப்பெண்களை மட்டும் சேமி", use_container_width=True):
+                if not save_data:
+                    st.warning("தயவுசெய்து குறைந்தது ஒரு மாணவரையாவது தேர்வு செய்யவும்!")
+                else:
+                    with st.spinner("அப்டேட் செய்யப்படுகிறது..."):
+                        requests.post(f"{BASE_URL}?sheet=Marks", json={"data": save_data}, allow_redirects=True)
+                        st.success("தேர்வு செய்த மாணவர்களின் மதிப்பெண்கள் மட்டும் மாற்றப்பட்டது!")
+                        st.rerun()
