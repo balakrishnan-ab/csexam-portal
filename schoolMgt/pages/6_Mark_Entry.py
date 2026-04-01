@@ -2,11 +2,8 @@ import streamlit as st
 import requests
 import pandas as pd
 
-try:
-    BASE_URL = st.secrets["BASE_URL"]
-except:
-    # Secrets வேலை செய்யவில்லை என்றால் மட்டும் இதை மாற்றவும்
-    BASE_URL = "https://script.google.com/macros/s/AKfycbxcCywCOjo9On8r3xpfyswIzkeroo6PGApMyjEaChLfsVEMwHQNfyBEXs2sqrd51zEN5w/exec"
+# 🔗 மெயினில் இருந்து URL-ஐ எடுத்துக்கொள்வது
+BASE_URL = st.session_state.get("BASE_URL", "https://script.google.com/macros/s/AKfycbxcCywCOjo9On8r3xpfyswIzkeroo6PGApMyjEaChLfsVEMwHQNfyBEXs2sqrd51zEN5w/exec")
 
 # பக்கத்தின் கட்டமைப்பு
 st.set_page_config(page_title="School Management System", layout="wide")
