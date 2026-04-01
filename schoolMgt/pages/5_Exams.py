@@ -2,75 +2,91 @@ import streamlit as st
 import requests
 import pandas as pd
 
-EXAM_API = "https://sheetdb.io/api/v1/sb3mxuvdynqos?sheet=Exams"
+# கூகுள் ஸ்கிரிப்ட் URL
+BASE_URL = "https://script.google.com/macros/s/AKfycbzgqCZ6f-kwO46eZPWb_Tr7gz-JdLQSSOL8kVLzRbhPIrinmdQrGiNjNHYIYANNPO8xYg/exec"
 
-st.set_page_config(page_title="Exams", layout="wide")
+st.set_page_config(page_title="Exams Management", layout="wide")
 
-# CSS - மொபைல் கச்சிதமான தோற்றம்
-st.markdown("""
-    <style>
-    .fixed-table { width: 100%; border-collapse: collapse; font-size: 14px; table-layout: fixed; }
-    .fixed-table th, .fixed-table td { 
-        border-bottom: 1px solid #eee; padding: 12px 5px; text-align: left; 
-    }
-    .fixed-table th { background-color: #f1f3f5; font-weight: bold; }
-    </style>
-    """, unsafe_allow_html=True)
+# ⚡ தரவுகளை வேகமாகப் பெறுதல் (Caching)
+@st.cache_data(ttl=300)
+def fetch_exams():
+    try:
+        res = requests.get(f"{BASE_URL}?sheet=Exams", allow_redirects=True)
+        return res.json()
+    except:
+        return []
 
 st.title("📝 தேர்வு மேலாண்மை")
 
-# 1. புதிய தேர்வை உருவாக்குதல்
-with st.expander("➕ புதிய தேர்வை உருவாக்க", expanded=False):
-    e_name = st.text_input("தேர்வின் பெயர் (எ.கா: First Revision)")
-    e_year = st.selectbox("கல்வியாண்டு", ["2025-26", "2026-27"])
+# 1. புதிய தேர்வு சேர்க்கும் படிவம்
+with st.form("add_exam_form", clear_on_submit=True):
+    st.subheader("🆕 புதிய தேர்வு சேர்க்கை")
+    col1, col2 = st.columns(2)
+    ename = col1.text_input("தேர்வின் பெயர் (எ.கா: ANNUAL EXAM)").upper().strip()
+    ayear = col2.text_input("கல்வியாண்டு (Academic Year)", value="2025-26")
     
-    if st.button("💾 தேர்வைச் சேமி", use_container_width=True):
-        if e_name:
-            # exam_id-யும் பெயரையும் ஒன்றாகவே வைக்கிறோம்
-            payload = {"exam_id": e_name, "exam_name": e_name, "academic_year": e_year}
-            requests.post(EXAM_API, json={"data": [payload]})
-            st.success("தேர்வு உருவாக்கப்பட்டது!")
-            st.rerun()
+    if st.form_submit_button("💾 தேர்வைச் சேமி"):
+        if ename:
+            # தேர்வுக்கான ஒரு ID-யை பெயரிலிருந்தே உருவாக்குதல்
+            eid = ename.replace(" ", "_").lower()
+            payload = {"exam_id": eid, "exam_name": ename, "academic_year": ayear}
+            try:
+                requests.post(f"{BASE_URL}?sheet=Exams", json={"data": [payload]}, allow_redirects=True)
+                st.success(f"தேர்வு '{ename}' வெற்றிகரமாகச் சேர்க்கப்பட்டது!")
+                st.cache_data.clear()
+                st.rerun()
+            except Exception as e:
+                st.error(f"பிழை: {e}")
+        else:
+            st.warning("தேர்வின் பெயரை உள்ளிடவும்.")
 
 st.divider()
 
-# 2. தேர்வுகளின் பட்டியல்
-st.subheader("📋 உருவாக்கப்பட்ட தேர்வுகள்")
+# 2. தேர்வுகள் பட்டியல் (ID மறைக்கப்பட்டது)
+exams_data = fetch_exams()
+if exams_data:
+    df = pd.DataFrame(exams_data)
+    df_sorted = df.reset_index(drop=True)
+    df_sorted.index = df_sorted.index + 1
+    df_sorted.index.name = "S.No"
+    
+    st.subheader("📋 தேர்வுகள் பட்டியல்")
+    # 🛡️ 'exam_id' காலத்தை மறைத்துவிட்டுப் பெயரை மட்டும் காட்டுதல்
+    st.dataframe(df_sorted[['exam_name', 'academic_year']], use_container_width=True)
 
-try:
-    exams = requests.get(EXAM_API).json()
-    if exams and isinstance(exams, list):
-        html_code = """
-        <table class="fixed-table">
-            <tr>
-                <th style="width: 50%;">தேர்வு பெயர்</th>
-                <th style="width: 35%;">கல்வியாண்டு</th>
-                <th style="width: 15%;">நீக்க</th>
-            </tr>"""
+    st.divider()
+
+    # 3. திருத்துதல் மற்றும் நீக்குதல் (Edit & Delete)
+    st.subheader("⚙️ தேர்வை மாற்றியமைக்க / நீக்க")
+    
+    e_list = ["-- தேர்வைத் தேர்வு செய்க --"] + df_sorted['exam_name'].tolist()
+    sel_exam = st.selectbox("நிர்வகிக்க வேண்டிய தேர்வு:", e_list)
+
+    if sel_exam != "-- தேர்வைத் தேர்வு செய்க --":
+        old_data = df[df['exam_name'] == sel_exam].iloc[0]
         
-        for e in exams:
-            en = e.get('exam_name', '')
-            ey = e.get('academic_year', '')
+        col1, col2 = st.columns(2)
+        with col1:
+            st.write("📝 திருத்துதல் (Edit)")
+            new_ename = st.text_input("புதிய தேர்வு பெயர்:", value=old_data['exam_name']).upper()
+            new_ayear = st.text_input("புதிய கல்வியாண்டு:", value=old_data['academic_year'])
             
-            html_code += f"""
-            <tr>
-                <td><b>{en}</b></td>
-                <td>{ey}</td>
-                <td style="text-align:center;">
-                    <a href="?delete_exam={en}" target="_self" 
-                       style="text-decoration:none; background:#ff4b4b; color:white; padding:4px 8px; border-radius:4px; font-size:10px;">🗑️</a>
-                </td>
-            </tr>"""
-        
-        html_code += "</table>"
-        st.markdown(html_code, unsafe_allow_html=True)
+            if st.button("🆙 திருத்து (Update)"):
+                update_url = f"{BASE_URL}?sheet=Exams&action=update&old_exam={sel_exam}"
+                payload = {"exam_name": new_ename, "academic_year": new_ayear}
+                requests.post(update_url, json={"data": [payload]}, allow_redirects=True)
+                st.success("தேர்வு விவரங்கள் மாற்றப்பட்டது!")
+                st.cache_data.clear()
+                st.rerun()
 
-        # நீக்குதல் லாஜிக்
-        if "delete_exam" in st.query_params:
-            requests.delete(f"{EXAM_API}/exam_name/{st.query_params['delete_exam']}")
-            st.query_params.clear()
-            st.rerun()
-    else:
-        st.info("தேர்வுகள் ஏதுமில்லை.")
-except:
-    st.error("தரவுகளைப் பெறுவதில் சிக்கல்!")
+        with col2:
+            st.write("⚠️ நீக்குதல் (Delete)")
+            if st.checkbox(f"நான் {sel_exam}-ஐ நீக்க விரும்புகிறேன்"):
+                if st.button(f"❌ {sel_exam}-ஐ நீக்கு", type="primary"):
+                    del_url = f"{BASE_URL}?sheet=Exams&action=delete&exam_name={sel_exam}"
+                    requests.post(del_url, allow_redirects=True)
+                    st.warning("தேர்வு நீக்கப்பட்டது!")
+                    st.cache_data.clear()
+                    st.rerun()
+else:
+    st.info("தேர்வுகள் இன்னும் சேர்க்கப்படவில்லை.")
