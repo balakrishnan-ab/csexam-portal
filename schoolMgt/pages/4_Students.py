@@ -99,4 +99,11 @@ if students_data:
                 target_emis = str(df[df['student_name'] == del_student]['emis_no'].values[0])
                 del_url = f"{BASE_URL}?sheet=Students&action=delete&emis_no={target_emis}"
                 
-                requests.post(del_url, allow_redirect
+                requests.post(del_url, allow_redirects=True)
+                st.warning(f"{del_student} நீக்கப்பட்டார்!")
+                st.cache_data.clear()
+                st.rerun()
+    else:
+        st.info("இந்த வகுப்பில் மாணவர்கள் இல்லை.")
+else:
+    st.info("மாணவர் விவரங்கள் இன்னும் சேர்க்கப்படவில்லை.")
