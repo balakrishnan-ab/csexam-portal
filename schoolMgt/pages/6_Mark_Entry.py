@@ -3,7 +3,6 @@ import requests
 import pandas as pd
 
 # 🆕 நீங்கள் கொடுத்த புதிய URL
-BASE_URL = st.secrets["BASE_URL"]
 st.set_page_config(page_title="Mark Entry", layout="wide")
 
 
