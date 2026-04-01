@@ -28,7 +28,7 @@ with st.form("add_student_form", clear_on_submit=True):
     emis = col2.text_input("EMIS எண்")
     
     col3, col4 = st.columns(2)
-    gender = col3.selectbox("பாலினம்", ["Male", "Female"])
+    gender = col3.selectbox("பாலினம்", ["Female", "Male"]) # பெண்களை முதலில் காட்ட Female முதன்மை
     cname = col4.selectbox("வகுப்பைத் தேர்ந்தெடுக்கவும்", class_list)
     
     submit = st.form_submit_button("💾 மாணவரைச் சேமி")
@@ -40,48 +40,53 @@ with st.form("add_student_form", clear_on_submit=True):
                 requests.post(f"{BASE_URL}?sheet=Students", json={"data": [payload]}, allow_redirects=True)
                 st.success(f"மாணவர் {name} சேர்க்கப்பட்டார்!")
                 st.rerun()
-            except Exception as e:
-                st.error(f"பிழை: {e}")
+            except:
+                st.error("சேமிப்பதில் பிழை!")
 
 st.divider()
 
-# 3. மாணவர்கள் பட்டியல் (அகர வரிசை மற்றும் வரிசை எண்ணுடன்)
+# 3. மாணவர்கள் பட்டியல் (குறிப்பிட்ட வரிசை அமைப்புடன்)
 st.subheader("📋 மாணவர்கள் பட்டியல்")
 if students_data:
     df = pd.DataFrame(students_data)
     
-    # அ) வகுப்பு வாரியாகப் பார்க்க Filter
     filter_classes = ["அனைத்தும்"] + sorted(df['class_name'].unique().tolist())
     selected_filter = st.selectbox("வகுப்பு வாரியாகப் பார்க்க:", filter_classes)
     
     df_filtered = df if selected_filter == "அனைத்தும்" else df[df['class_name'] == selected_filter]
 
     if not df_filtered.empty:
-        # ஆ) அகர வரிசைப்படி அடுடுதல் (Alphabetical Order by Name)
-        df_sorted = df_filtered.sort_values(by=['student_name']).reset_index(drop=True)
+        # வரிசைப்படுத்துதல்: 1. வகுப்பு, 2. பாலினம் (Female முதலில்), 3. பெயர் (அகர வரிசை)
+        # Gender 'Female' என்பது 'Male' ஐ விட அகர வரிசையில் முதலில் வரும் என்பதால் ascending=True சரியாக இருக்கும்
+        df_sorted = df_filtered.sort_values(by=['class_name', 'Gender', 'student_name'], ascending=[True, True, True]).reset_index(drop=True)
         
-        # இ) வரிசை எண் 1-லிருந்து தொடங்குதல்
+        # வரிசை எண் 1-லிருந்து தொடங்குதல்
         df_sorted.index = df_sorted.index + 1
         df_sorted.index.name = "S.No"
         
-        # ஈ) காலங்களின் வரிசையை முறைப்படுத்துதல்
-        cols = ['student_name', 'class_name', 'Gender', 'emis_no']
+        # காலங்களின் வரிசை
+        cols = ['student_name', 'Gender', 'class_name', 'emis_no']
         st.dataframe(df_sorted[cols], use_container_width=True)
 
-        # 4. பாதுகாப்பான நீக்கல் வசதி
+        # 4. பாதுகாப்பான நீக்கல் வசதி (திருத்தப்பட்டது)
         st.write("---")
         st.subheader("🗑️ மாணவரை நீக்க")
         
-        del_student = st.selectbox("நீக்க வேண்டிய மாணவர்:", df_sorted['student_name'].tolist())
-        confirm_delete = st.checkbox(f"நான் உறுதியாக {del_student}-ஐ நீக்க விரும்புகிறேன்")
+        del_student_name = st.selectbox("நீக்க வேண்டிய மாணவர்:", df_sorted['student_name'].tolist())
+        confirm_delete = st.checkbox(f"நான் உறுதியாக {del_student_name}-ஐ நீக்க விரும்புகிறேன்")
         
         if confirm_delete:
-            if st.button(f"❌ {del_student}-ஐ நிரந்தரமாக நீக்கு", type="primary"):
-                target_emis = df[df['student_name'] == del_student]['emis_no'].values[0]
-                requests.post(f"{BASE_URL}?sheet=Students&action=delete", json={"emis_no": target_emis}, allow_redirects=True)
-                st.warning("நீக்கப்பட்டது! சீட்டில் சரிபார்க்கவும்.")
-                st.rerun()
+            if st.button(f"❌ {del_student_name}-ஐ நிரந்தரமாக நீக்கு", type="primary"):
+                # EMIS எண்ணை சரியாக எடுத்தல்
+                target_emis = df[df['student_name'] == del_student_name]['emis_no'].values[0]
+                
+                # பிழையைத் தவிர்க்க URL parameters மூலம் அனுப்புதல்
+                del_url = f"{BASE_URL}?sheet=Students&action=delete&emis_no={target_emis}"
+                try:
+                    requests.post(del_url, allow_redirects=True)
+                    st.warning(f"{del_student_name} நீக்கப்பட்டார். பக்கத்தை புதுப்பிக்கவும்.")
+                    st.rerun()
+                except:
+                    st.error("நீக்குதலில் பிழை! கூகுள் சீட்டில் நேரடியாக நீக்கவும்.")
     else:
-        st.info("இந்த வகுப்பில் மாணவர்கள் யாரும் இல்லை.")
-else:
-    st.info("மாணவர் விவரங்கள் இன்னும் சேர்க்கப்படவில்லை.")
+        st.info("தரவுகள் இல்லை.")
