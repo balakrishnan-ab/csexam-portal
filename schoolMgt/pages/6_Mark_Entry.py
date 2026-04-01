@@ -3,8 +3,7 @@ import requests
 import pandas as pd
 
 # 🆕 நீங்கள் கொடுத்த புதிய URL
-BASE_URL = "https://script.google.com/macros/s/AKfycbwLQrSzbCDfILv0XNZlrl-Gw7c9ypi_6ruyyVi_ChW9ZE8tG4rrNR2okj6ITt74-1AChA/exec"
-
+BASE_URL = st.secrets["BASE_URL"]
 st.set_page_config(page_title="Mark Entry", layout="wide")
 
 # ⚡ தரவுகளைப் பெறுதல்
