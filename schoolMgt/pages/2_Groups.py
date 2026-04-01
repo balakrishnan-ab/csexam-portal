@@ -82,4 +82,20 @@ if groups_data:
             
             if st.button("🆙 திருத்து (Update)"):
                 new_subs_str = ", ".join(new_subs)
-                update_url = f"{BASE
+                update_url = f"{BASE_URL}?sheet=Groups&action=update&old_group={sel_group}"
+                requests.post(update_url, json={"data": [{"group_name": new_gname, "subjects": new_subs_str}]}, allow_redirects=True)
+                st.success("மாற்றப்பட்டது!")
+                st.cache_data.clear()
+                st.rerun()
+
+        with col2:
+            st.write("⚠️ நீக்குதல்")
+            if st.checkbox(f"நான் {sel_group}-ஐ நீக்க விரும்புகிறேன்"):
+                if st.button(f"❌ {sel_group}-ஐ நீக்கு"):
+                    del_url = f"{BASE_URL}?sheet=Groups&action=delete&group_name={sel_group}"
+                    requests.post(del_url, allow_redirects=True)
+                    st.warning("நீக்கப்பட்டது!")
+                    st.cache_data.clear()
+                    st.rerun()
+else:
+    st.info("தரவுகள் இல்லை.")
