@@ -3,9 +3,7 @@ import requests
 import pandas as pd
 
 # கூகுள் ஸ்கிரிப்ட் URL
-BASE_URL = "https://script.google.com/macros/s/AKfycbzgqCZ6f-kwO46eZPWb_Tr7gz-JdLQSSOL8kVLzRbhPIrinmdQrGiNjNHYIYANNPO8xYg/exec"
-
-st.set_page_config(page_title="Classes Management", layout="wide")
+BASE_URL = st.secrets["BASE_URL"]st.set_page_config(page_title="Classes Management", layout="wide")
 
 # ⚡ தரவுகளை வேகமாகப் பெறுதல் (Caching)
 @st.cache_data(ttl=300)
