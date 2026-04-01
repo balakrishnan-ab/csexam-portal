@@ -6,6 +6,7 @@ BASE_URL = "https://script.google.com/macros/s/AKfycbzgqCZ6f-kwO46eZPWb_Tr7gz-Jd
 
 st.set_page_config(page_title="Mark Entry", layout="wide")
 
+# ⚡ தரவுகளைப் பெறுதல்
 @st.cache_data(ttl=60)
 def fetch_all():
     try:
@@ -18,14 +19,28 @@ def fetch_all():
     except: return [], [], [], [], []
 
 # ---------------------------------------------------------
-# ⚡ மின்னல் வேக டிக் (Tick) லாஜிக் - Callback Function
+# ⚡ மின்னல் வேக டிக் மற்றும் மதிப்பெண் லாஜிக் (Callback)
 # ---------------------------------------------------------
-def update_all_ticks():
-    # மாஸ்டர் செக்பாக்ஸின் மதிப்பை எடுத்து அனைத்து மாணவர் செக்பாக்ஸ்களுக்கும் கடத்துதல்
-    val = st.session_state.master_tick
+def sync_all():
+    # 1. டிக் அடித்தால் அனைவருக்கும் டிக் போடுதல்
+    master_val = st.session_state.master_tick
     for key in st.session_state.keys():
         if key.startswith("chk_"):
-            st.session_state[key] = val
+            st.session_state[key] = master_val
+            
+    # 2. 10 அல்லது 20 மதிப்பெண் பட்டன் அழுத்தப்பட்டால் பெட்டிகளில் நிரப்புதல்
+    m_int = st.session_state.master_int
+    m_prac = st.session_state.get('master_prac', False)
+    
+    for key in st.session_state.keys():
+        if master_val: # டிக் இருந்தால் மட்டுமே மதிப்பெண் விழும்
+            if key.startswith("i_") and m_int:
+                st.session_state[key] = "10"
+            elif key.startswith("p_") and m_prac:
+                st.session_state[key] = "20"
+        else: # டிக் எடுத்தால் மதிப்பெண்களை நீக்குதல்
+            if key.startswith("i_") or key.startswith("p_"):
+                st.session_state[key] = ""
 
 st.title("✍️ மதிப்பெண் உள்ளீடு")
 
@@ -55,13 +70,13 @@ if students:
     df_f = df[df['class_name'] == sel_class].sort_values(by=['Gender', 'student_name'], ascending=[True, True])
     
     if not df_f.empty:
-        # 1. மாஸ்டர் செக்பாக்ஸ்கள் (Form-க்கு வெளியே)
+        # 1. மாஸ்டர் செக்பாக்ஸ்கள் (on_change=sync_all இருப்பதால் உடனே மாறும்)
         m1, m2, m3 = st.columns(3)
-        
-        # 'on_change' இருப்பதால் இதை கிளிக் செய்த உடனே 'update_all_ticks' இயங்கும்
-        is_all = m1.checkbox("அனைவரையும் தேர்வு செய்க / நீக்குக", key="master_tick", on_change=update_all_ticks)
-        is_int = m2.checkbox("அனைவருக்கும் Internal (10) வழங்குக", key="master_int")
-        is_prac = m3.checkbox("அனைவருக்கும் Practical (20) வழங்குக", key="master_prac") if "70" in eval_type else False
+        is_all = m1.checkbox("அனைவரையும் தேர்வு செய்க / நீக்குக", key="master_tick", on_change=sync_all)
+        is_int = m2.checkbox("அனைவருக்கும் Internal (10) வழங்குக", key="master_int", on_change=sync_all)
+        is_prac = False
+        if "70" in eval_type:
+            is_prac = m3.checkbox("அனைவருக்கும் Practical (20) வழங்குக", key="master_prac", on_change=sync_all)
 
         # 2. மதிப்பெண் படிவம்
         with st.form("marks_final_form"):
@@ -69,27 +84,24 @@ if students:
             h = st.columns([0.5, 2, 1, 1, 1]) if "70" in eval_type else st.columns([0.5, 2, 1, 1])
             h[0].write("**தேர்வு**"); h[1].write("**மாணவர் பெயர்**")
             
-            for index, row in df_f.iterrows():
+            for _, row in df_f.iterrows():
                 cols = st.columns([0.5, 2, 1, 1, 1]) if "70" in eval_type else st.columns([0.5, 2, 1, 1])
                 
-                # 'key' மூலம் செஷன் ஸ்டேட்டில் இருந்து மதிப்பை நேரடியாகப் பெறுகிறது
-                s_key = f"chk_{row['emis_no']}"
-                student_sel = cols[0].checkbox(" ", key=s_key, label_visibility="collapsed")
+                # Checkbox
+                s_sel = cols[0].checkbox(" ", key=f"chk_{row['emis_no']}", label_visibility="collapsed")
                 cols[1].write(f"**{row['student_name']}**")
                 
                 if "70" in eval_type:
                     t = cols[2].text_input("Theory", key=f"t_{row['emis_no']}", label_visibility="collapsed")
-                    p_val = "20" if (is_prac and student_sel) else ""
-                    i_val = "10" if (is_int and student_sel) else ""
-                    p = cols[3].text_input("Prac", value=p_val, key=f"p_{row['emis_no']}", label_visibility="collapsed")
-                    i = cols[4].text_input("Int", value=i_val, key=f"i_{row['emis_no']}", label_visibility="collapsed")
-                    if student_sel:
+                    # Session State-ல் இருந்து நேரடியாக மதிப்பை எடுக்கிறது
+                    p = cols[3].text_input("Prac", key=f"p_{row['emis_no']}", label_visibility="collapsed")
+                    i = cols[4].text_input("Int", key=f"i_{row['emis_no']}", label_visibility="collapsed")
+                    if s_sel:
                         save_data.append({"action":"upsert","exam_id":sel_exam,"emis_no":row['emis_no'],f"{col_prefix}_T":t,f"{col_prefix}_P":p,f"{col_prefix}_I":i})
                 else:
                     e = cols[2].text_input("Exam", key=f"e_{row['emis_no']}", label_visibility="collapsed")
-                    i_val = "10" if (is_int and student_sel) else ""
-                    i = cols[3].text_input("Int", value=i_val, key=f"i_{row['emis_no']}", label_visibility="collapsed")
-                    if student_sel:
+                    i = cols[3].text_input("Int", key=f"i_{row['emis_no']}", label_visibility="collapsed")
+                    if s_sel:
                         save_data.append({"action":"upsert","exam_id":sel_exam,"emis_no":row['emis_no'],f"{col_prefix}_T":e,f"{col_prefix}_I":i})
 
             if st.form_submit_button("🚀 மதிப்பெண்களைச் சேமி", use_container_width=True):
