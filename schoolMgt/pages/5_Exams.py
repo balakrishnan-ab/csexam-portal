@@ -15,11 +15,9 @@ except:
 @st.cache_data(ttl=60)
 def fetch_everything():
     try:
-        # கூகுள் ஸ்கிரிப்டிலிருந்து அனைத்து தகவல்களையும் ஒரே முறையில் பெறுகிறது
         res = requests.get(BASE_URL).json()
         return res
     except Exception as e:
-        st.error(f"தொடர்பு கொள்வதில் பிழை: {e}")
         return None
 
 all_data = fetch_everything()
@@ -44,7 +42,6 @@ with st.form("add_exam_form"):
 
     st.divider()
     st.markdown("### 📊 **தேர்வு எண் தொடக்க விபரம் (Roll No Settings)**")
-    st.info("பெண்கள் பெயர்கள் முதலிலும், ஆண்கள் பெயர்கள் இரண்டாவதாகவும் வரிசைப்படுத்தப்படும்.")
     
     # எந்தெந்த வகுப்புகளுக்கு தேர்வு எண் உருவாக்க வேண்டும்?
     sel_classes = st.multiselect("வகுப்புகளைத் தேர்ந்தெடுக்கவும்:", [c['class_name'] for c in classes_list])
@@ -56,7 +53,7 @@ with st.form("add_exam_form"):
         for cls in sel_classes:
             st.write(f"📍 **{cls} வகுப்பு விபரம்:**")
             
-            # அந்த வகுப்பில் உள்ள ஆண்/பெண் எண்ணிக்கையைக் கணக்கிடுதல்
+            # அந்த வகுப்பில் உள்ள ஆண்/பெண் எண்ணிக்கை
             m_students = df_stu[(df_stu['class_name'] == cls) & (df_stu['Gender'] == 'Male')]
             f_students = df_stu[(df_stu['class_name'] == cls) & (df_stu['Gender'] == 'Female')]
             
@@ -65,21 +62,50 @@ with st.form("add_exam_form"):
             
             c3, c4 = st.columns(2)
             
-            # மாணவிகள் (Female) பகுதி
+            # மாணவிகள் (Female) - இறுதி எண் கணக்கீடு
             with c3:
                 f_start = st.number_input(f"{cls} - மாணவியர் தொடக்க எண்", min_value=1, value=1, key=f"f_s_{cls}")
                 f_end = f_start + f_count - 1 if f_count > 0 else 0
                 st.write(f"👩‍🎓 மாணவிகள்: **{f_count}** | இறுதி எண்: :blue[**{f_end if f_count > 0 else '-'}**]")
             
-            # மாணவர்கள் (Male) பகுதி
+            # மாணவர்கள் (Male) - இறுதி எண் கணக்கீடு
             with c4:
                 m_start = st.number_input(f"{cls} - மாணவர் தொடக்க எண்", min_value=1, value=51, key=f"m_s_{cls}")
                 m_end = m_start + m_count - 1 if m_count > 0 else 0
                 st.write(f"👨‍🎓 மாணவர்கள்: **{m_count}** | இறுதி எண்: :blue[**{m_end if m_count > 0 else '-'}**]")
             
-            # இந்த தகவல்களை ஒரு அகராதியில் சேமித்தல்
             roll_settings[cls] = {"female": f_start, "male": m_start}
             st.write("---")
 
     # 4. சேமிக்கும் பட்டன்
-    submit = st.form_submit_button("🚀 தேர்வை உருவாக்கி Roll
+    submit = st.form_submit_button("🚀 தேர்வை உருவாக்கி Roll No ஒதுக்கு", use_container_width=True)
+    
+    if submit:
+        if ename and sel_classes:
+            payload = {
+                "action": "generate_roll_nos",
+                "exam_name": ename,
+                "academic_year": ayear,
+                "roll_settings": roll_settings
+            }
+            try:
+                res = requests.post(BASE_URL, json=payload)
+                if res.status_code == 200:
+                    st.success(f"தேர்வு '{ename}' உருவாக்கப்பட்டது!")
+                    st.cache_data.clear()
+                    st.rerun()
+                else:
+                    st.error("சேமிப்பதில் பிழை ஏற்பட்டது.")
+            except Exception as e:
+                st.error(f"Error: {e}")
+        else:
+            st.warning("தேர்வு பெயர் மற்றும் வகுப்புகளைத் தேர்ந்தெடுக்கவும்.")
+
+st.divider()
+
+# 5. தேர்வுகள் பட்டியல்
+if exams_list:
+    st.subheader("📋 தேர்வுகள் பட்டியல்")
+    df_exams = pd.DataFrame(exams_list)[['exam_name', 'academic_year']]
+    df_exams.index = range(1, len(df_exams) + 1)
+    st.table(df_exams)
