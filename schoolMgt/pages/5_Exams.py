@@ -2,18 +2,28 @@ import streamlit as st
 import requests
 import pandas as pd
 
-# கூகுள் ஸ்கிரிப்ட் URL
-BASE_URL = st.secrets["BASE_URL"]
+# 1. பக்க அமைப்பு
 st.set_page_config(page_title="Exams Management", layout="wide")
 
-# ⚡ தரவுகளை வேகமாகப் பெறுதல் (Caching)
+# 2. URL அமைப்பு
+try:
+    BASE_URL = st.secrets["BASE_URL"]
+except:
+    st.error("BASE_URL secrets-ல் கண்டறியப்படவில்லை!")
+    st.stop()
+
+# 3. ⚡ அனைத்து தரவுகளையும் ஒரே முறையில் பெறுதல் (மின்னல் வேகம்)
 @st.cache_data(ttl=300)
-def fetch_exams():
+def fetch_all_data():
     try:
-        res = requests.get(f"{BASE_URL}?sheet=Exams", allow_redirects=True)
-        return res.json()
+        # நாம் ஏற்கனவே Script-ஐ மாற்றியதால் வெறும் BASE_URL போதுமானது
+        res = requests.get(BASE_URL).json()
+        return res
     except:
-        return []
+        return None
+
+data = fetch_all_data()
+exams_list = data.get('exams', []) if data else []
 
 st.title("📝 தேர்வு மேலாண்மை")
 
@@ -26,13 +36,14 @@ with st.form("add_exam_form", clear_on_submit=True):
     
     if st.form_submit_button("💾 தேர்வைச் சேமி"):
         if ename:
-            # தேர்வுக்கான ஒரு ID-யை பெயரிலிருந்தே உருவாக்குதல்
+            # ID-யை உருவாக்குதல்
             eid = ename.replace(" ", "_").lower()
             payload = {"exam_id": eid, "exam_name": ename, "academic_year": ayear}
             try:
-                requests.post(f"{BASE_URL}?sheet=Exams", json={"data": [payload]}, allow_redirects=True)
+                # தரவைச் சேமிக்கிறோம்
+                requests.post(f"{BASE_URL}?sheet=Exams", json={"data": [payload]})
                 st.success(f"தேர்வு '{ename}' வெற்றிகரமாகச் சேர்க்கப்பட்டது!")
-                st.cache_data.clear()
+                st.cache_data.clear() # பழைய கேச்-ஐ நீக்குதல்
                 st.rerun()
             except Exception as e:
                 st.error(f"பிழை: {e}")
@@ -41,51 +52,47 @@ with st.form("add_exam_form", clear_on_submit=True):
 
 st.divider()
 
-# 2. தேர்வுகள் பட்டியல் (ID மறைக்கப்பட்டது)
-exams_data = fetch_exams()
-if exams_data:
-    df = pd.DataFrame(exams_data)
-    df_sorted = df.reset_index(drop=True)
-    df_sorted.index = df_sorted.index + 1
-    df_sorted.index.name = "S.No"
-    
+# 2. தேர்வுகள் பட்டியல் (பிழை வராமல் கையாளுதல்)
+if exams_list:
     st.subheader("📋 தேர்வுகள் பட்டியல்")
-    # 🛡️ 'exam_id' காலத்தை மறைத்துவிட்டுப் பெயரை மட்டும் காட்டுதல்
-    st.dataframe(df_sorted[['exam_name', 'academic_year']], use_container_width=True)
+    try:
+        df = pd.DataFrame(exams_list)
+        # நமக்குத் தேவையான காலம்கள் மட்டும் (exam_name, academic_year)
+        display_df = df[['exam_name', 'academic_year']].copy()
+        display_df.index = range(1, len(display_df) + 1)
+        st.table(display_df) # dataframe-க்கு பதில் table இன்னும் வேகமாகத் தெரியும்
+    except Exception as e:
+        st.error("தரவுகளைக் காட்டுவதில் பிழை. கூகுள் சீட்டில் காலம்கள் (Headers) சரியாக உள்ளனவா எனப் பார்க்கவும்.")
 
     st.divider()
 
-    # 3. திருத்துதல் மற்றும் நீக்குதல் (Edit & Delete)
-    st.subheader("⚙️ தேர்வை மாற்றியமைக்க / நீக்க")
+    # 3. திருத்துதல் மற்றும் நீக்குதல்
+    st.subheader("⚙️ நிர்வாகம்")
     
-    e_list = ["-- தேர்வைத் தேர்வு செய்க --"] + df_sorted['exam_name'].tolist()
-    sel_exam = st.selectbox("நிர்வகிக்க வேண்டிய தேர்வு:", e_list)
+    e_names = [e['exam_name'] for e in exams_list]
+    sel_exam = st.selectbox("நிர்வகிக்க வேண்டிய தேர்வு:", ["-- தேர்வு செய்க --"] + e_names)
 
-    if sel_exam != "-- தேர்வைத் தேர்வு செய்க --":
-        old_data = df[df['exam_name'] == sel_exam].iloc[0]
+    if sel_exam != "-- தேர்வு செய்க --":
+        # தேர்ந்தெடுக்கப்பட்ட தேர்வின் தற்போதைய விவரம்
+        curr_exam = next(e for e in exams_list if e['exam_name'] == sel_exam)
         
-        col1, col2 = st.columns(2)
-        with col1:
-            st.write("📝 திருத்துதல் (Edit)")
-            new_ename = st.text_input("புதிய தேர்வு பெயர்:", value=old_data['exam_name']).upper()
-            new_ayear = st.text_input("புதிய கல்வியாண்டு:", value=old_data['academic_year'])
-            
-            if st.button("🆙 திருத்து (Update)"):
-                update_url = f"{BASE_URL}?sheet=Exams&action=update&old_exam={sel_exam}"
-                payload = {"exam_name": new_ename, "academic_year": new_ayear}
-                requests.post(update_url, json={"data": [payload]}, allow_redirects=True)
-                st.success("தேர்வு விவரங்கள் மாற்றப்பட்டது!")
+        c1, c2 = st.columns(2)
+        with c1:
+            st.info("📝 திருத்துதல்")
+            new_name = st.text_input("புதிய பெயர்:", value=curr_exam['exam_name']).upper()
+            new_year = st.text_input("புதிய ஆண்டு:", value=curr_exam['academic_year'])
+            if st.button("🆙 அப்டேட் செய்"):
+                upd_url = f"{BASE_URL}?sheet=Exams&action=update&old_exam={sel_exam}"
+                requests.post(upd_url, json={"data": [{"exam_name": new_name, "academic_year": new_year}]})
                 st.cache_data.clear()
                 st.rerun()
 
-        with col2:
-            st.write("⚠️ நீக்குதல் (Delete)")
-            if st.checkbox(f"நான் {sel_exam}-ஐ நீக்க விரும்புகிறேன்"):
-                if st.button(f"❌ {sel_exam}-ஐ நீக்கு", type="primary"):
-                    del_url = f"{BASE_URL}?sheet=Exams&action=delete&exam_name={sel_exam}"
-                    requests.post(del_url, allow_redirects=True)
-                    st.warning("தேர்வு நீக்கப்பட்டது!")
-                    st.cache_data.clear()
-                    st.rerun()
+        with c2:
+            st.warning("⚠️ நீக்குதல்")
+            if st.button(f"❌ {sel_exam}-ஐ நீக்கு"):
+                del_url = f"{BASE_URL}?sheet=Exams&action=delete&exam_name={sel_exam}"
+                requests.post(del_url)
+                st.cache_data.clear()
+                st.rerun()
 else:
     st.info("தேர்வுகள் இன்னும் சேர்க்கப்படவில்லை.")
