@@ -17,13 +17,13 @@ def fetch_everything():
     try:
         res = requests.get(BASE_URL).json()
         return res
-    except Exception as e:
+    except:
         return None
 
 all_data = fetch_everything()
 
 if not all_data:
-    st.warning("கூகுள் சீட்டில் இருந்து தகவல்கள் வரவில்லை. URL-ஐச் சரிபார்க்கவும்.")
+    st.warning("கூகுள் சீட்டில் இருந்து தரவுகள் வரவில்லை. URL-ஐச் சரிபார்க்கவும்.")
     st.stop()
 
 # தரவுகளைப் பிரித்தல்
@@ -42,8 +42,8 @@ with st.form("add_exam_form"):
 
     st.divider()
     st.markdown("### 📊 **தேர்வு எண் தொடக்க விபரம் (Roll No Settings)**")
+    st.info("குறிப்பு: நீங்கள் தொடக்க எண்ணை உள்ளிட்டதும் இறுதி எண் தானாகவே கணக்கிடப்படும்.")
     
-    # எந்தெந்த வகுப்புகளுக்கு தேர்வு எண் உருவாக்க வேண்டும்?
     sel_classes = st.multiselect("வகுப்புகளைத் தேர்ந்தெடுக்கவும்:", [c['class_name'] for c in classes_list])
     
     roll_settings = {}
@@ -51,33 +51,31 @@ with st.form("add_exam_form"):
         df_stu = pd.DataFrame(students_list)
         
         for cls in sel_classes:
-            st.write(f"📍 **{cls} வகுப்பு விபரம்:**")
+            st.markdown(f"#### 📍 {cls} வகுப்பு")
             
             # அந்த வகுப்பில் உள்ள ஆண்/பெண் எண்ணிக்கை
-            m_students = df_stu[(df_stu['class_name'] == cls) & (df_stu['Gender'] == 'Male')]
-            f_students = df_stu[(df_stu['class_name'] == cls) & (df_stu['Gender'] == 'Female')]
-            
-            m_count = len(m_students)
-            f_count = len(f_students)
+            m_count = len(df_stu[(df_stu['class_name'] == cls) & (df_stu['Gender'] == 'Male')])
+            f_count = len(df_stu[(df_stu['class_name'] == cls) & (df_stu['Gender'] == 'Female')])
             
             c3, c4 = st.columns(2)
             
-            # மாணவிகள் (Female) - இறுதி எண் கணக்கீடு
+            # மாணவிகள் (Female) பகுதி
             with c3:
                 f_start = st.number_input(f"{cls} - மாணவியர் தொடக்க எண்", min_value=1, value=1, key=f"f_s_{cls}")
+                # ⚡ உடனடி கணக்கீடு: தொடக்க எண் + எண்ணிக்கை - 1
                 f_end = f_start + f_count - 1 if f_count > 0 else 0
-                st.write(f"👩‍🎓 மாணவிகள்: **{f_count}** | இறுதி எண்: :blue[**{f_end if f_count > 0 else '-'}**]")
+                st.success(f"👩‍🎓 மாணவிகள்: **{f_count}** | இறுதி எண்: **{f_end if f_count > 0 else '-'}**")
             
-            # மாணவர்கள் (Male) - இறுதி எண் கணக்கீடு
+            # மாணவர்கள் (Male) பகுதி
             with c4:
                 m_start = st.number_input(f"{cls} - மாணவர் தொடக்க எண்", min_value=1, value=51, key=f"m_s_{cls}")
+                # ⚡ உடனடி கணக்கீடு: தொடக்க எண் + எண்ணிக்கை - 1
                 m_end = m_start + m_count - 1 if m_count > 0 else 0
-                st.write(f"👨‍🎓 மாணவர்கள்: **{m_count}** | இறுதி எண்: :blue[**{m_end if m_count > 0 else '-'}**]")
+                st.info(f"👨‍🎓 மாணவர்கள்: **{m_count}** | இறுதி எண்: **{m_end if m_count > 0 else '-'}**")
             
             roll_settings[cls] = {"female": f_start, "male": m_start}
             st.write("---")
 
-    # 4. சேமிக்கும் பட்டன்
     submit = st.form_submit_button("🚀 தேர்வை உருவாக்கி Roll No ஒதுக்கு", use_container_width=True)
     
     if submit:
@@ -91,20 +89,19 @@ with st.form("add_exam_form"):
             try:
                 res = requests.post(BASE_URL, json=payload)
                 if res.status_code == 200:
-                    st.success(f"தேர்வு '{ename}' உருவாக்கப்பட்டது!")
+                    st.success(f"தேர்வு '{ename}' உருவாக்கப்பட்டு எண்கள் வழங்கப்பட்டன!")
                     st.cache_data.clear()
                     st.rerun()
                 else:
-                    st.error("சேமிப்பதில் பிழை ஏற்பட்டது.")
+                    st.error("சேமிப்பதில் பிழை!")
             except Exception as e:
                 st.error(f"Error: {e}")
         else:
-            st.warning("தேர்வு பெயர் மற்றும் வகுப்புகளைத் தேர்ந்தெடுக்கவும்.")
+            st.warning("விபரங்களை முழுமையாக உள்ளிடவும்.")
 
-st.divider()
-
-# 5. தேர்வுகள் பட்டியல்
+# 4. தேர்வுகள் பட்டியல்
 if exams_list:
+    st.divider()
     st.subheader("📋 தேர்வுகள் பட்டியல்")
     df_exams = pd.DataFrame(exams_list)[['exam_name', 'academic_year']]
     df_exams.index = range(1, len(df_exams) + 1)
