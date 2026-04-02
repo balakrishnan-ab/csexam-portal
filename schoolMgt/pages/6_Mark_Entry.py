@@ -8,11 +8,10 @@ import pandas as pd
 
 # 🌍 இது ஒன்றே போதும்! (Constants.py தேவையில்லை)
 if "BASE_URL" in st.secrets:
-    BASE_URL = st.secrets["BASE_URL"] 
+      BASE_URL = st.secrets["BASE_URL"]
 else:
     # Secrets வேலை செய்யவில்லை என்றால் மட்டும் இது இயங்கும்
-    BASE_URL = "https://script.google.com/macros/s/AKfycbxcCywCOjo9On8r3xpfyswIzkeroo6PGApMyjEaChLfsVEMwHQNfyBEXs2sqrd51zEN5w/exec"
-
+   BASE_URL = "https://script.google.com/macros/s/AKfycbxcCywCOjo9On8r3xpfyswIzkeroo6PGApMyjEaChLfsVEMwHQNfyBEXs2sqrd51zEN5w/exec"
 st.set_page_config(page_title="Mark Entry", layout="wide")
 # ... மீதி உள்ள பழைய குறியீடுகள் அப்படியே இருக்கட்டும் ...from Constants import BASE_URL 
 
