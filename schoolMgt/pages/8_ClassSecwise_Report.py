@@ -10,7 +10,7 @@ def get_supabase_client():
 
 supabase = get_supabase_client()
 
-st.set_page_config(page_title="Detailed Result Analysis", layout="wide")
+st.set_page_config(page_title="Refined Result Analysis", layout="wide")
 
 # ⚡ டிசைன் CSS
 st.markdown("""
@@ -58,7 +58,7 @@ if sel_exam_name and sel_class != "-- தேர்வு செய்க --":
         pass_count = 0
 
         for s in students:
-            row = {"பெயர்": s['student_name']} # Rank-ஐ இங்கே சேர்க்க வேண்டாம்
+            row = {"பெயர்": s['student_name']}
             total_score = 0
             fail_subs = []
             
@@ -74,7 +74,16 @@ if sel_exam_name and sel_class != "-- தேர்வு செய்க --":
                         if tot == 100: centum_winners.append({"பெயர்": s['student_name'], "பாடம்": s_name})
                         
                         if show_breakup:
-                            row[s_name] = f"{tot}\n({m.get('theory_mark',0)}+{m.get('internal_mark',0)}+{m.get('practical_mark',0)})"
+                            # 🛠️ செய்முறை இருக்கிறதா எனச் சரிபார்க்கும் லாஜிக்
+                            theory = m.get('theory_mark', 0)
+                            internal = m.get('internal_mark', 0)
+                            practical = m.get('practical_mark', 0)
+                            
+                            # செய்முறை இருந்தால் மட்டும் +P சேர்க்கவும்
+                            if sub.get('has_practical'):
+                                row[s_name] = f"{tot}\n({theory}+{internal}+{practical})"
+                            else:
+                                row[s_name] = f"{tot}\n({theory}+{internal})"
                         else:
                             row[s_name] = tot
                     else:
@@ -90,33 +99,23 @@ if sel_exam_name and sel_class != "-- தேர்வு செய்க --":
             report_rows.append(row)
 
         df = pd.DataFrame(report_rows)
-        # ⚡ பிழையைச் சரிசெய்யும் பகுதி (Rank Calculation)
         df = df.sort_values(by=["தோல்வி எண்ணிக்கை", "மொத்தம்"], ascending=[True, False]).reset_index(drop=True)
         
+        # Rank கணக்கீடு
         ranks = []
         r_val = 1
         for idx, row in df.iterrows():
             if row["தோல்வி எண்ணிக்கை"] == 0:
-                ranks.append(str(r_val))
-                r_val += 1
+                ranks.append(str(r_val)); r_val += 1
             else:
                 ranks.append("-")
-        
-        # 'Rank' வரிசையை இப்போது சேர்க்கிறோம் (இது பிழையைத் தவிர்க்கும்)
         df.insert(0, "Rank", ranks)
-
-        # 🏆 செண்டம்
-        if centum_winners:
-            st.subheader("🏆 100/100 எடுத்த மாணவர்கள்")
-            cols = st.columns(min(len(centum_winners), 5))
-            for idx, c in enumerate(centum_winners):
-                cols[idx % 5].markdown(f'<div class="centum-card">🥇 <b>{c["பெயர்"]}</b><br><small>{c["பாடம்"]}</small></div>', unsafe_allow_html=True)
 
         st.divider()
         st.subheader(f"📝 {sel_class} மதிப்பெண் பட்டியல்")
         st.dataframe(df.style.map(lambda v: 'color: red' if "ABS" in str(v) or (isinstance(v, int) and v < 35) else '').set_properties(**{'background-color': '#f8fafc'}, subset=['மொத்தம்']), use_container_width=True)
 
-        # Dashboard & Analysis
+        # Dashboard
         col_avg, col_pass = st.columns(2)
         c_avg = round(df["மொத்தம்"].mean(), 1) if not df.empty else 0
         p_per = round((pass_count / len(students)) * 100, 1)
@@ -129,7 +128,7 @@ if sel_exam_name and sel_class != "-- தேர்வு செய்க --":
         for sub in relevant_subjects:
             s_col = sub['subject_name']
             if s_col in df.columns:
-                temp_v = df[s_col].apply(lambda x: int(str(x).split('\n')[0]) if str(x).replace('\n','').isdigit() else None)
+                temp_v = df[s_col].apply(lambda x: int(str(x).split('\n')[0]) if str(x).replace('\n','').replace('(','').replace(')','').isdigit() or '\n' in str(x) else None)
                 v = pd.to_numeric(temp_v, errors='coerce').dropna()
                 stats.append({
                     "பாடம்": s_col, "சராசரி": round(v.mean(), 1) if not v.empty else 0,
