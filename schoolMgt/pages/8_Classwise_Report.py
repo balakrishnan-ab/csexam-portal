@@ -1,5 +1,6 @@
 import streamlit as st
 import pandas as pd
+import numpy as np
 from supabase import create_client
 
 # --- Supabase இணைப்பு ---
@@ -10,17 +11,18 @@ def get_supabase_client():
 
 supabase = get_supabase_client()
 
-st.set_page_config(page_title="Detailed Class Report", layout="wide")
+st.set_page_config(page_title="Advanced Class Report", layout="wide")
 
-# ⚡ அட்டவணைத் தலைப்புகளை அழகாக்க CSS
+# ⚡ தடிமனான மற்றும் வண்ண எழுத்துக்களுக்கான CSS
 st.markdown("""
     <style>
-    .stDataFrame { font-size: 14px !important; }
-    thead tr th { background-color: #f0f2f6 !important; color: black !important; font-weight: bold !important; }
+    .big-font { font-size:18px !important; font-weight: bold; color: #1E3A8A; }
+    .fail-text { color: red; font-weight: bold; }
+    .pass-text { color: green; font-weight: bold; }
     </style>
     """, unsafe_allow_html=True)
 
-st.title("📂 விரிவான வகுப்பு வாரி மதிப்பெண் அறிக்கை")
+st.title("📂 வகுப்பு வாரி மதிப்பெண் பகுப்பாய்வு (Result Analysis)")
 
 # --- 1. தரவுகள் ---
 exams = supabase.table("exams").select("*").execute().data
@@ -28,7 +30,6 @@ all_classes = supabase.table("classes").select("*").execute().data
 all_groups = supabase.table("groups").select("*").execute().data
 all_subjects = supabase.table("subjects").select("*").execute().data
 
-# --- 2. வடிகட்டிகள் ---
 c1, c2 = st.columns(2)
 sel_exam_name = c1.selectbox("1. தேர்வு:", [e['exam_name'] for e in exams])
 class_list = sorted(list(set([c.get('class_n') or c.get('class_name') for c in all_classes])))
@@ -37,7 +38,7 @@ sel_class = c2.selectbox("2. வகுப்பு:", ["-- தேர்வு �
 if sel_exam_name and sel_class != "-- தேர்வு செய்க --":
     exam_id = next(e['id'] for e in exams if e['exam_name'] == sel_exam_name)
     
-    # வகுப்பிற்குரிய பாடங்களை எடுத்தல்
+    # பாடப்பிரிவு கண்டறிதல்
     class_info = next((c for c in all_classes if (c.get('class_n') == sel_class or c.get('class_name') == sel_class)), None)
     relevant_subjects = []
     if class_info:
@@ -50,27 +51,31 @@ if sel_exam_name and sel_class != "-- தேர்வு செய்க --":
     marks_data = supabase.table("marks").select("*").eq("exam_id", exam_id).execute().data
 
     if students and relevant_subjects:
-        show_detailed = st.toggle("🔍 விரிவான பார்வை (Theory, Practical, Internal பிரித்துக்காட்டு)")
+        show_detailed = st.toggle("🔍 விரிவான பார்வை (T, P, I பிரித்துக்காட்டு)")
 
-        final_rows = []
+        report_rows = []
         for s in students:
             row = {"தேர்வு எண்": s['exam_no'], "மாணவர் பெயர்": s['student_name']}
             total_score = 0
+            fail_count = 0
             
             for sub in relevant_subjects:
                 s_name = sub['subject_name']
                 s_code = sub['subject_code']
                 eval_type = sub.get('eval_type', '90+10')
-                has_prac = len(eval_type.split('+')) > 2 # செய்முறை உள்ளதா எனச் சரிபார்த்தல்
+                has_prac = len(eval_type.split('+')) > 2
                 
                 m = next((m for m in marks_data if m['emis_no'] == s['emis_no'] and m['subject_id'] == s_code), None)
                 
                 if m:
-                    if m.get('is_absent'):
-                        t, p, i, tot = "ABS", "ABS", "ABS", "ABS"
-                    else:
-                        t, p, i, tot = m.get('theory_mark', 0), m.get('practical_mark', 0), m.get('internal_mark', 0), m.get('total_mark', 0)
+                    t, p, i, tot = m.get('theory_mark', 0), m.get('practical_mark', 0), m.get('internal_mark', 0), m.get('total_mark', 0)
+                    if not m.get('is_absent'):
                         total_score += tot
+                        # தேர்ச்சி விதி (உதாரணமாக மொத்தம் 35)
+                        if tot < 35: fail_count += 1
+                    else:
+                        t = p = i = tot = "ABS"
+                        fail_count += 1
                     
                     if show_detailed:
                         row[f"{s_name} (T)"] = t
@@ -80,24 +85,64 @@ if sel_exam_name and sel_class != "-- தேர்வு செய்க --":
                     else:
                         row[s_name] = tot
                 else:
-                    if show_detailed:
-                        row[f"{s_name} (T)"], row[f"{s_name} (I)"], row[f"{s_name} (Σ)"] = "-", "-", "-"
-                        if has_prac: row[f"{s_name} (P)"] = "-"
-                    else:
-                        row[s_name] = "-"
+                    row[s_name] = "-"
             
             row["மொத்தம்"] = total_score
-            final_rows.append(row)
+            row["தோல்வி பாடங்கள்"] = fail_count
+            report_rows.append(row)
 
-        df = pd.DataFrame(final_rows)
+        df = pd.DataFrame(report_rows)
+        # ⚡ தரவரிசை (Ranking)
         df = df.sort_values(by="மொத்தம்", ascending=False).reset_index(drop=True)
-        df.index += 1
-        df.index.name = "Rank"
+        df.insert(0, 'Rank', range(1, 1 + len(df)))
+
+        # ⚡ நிறம் மாற்றுதல் (Styler)
+        def color_fails(val):
+            try:
+                if isinstance(val, (int, float)) and val < 35: return 'color: red; font-weight: bold'
+                if val == "ABS": return 'color: red'
+            except: pass
+            return ''
 
         st.divider()
-        st.subheader(f"📊 {sel_class} - {sel_exam_name} விரிவான அறிக்கை")
-        st.dataframe(df, use_container_width=True)
+        st.subheader(f"📊 {sel_class} மதிப்பெண் பட்டியல்")
+        
+        # தடிமனான எழுத்துக்களுக்கான ஸ்டைலிங்
+        styled_df = df.style.applymap(color_fails).set_properties(**{'font-weight': 'bold'}, subset=['மொத்தம்'])
+        st.dataframe(styled_df, use_container_width=True)
 
-        # Excel டவுன்லோட்
-        csv = df.to_csv(index=True).encode('utf-8-sig')
-        st.download_button("📥 எக்செல் தரவிறக்கம்", data=csv, file_name=f"{sel_class}_Detailed_Report.csv", mime="text/csv")
+        # ⚡ 4. பாடவாரி புள்ளிவிவரம் (Bottom Stats)
+        st.subheader("📈 பாடவாரி புள்ளிவிவரங்கள்")
+        stats_data = []
+        for sub in relevant_subjects:
+            s_name = sub['subject_name']
+            if show_detailed: s_col = f"{s_name} (Σ)"
+            else: s_col = s_name
+            
+            if s_col in df.columns:
+                valid_marks = pd.to_numeric(df[s_col], errors='coerce').dropna()
+                if not valid_marks.empty:
+                    stats_data.append({
+                        "பாடம்": s_name,
+                        "சராசரி": round(valid_marks.mean(), 2),
+                        "அதிகபட்சம்": valid_marks.max(),
+                        "குறைந்தபட்சம்": valid_marks.min(),
+                        "தோல்வியுற்றோர்": len(valid_marks[valid_marks < 35])
+                    })
+        
+        if stats_data:
+            st.table(pd.DataFrame(stats_data))
+
+        # ⚡ 5. தோல்விப் பட்டியல் (Fail Category)
+        st.divider()
+        st.subheader("❌ தோல்வி அடைந்தவர்களின் விவரம்")
+        
+        for i in range(1, 7):
+            fail_list = df[df["தோல்வி பாடங்கள்"] == i][["மாணவர் பெயர்", "மொத்தம்"]]
+            if not fail_list.empty:
+                with st.expander(f"📌 {i} பாடத்தில் தோல்வி அடைந்தவர்கள் ({len(fail_list)} பேர்)"):
+                    st.write(", ".join(fail_list["மாணவர் பெயர்"].tolist()))
+
+        # Download
+        csv = df.to_csv(index=False).encode('utf-8-sig')
+        st.download_button("📥 முழு அறிக்கையை பதிவிறக்கு", data=csv, file_name=f"{sel_class}_Result.csv")
