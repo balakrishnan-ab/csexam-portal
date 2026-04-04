@@ -10,7 +10,7 @@ def get_supabase_client():
 
 supabase = get_supabase_client()
 
-st.set_page_config(page_title="Final School Report", layout="wide")
+st.set_page_config(page_title="Filtered School Report", layout="wide")
 
 # ⚡ CSS வடிவமைப்பு
 st.markdown("""
@@ -93,6 +93,7 @@ if sel_exam_name and sel_class != "-- தேர்வு செய்க --":
                     stats["pass"]["all"] += 1; stats["pass"][gen] += 1
                 else:
                     s_info = f"{s['student_name']} ({', '.join(fail_subs)})"
+                    # தோல்வி எண்ணிக்கை அடிப்படையில் வகைப்படுத்தல்
                     if fails >= len(relevant_subjects): fail_cats["All"].append(s_info)
                     elif fails in fail_cats: fail_cats[fails].append(s_info)
             else:
@@ -114,15 +115,17 @@ if sel_exam_name and sel_class != "-- தேர்வு செய்க --":
         m[4].markdown(f'<div class="main-stat"><div class="stat-label">Pass %</div><div class="stat-val" style="color:#16a34a">{p_per}%</div></div>', unsafe_allow_html=True)
         m[5].markdown(f'<div class="main-stat"><div class="stat-label">Class Avg</div><div class="stat-val" style="color:#3b82f6">{round(sum(class_total_list)/len(class_total_list),1) if class_total_list else 0}</div></div>', unsafe_allow_html=True)
 
-        # --- Expanders (Top: Centum & Absents) ---
+        # --- Top Expanders (Centum & Absents) ---
         st.divider()
         c_e1, c_e2 = st.columns(2)
         with c_e1:
-            with st.expander(f"🏆 100/100 எடுத்தவர்கள்: {len(centum_list)} பேர்"):
-                for item in centum_list: st.markdown(f'<div class="info-card">🥇 {item}</div>', unsafe_allow_html=True)
+            if len(centum_list) > 0:
+                with st.expander(f"🏆 100/100 எடுத்தவர்கள்: {len(centum_list)} பேர்"):
+                    for item in centum_list: st.markdown(f'<div class="info-card">🥇 {item}</div>', unsafe_allow_html=True)
         with c_e2:
-            with st.expander(f"🚶 தேர்வுக்கே வராதவர்கள்: {len(absent_list)} பேர்"):
-                for item in absent_list: st.markdown(f'<div class="info-card critical-card">❌ {item}</div>', unsafe_allow_html=True)
+            if len(absent_list) > 0:
+                with st.expander(f"🚶 தேர்வுக்கே வராதவர்கள்: {len(absent_list)} பேர்"):
+                    for item in absent_list: st.markdown(f'<div class="info-card critical-card">❌ {item}</div>', unsafe_allow_html=True)
 
         # --- 📈 பாடவாரி விரிவான பகுப்பாய்வு ---
         st.divider()
@@ -161,20 +164,20 @@ if sel_exam_name and sel_class != "-- தேர்வு செய்க --":
         df.insert(0, "Rank", ranks)
         st.dataframe(df[["Rank", "பெயர்"] + [s['subject_name'] for s in relevant_subjects] + ["மொத்தம்", "தோல்வி விவரம்"]].style.apply(lambda x: ['color: red' if (isinstance(v, int) and v < 35) or v == "ABS" else '' for v in x], axis=1), use_container_width=True, hide_index=True)
 
-        # --- 📉 தோல்விப் பட்டியல் (Bottom of the Page) ---
+        # --- 📉 தோல்விப் பட்டியல் (Bottom - Only if count > 0) ---
         st.divider()
-        st.subheader("📉 தோல்வி அடைந்த மாணவர்களின் விவரம் (பாடம் வாரியாக)")
+        st.subheader("📉 தோல்வி அடைந்த மாணவர்களின் விவரம்")
         b1, b2 = st.columns(2)
+        
         with b1:
             for n in [1, 2, 3]:
-                with st.expander(f"❌ {n} பாடத்தில் தோல்வி: {len(fail_cats[n])} பேர்"):
-                    if fail_cats[n]:
+                if len(fail_cats[n]) > 0: # 0-க்கு மேல் இருந்தால் மட்டுமே காட்டு
+                    with st.expander(f"❌ {n} பாடத்தில் தோல்வி: {len(fail_cats[n])} பேர்"):
                         for item in fail_cats[n]: st.markdown(f'<div class="info-card fail-card">⚠️ {item}</div>', unsafe_allow_html=True)
-                    else: st.write("யாரும் இல்லை")
+        
         with b2:
             for n in [4, 5, "All"]:
-                label = f"{n} பாடத்தில் தோல்வி" if n != "All" else "அனைத்துப் பாடங்களிலும் தோல்வி"
-                with st.expander(f"🔴 {label}: {len(fail_cats[n])} பேர்"):
-                    if fail_cats[n]:
+                if len(fail_cats[n]) > 0: # 0-க்கு மேல் இருந்தால் மட்டுமே காட்டு
+                    label = f"{n} பாடத்தில் தோல்வி" if n != "All" else "அனைத்துப் பாடங்களிலும் தோல்வி"
+                    with st.expander(f"🔴 {label}: {len(fail_cats[n])} பேர்"):
                         for item in fail_cats[n]: st.markdown(f'<div class="info-card critical-card">🚩 {item}</div>', unsafe_allow_html=True)
-                    else: st.write("யாரும் இல்லை")
