@@ -5,7 +5,8 @@ import pandas as pd
 # 1. Supabase இணைப்பு தகவல்கள்
 # உங்கள் Streamlit Secrets-ல் SUPABASE_URL மற்றும் SUPABASE_KEY இருப்பதை உறுதி செய்யவும்
 try:
-    url: str = st.secrets["SUPABASE_URL"]
+ #   url: str = st.secrets["SUPABASE_URL"]
+    url: str = st.secrets["SUPABASE_URL"].strip()
     key: str = st.secrets["SUPABASE_KEY"]
     supabase: Client = create_client(url, key)
 except Exception as e:
