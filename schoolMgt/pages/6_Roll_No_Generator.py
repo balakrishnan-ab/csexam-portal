@@ -15,7 +15,7 @@ def get_supabase_client():
 supabase = get_supabase_client()
 
 st.set_page_config(page_title="Roll No Generator", layout="wide")
-st.title("📝 நெகிழ்வான தொடர் தேர்வு எண் மேலாண்மை")
+st.title("📝 தேர்வு எண் மேலாண்மை (தொடர்ச்சி / தனித்தனி)")
 
 if not supabase:
     st.error("Supabase இணைப்பு இல்லை!")
@@ -42,32 +42,41 @@ if selected_exam_label != "-- தேர்வு செய்க --" and sel_cla
     df_stu = pd.DataFrame(students_list)
     
     st.divider()
-    st.subheader("🔢 வகுப்பு வாரியான எண் ஒதுக்கீடு")
+    
+    # 🔘 ரேடியோ பட்டன் - தேர்வு எண் முறை
+    mode = st.radio(
+        "எண் ஒதுக்கும் முறை:",
+        ["தொடர்ச்சியாக (Continuous)", "பிரிவுக்கு வேறாக (Section-wise Break)"],
+        horizontal=True
+    )
+    
+    st.subheader("🔢 எண் ஒதுக்கீடு")
     
     all_new_mappings = []
-    # முதல் வகுப்பிற்கான ஆரம்ப எண்
-    global_start = st.number_input("முதல் வகுப்பிற்கான ஆரம்ப எண்:", min_value=1, value=1001, step=1)
+    # முதல் வகுப்பிற்கான பொதுவான ஆரம்ப எண்
+    start_val = st.number_input("ஆரம்ப எண்:", min_value=1, value=1001)
     
-    current_num = global_start
+    current_num = start_val
 
-    # ⚡ ஒவ்வொரு வகுப்பிற்கும் தனித்தனி கட்டுப்பாடுகள்
-    for cls in sel_classes:
-        with st.expander(f"📍 {cls} - எண்களைச் சரிபார்க்க", expanded=True):
-            # அந்த வகுப்பிற்கான ஆரம்ப எண்ணை மாற்றும் வசதி
-            current_num = st.number_input(f"{cls} வகுப்பிற்கான ஆரம்ப எண்:", min_value=1, value=int(current_num), key=f"start_{cls}")
+    for i, cls in enumerate(sel_classes):
+        with st.expander(f"📍 {cls} - விபரங்கள்", expanded=True):
             
+            # 'பிரிவுக்கு வேறாக' எனில் மட்டும் ஒவ்வொரு வகுப்பிற்கும் எண்களை மாற்ற அனுமதித்தல்
+            if mode == "பிரிவுக்கு வேறாக (Section-wise Break)":
+                current_num = st.number_input(f"{cls} ஆரம்ப எண்:", min_value=1, value=int(current_num), key=f"inp_{cls}")
+            else:
+                st.info(f"{cls} வகுப்பிற்கான ஆரம்ப எண்: **{current_num}** (தொடர்ச்சி)")
+
             f_students = df_stu[(df_stu['class_name'] == cls) & (df_stu['gender'] == 'Female')].sort_values('student_name')
             m_students = df_stu[(df_stu['class_name'] == cls) & (df_stu['gender'] == 'Male')].sort_values('student_name')
             
-            col_f, col_m = st.columns(2)
-            
+            # --- எண்களை ஒதுக்கும் பகுதி ---
             # மாணவிகள்
             f_s = current_num
             for _, row in f_students.iterrows():
                 all_new_mappings.append({"exam_id": selected_exam_id, "emis_no": row['emis_no'], "exam_no": current_num, "class_name": cls, "student_name": row['student_name']})
                 current_num += 1
             f_e = current_num - 1
-            with col_f: st.success(f"👩‍🎓 மாணவிகள் ({len(f_students)}): **{f_s} - {f_e}**" if not f_students.empty else "👩‍🎓 மாணவிகள்: இல்லை")
 
             # மாணவர்கள்
             m_s = current_num
@@ -75,14 +84,15 @@ if selected_exam_label != "-- தேர்வு செய்க --" and sel_cla
                 all_new_mappings.append({"exam_id": selected_exam_id, "emis_no": row['emis_no'], "exam_no": current_num, "class_name": cls, "student_name": row['student_name']})
                 current_num += 1
             m_e = current_num - 1
-            with col_m: st.info(f"👨‍🎓 மாணவர்கள் ({len(m_students)}): **{m_s} - {m_e}**" if not m_students.empty else "👨‍🎓 மாணவர்கள்: இல்லை")
             
-            st.caption(f"அடுத்த வகுப்பிற்குப் பரிந்துரைக்கப்படும் எண்: **{current_num}**")
+            col_f, col_m = st.columns(2)
+            with col_f: st.success(f"👩‍🎓 மாணவிகள் ({len(f_students)}): {f_s}-{f_e}" if not f_students.empty else "👩‍🎓 மாணவிகள்: இல்லை")
+            with col_m: st.info(f"👨‍🎓 மாணவர்கள் ({len(m_students)}): {m_s}-{m_e}" if not m_students.empty else "👨‍🎓 மாணவர்கள்: இல்லை")
 
     # --- இறுதிச் சேமிப்பு ---
     if all_new_mappings:
         st.divider()
-        st.subheader("📋 இறுதிப் பார்வை மற்றும் சேமிப்பு")
+        st.subheader("📋 இறுதிப் பார்வை")
         df_preview = pd.DataFrame(all_new_mappings)
         st.dataframe(df_preview[['exam_no', 'student_name', 'class_name']].sort_values('exam_no'), use_container_width=True, hide_index=True)
         
