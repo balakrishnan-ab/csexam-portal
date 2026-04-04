@@ -31,15 +31,12 @@ if sel_exam and sel_sub and sel_cls:
 
     students = supabase.table("exam_mapping").select("*").eq("exam_id", exam_id).eq("class_name", sel_cls).order("exam_no").execute().data
 
-    # மதிப்பீடு பிரித்தல்
+    # மதிப்பீடு பிரித்தல் (எ.கா: 70+20+10)
     parts = eval_type.split('+')
-    max_t = int(parts[0])
-    max_p = int(parts[1]) if len(parts) > 2 else 0
-    max_i = int(parts[-1])
+    max_t, max_p, max_i = int(parts[0]), (int(parts[1]) if len(parts) > 2 else 0), int(parts[-1])
 
-    # தேர்ச்சி நிபந்தனை
+    # ⚡ தேர்ச்சி நிபந்தனை
     min_theory = 25 if max_t == 90 else 15
-    min_total = 35
 
     def update_all():
         for i in range(len(students)):
@@ -54,10 +51,9 @@ if sel_exam and sel_sub and sel_cls:
 
     st.divider()
     
-    # ⚡ 2. அட்டவணை தலைப்புகள் (மிகவும் நெருக்கமான விகிதத்தில்)
-    # [Roll No, Name, Abs, Theory, Prac, Int, Total]
-    col_ratios = [1, 2.5, 0.5, 1, 1, 1, 1] if max_p > 0 else [1, 3, 0.5, 1.2, 0.1, 1.2, 1]
-    
+    # ⚡ 2. அட்டவணை தலைப்புகள் (அகலம் சுருக்கப்பட்டுள்ளது)
+    # [Roll, Name, Abs, Theory, Prac, Int, Total]
+    col_ratios = [1.2, 3, 0.6, 1.2, 1.2, 1.2, 1]
     h = st.columns(col_ratios)
     h[0].caption("**தேர்வு எண்**")
     h[1].caption("**மாணவர் பெயர்**")
@@ -70,26 +66,28 @@ if sel_exam and sel_sub and sel_cls:
     mark_list = []
 
     for idx, s in enumerate(students):
+        # தற்போதைய மதிப்புகளை எடுத்தல்
         t_val = st.session_state.get(f"t_{idx}", 0)
         p_val = st.session_state.get(f"p_{idx}", 0)
         i_val = st.session_state.get(f"int_{idx}", 0)
         total = t_val + p_val + i_val
         
-        is_fail = (t_val < min_theory) or (total < min_total)
-        display_name = s['student_name']
-        name_color = "red" if is_fail else "black"
+        # ⚡ தோல்வி நிபந்தனை சரிபார்த்தல்
+        is_fail = (t_val < min_theory) or (total < 35)
+        name_style = "color:red; font-weight:bold;" if is_fail else "color:black;"
 
         # ⚡ ஒவ்வொரு மாணவரும் ஒரு வரிசையில்
         r = st.columns(col_ratios)
         
         r[0].write(f"`{s['exam_no']}`")
-        r[1].markdown(f"<p style='color:{name_color}; font-weight:bold; margin:0;'>{display_name}</p>", unsafe_allow_html=True)
+        r[1].markdown(f"<span style='{name_style}'>{s['student_name']}</span>", unsafe_allow_html=True)
         is_abs = r[2].checkbox("", key=f"abs_{idx}", label_visibility="collapsed")
 
         if is_abs:
             t, p, intn, tot = 0, 0, 0, 0
             r[6].error("ABS")
         else:
+            # ⚡ label_visibility="collapsed" பயன்படுத்துவதால் உயரம் குறையும்
             t = r[3].number_input("", 0, max_t, key=f"t_{idx}", label_visibility="collapsed")
             p = 0
             if max_p > 0:
@@ -97,8 +95,9 @@ if sel_exam and sel_sub and sel_cls:
             intn = r[5].number_input("", 0, max_i, key=f"int_{idx}", label_visibility="collapsed")
             
             tot = t + p + intn
-            if tot < 35: r[6].markdown(f"<div style='background-color:#ffcccc; padding:5px; border-radius:5px; text-align:center;'><b>{tot}</b></div>", unsafe_allow_html=True)
-            else: r[6].markdown(f"<div style='background-color:#ccffcc; padding:5px; border-radius:5px; text-align:center;'><b>{tot}</b></div>", unsafe_allow_html=True)
+            # மொத்தம் 35-க்கு கீழ் இருந்தால் பெட்டி சிவப்பாகும்
+            if tot < 35: r[6].markdown(f"<div style='background-color:#ffcccc; text-align:center; border-radius:5px;'><b>{tot}</b></div>", unsafe_allow_html=True)
+            else: r[6].markdown(f"<div style='background-color:#ccffcc; text-align:center; border-radius:5px;'><b>{tot}</b></div>", unsafe_allow_html=True)
 
         mark_list.append({
             "exam_id": exam_id, "emis_no": s['emis_no'], "subject_id": sub_code,
