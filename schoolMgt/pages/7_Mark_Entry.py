@@ -110,4 +110,21 @@ if sel_exam_name != "-- தேர்வு செய்க --":
                     else:
                         # பிழை இல்லை எனில் சேமித்தல்
                         t_marks = pd.to_numeric(edited_df['Theory']).fillna(0)
-                        i_marks = pd.to_numeric(edited_df['Internal']).fillna
+                        i_marks = pd.to_numeric(edited_df['Internal']).fillna(0)
+                        p_marks = pd.to_numeric(edited_df['Practical']).fillna(0) if "Practical" in edited_df.columns else 0
+                        
+                        edited_df['Total'] = t_marks + i_marks + p_marks
+                        edited_df.loc[edited_df['Abs'] == True, ['Theory', 'Practical', 'Internal', 'Total']] = 0
+
+                        final_list = []
+                        for idx, r in edited_df.iterrows():
+                            final_list.append({
+                                "exam_id": exam_id, "emis_no": df.iloc[idx]['EMIS'], "subject_id": sub_code,
+                                "theory_mark": int(r['Theory']), "practical_mark": int(r.get('Practical', 0)),
+                                "internal_mark": int(r['Internal']), "total_mark": int(r['Total']), "is_absent": bool(r['Abs'])
+                            })
+                        
+                        supabase.table("marks").upsert(final_list, on_conflict="exam_id, emis_no, subject_id").execute()
+                        st.session_state[state_key].update(edited_df)
+                        st.success("✅ அனைத்து மதிப்பெண்களும் சரியாகச் சேமிக்கப்பட்டன!")
+                        st.rerun()
