@@ -1,116 +1,150 @@
 import streamlit as st
-import requests
+from supabase import create_client, Client
 import pandas as pd
 
-# 1. பக்க அமைப்பு
-st.set_page_config(page_title="Students Management", layout="wide")
-
-# 2. URL அமைப்பு
+# 1. Supabase இணைப்பு (Secrets-ல் இருந்து URL மற்றும் Key-ஐ எடுக்கும்)
 try:
-    BASE_URL = st.secrets["BASE_URL"]
-except:
-    st.error("BASE_URL secrets-ல் கண்டறியப்படவில்லை!")
+    url: str = st.secrets["SUPABASE_URL"]
+    key: str = st.secrets["SUPABASE_KEY"]
+    supabase: Client = create_client(url, key)
+except Exception as e:
+    st.error("Supabase இணைப்பு தகவல்கள் Secrets-ல் இல்லை!")
     st.stop()
 
-# 3. ⚡ மின்னல் வேகத்தில் அனைத்து தரவுகளையும் பெறுதல்
-@st.cache_data(ttl=300)
-def fetch_everything():
+st.set_page_config(page_title="Student Management", layout="wide")
+
+st.title("🧑‍🎓 மாணவர் மேலாண்மை (Supabase)")
+
+# ⚡ தரவுகளை வேகமாகப் பெறுதல் (Caching)
+@st.cache_data(ttl=60)
+def fetch_data(table_name):
     try:
-        # புதிய கூகுள் ஸ்கிரிப்ட் படி ஒரே முறையில் அனைத்து சீட்களையும் எடுக்கும்
-        res = requests.get(BASE_URL).json()
-        return res
-    except:
-        return None
+        response = supabase.table(table_name).select("*").execute()
+        return response.data
+    except Exception as e:
+        st.error(f"{table_name} தரவைப் பெறுவதில் பிழை: {e}")
+        return []
 
-all_data = fetch_everything()
+# தேவையான தரவுகளைப் பெறுதல்
+students_data = fetch_data("students")
+classes_data = fetch_data("classes")
 
-if not all_data:
-    st.warning("கூகுள் சீட்டில் இருந்து தகவல்கள் வரவில்லை.")
-    st.stop()
+# வகுப்புகளை மட்டும் அகரவரிசைப்படி பட்டியலிடுதல்
+class_list = sorted([c['class_name'] for c in classes_data]) if classes_data else []
 
-# தரவுகளைப் பிரித்தல்
-students_list = all_data.get('students', [])
-classes_list = all_data.get('classes', [])
-class_names = [c['class_name'] for c in classes_list]
-
-st.title("👨‍🎓 மாணவர்கள் மேலாண்மை")
-
-# 1. புதிய மாணவர் சேர்க்கை படிவம்
+# --- 1. புதிய மாணவர் சேர்க்கும் படிவம் ---
 with st.form("add_student_form", clear_on_submit=True):
     st.subheader("🆕 புதிய மாணவர் சேர்க்கை")
+    c1, c2, c3, c4 = st.columns([2, 3, 2, 2])
     
-    c1, c2, c3 = st.columns(3)
-    input_name = c1.text_input("மாணவர் பெயர் (Name)").upper().strip()
-    emis = c2.text_input("EMIS எண்")
-    roll_no = c3.text_input("தேர்வு எண் (Roll No)") # ஆசிரியர்களுக்காக புதிய காலம்
-    
-    c4, c5 = st.columns(2)
-    gender = c4.selectbox("பாலினம்", ["Female", "Male"])
-    cname = c5.selectbox("வகுப்பைத் தேர்ந்தெடுக்கவும்", class_names)
+    # 13 இலக்க EMIS எண் கட்டுப்பாடு
+    emis = c1.text_input("EMIS எண் (13 Digits)", max_chars=13, help="சரியாக 13 இலக்க எண்களை உள்ளிடவும்").strip()
+    sname = c2.text_input("மாணவர் பெயர்").upper().strip()
+    gender = c3.selectbox("பாலினம்", ["Male", "Female", "Transgender"])
+    s_class = c4.selectbox("வகுப்பு", ["-- தேர்வு செய்க --"] + class_list)
     
     if st.form_submit_button("💾 மாணவரைச் சேமி"):
-        if input_name and emis:
-            payload = {
-                "student_name": input_name, 
-                "emis_no": emis, 
-                "roll_no": roll_no, # தேர்வு எண் சேமிக்கப்படுகிறது
-                "Gender": gender, 
-                "class_name": cname
-            }
+        # முக்கியமான சரிபார்ப்புகள்
+        if not emis.isdigit() or len(emis) != 13:
+            st.error("❌ பிழை: EMIS எண் சரியாக 13 இலக்க எண்களாக இருக்க வேண்டும்!")
+        elif sname == "" or s_class == "-- தேர்வு செய்க --":
+            st.warning("⚠️ மாணவர் பெயர் மற்றும் வகுப்பைச் சரியாக உள்ளிடவும்.")
+        else:
             try:
-                # தரவைச் சேமிக்கிறோம்
-                requests.post(f"{BASE_URL}?sheet=Students", json={"data": [payload]})
-                st.success(f"மாணவர் {input_name} சேர்க்கப்பட்டார்!")
-                st.cache_data.clear() # Cache-ஐத் துடைத்துவிட்டு புதுப்பிக்கவும்
+                supabase.table("students").insert({
+                    "emis_no": emis,
+                    "student_name": sname,
+                    "gender": gender,
+                    "class_name": s_class
+                }).execute()
+                st.success(f"மாணவர் '{sname}' வெற்றிகரமாகச் சேர்க்கப்பட்டார்!")
+                st.cache_data.clear()
                 st.rerun()
             except Exception as e:
-                st.error(f"பிழை: {e}")
-        else:
-            st.warning("பெயர் மற்றும் EMIS எண்ணை உள்ளிடவும்.")
+                if "duplicate key" in str(e):
+                    st.error(f"❌ பிழை: EMIS எண் {emis} ஏற்கனவே பதிவு செய்யப்பட்டுள்ளது!")
+                else:
+                    st.error(f"பதிவு செய்வதில் பிழை: {e}")
 
 st.divider()
 
-# 2. மாணவர்கள் பட்டியல்
-if students_list:
-    st.subheader("📋 மாணவர்கள் பட்டியல்")
-    df = pd.DataFrame(students_list)
+# --- 2. மாணவர் பட்டியல் & தேடுதல் வசதி ---
+if students_data:
+    df = pd.DataFrame(students_data)
     
-    # Filter: வகுப்பு வாரியாகப் பார்த்தல்
-    filter_classes = ["அனைத்தும்"] + sorted(df['class_name'].unique().tolist())
-    selected_filter = st.selectbox("வகுப்பு வாரியாகப் பார்க்க:", filter_classes)
+    st.subheader("📋 மாணவர் பட்டியல்")
     
-    df_f = df if selected_filter == "அனைத்தும்" else df[df['class_name'] == selected_filter]
-
-    if not df_f.empty:
-        # வரிசைப்படுத்துதல்: வகுப்பு -> பாலினம் -> பெயர்
-        df_sorted = df_f.sort_values(by=['class_name', 'Gender', 'student_name']).reset_index(drop=True)
-        df_sorted.index = range(1, len(df_sorted) + 1)
+    # தேடுதல் மற்றும் வடிகட்டுதல் (Filter)
+    f1, f2 = st.columns([2, 1])
+    search_query = f1.text_input("பெயர் அல்லது EMIS மூலம் தேடுக:", placeholder="பெயரைத் தட்டச்சு செய்க...")
+    filter_class = f2.selectbox("வகுப்பு வாரியாக வடிகட்ட:", ["All"] + class_list)
+    
+    # வடிகட்டும் லாஜிக் (Filtering Logic)
+    filtered_df = df.copy()
+    if filter_class != "All":
+        filtered_df = filtered_df[filtered_df['class_name'] == filter_class]
+    if search_query:
+        filtered_df = filtered_df[
+            filtered_df['student_name'].str.contains(search_query.upper()) | 
+            filtered_df['emis_no'].contains(search_query)
+        ]
         
-        # 'roll_no' காலத்தை முன்னால் காட்டுதல்
-        cols_to_show = ['roll_no', 'student_name', 'Gender', 'class_name', 'emis_no']
-        st.dataframe(df_sorted[cols_to_show], use_container_width=True)
+    st.info(f"காண்பிக்கப்படும் மாணவர்கள் எண்ணிக்கை: {len(filtered_df)}")
+    
+    # அட்டவணையாகக் காட்டுதல்
+    st.dataframe(
+        filtered_df[['emis_no', 'student_name', 'gender', 'class_name']].sort_values('student_name'), 
+        use_container_width=True, 
+        hide_index=True
+    )
 
-        st.divider()
+    st.divider()
 
-        # 3. மாணவரை நீக்க (Delete)
-        st.subheader("🗑️ மாணவரை நீக்க")
+    # --- 3. திருத்துதல் மற்றும் நீக்குதல் ---
+    st.subheader("⚙️ மாணவர் விபரங்களை மாற்றியமைக்க / நீக்க")
+    
+    # மாணவரைத் தேர்வு செய்தல்
+    student_list = filtered_df.apply(lambda x: f"{x['emis_no']} - {x['student_name']}", axis=1).tolist()
+    sel_student = st.selectbox("நிர்வகிக்க வேண்டிய மாணவரைத் தேர்வு செய்க:", ["-- தேர்வு செய்க --"] + student_list)
+
+    if sel_student != "-- தேர்வு செய்க --":
+        selected_emis = sel_student.split(" - ")[0]
+        old_data = df[df['emis_no'] == selected_emis].iloc[0]
         
-        # EMIS மற்றும் பெயரைக் காட்டித் தேர்வு செய்தல்
-        df_sorted['display_name'] = df_sorted['student_name'] + " (" + df_sorted['emis_no'].astype(str) + ")"
-        del_choice = st.selectbox("நீக்க வேண்டிய மாணவரைத் தேர்வு செய்க:", ["-- தேர்வு செய்க --"] + df_sorted['display_name'].tolist())
-        
-        if del_choice != "-- தேர்வு செய்க --":
-            # EMIS எண்ணைப் பிரித்தெடுத்தல்
-            target_emis = del_choice.split('(')[-1].replace(')', '')
+        col1, col2 = st.columns(2)
+        with col1:
+            st.markdown("#### 📝 விபரங்களை மாற்ற")
+            u_name = st.text_input("புதிய பெயர்:", value=old_data['student_name']).upper().strip()
+            u_gender = st.selectbox("புதிய பாலினம்:", ["Male", "Female", "Transgender"], 
+                                   index=["Male", "Female", "Transgender"].index(old_data['gender']))
+            u_class = st.selectbox("புதிய வகுப்பு:", class_list, 
+                                  index=class_list.index(old_data['class_name']) if old_data['class_name'] in class_list else 0)
             
-            if st.checkbox(f"நான் {del_choice}-ஐ நீக்க விரும்புகிறேன்"):
-                if st.button(f"❌ மாணவரை நிரந்தரமாக நீக்கு", type="primary"):
-                    del_url = f"{BASE_URL}?sheet=Students&action=delete&emis_no={target_emis}"
-                    requests.post(del_url)
-                    st.success("மாணவர் நீக்கப்பட்டார்!")
+            if st.button("🆙 இற்றைப்படுத்து (Update)"):
+                try:
+                    supabase.table("students").update({
+                        "student_name": u_name,
+                        "gender": u_gender,
+                        "class_name": u_class
+                    }).eq("emis_no", selected_emis).execute()
+                    st.success("விபரங்கள் வெற்றிகரமாக மாற்றப்பட்டன!")
                     st.cache_data.clear()
                     st.rerun()
-    else:
-        st.info("இந்த வகுப்பில் மாணவர்கள் இல்லை.")
+                except Exception as e:
+                    st.error(f"மாற்றுவதில் பிழை: {e}")
+
+        with col2:
+            st.markdown("#### ❌ மாணவரை நீக்க")
+            st.warning(f"எச்சரிக்கை: {old_data['student_name']} என்பவரை நீக்கப் போகிறீர்கள்.")
+            confirm_del = st.checkbox("நான் இவரை நிரந்தரமாக நீக்க விரும்புகிறேன்")
+            if confirm_del:
+                if st.button(f"உறுதியாக நீக்கு", type="primary"):
+                    try:
+                        supabase.table("students").delete().eq("emis_no", selected_emis).execute()
+                        st.warning("மாணவர் நீக்கப்பட்டார்!")
+                        st.cache_data.clear()
+                        st.rerun()
+                    except Exception as e:
+                        st.error(f"நீக்குவதில் பிழை: {e}")
 else:
-    st.info("மாணவர்கள் பட்டியல் இன்னும் உருவாக்கப்படவில்லை.")
+    st.info("மாணவர்கள் விபரங்கள் இன்னும் சேர்க்கப்படவில்லை.")
