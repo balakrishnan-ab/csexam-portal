@@ -10,7 +10,7 @@ def get_supabase_client():
 
 supabase = get_supabase_client()
 
-st.set_page_config(page_title="Detailed School Report", layout="wide")
+st.set_page_config(page_title="Shortened Analysis", layout="wide")
 
 # ⚡ CSS வடிவமைப்பு
 st.markdown("""
@@ -21,7 +21,6 @@ st.markdown("""
     .gender-sub { font-size: 13px; color: #3b82f6; font-weight: bold; display: block; margin-top: 2px; }
     .stat-label { font-size: 13px; color: #64748b; font-weight: bold; margin-bottom: 5px; }
     .info-card { padding: 8px; border-radius: 5px; margin-bottom: 5px; border-left: 4px solid #10b981; background-color: #f0fdf4; font-size: 14px; }
-    .abs-card { border-left-color: #ef4444; background-color: #fef2f2; }
     </style>
     """, unsafe_allow_html=True)
 
@@ -84,9 +83,7 @@ if sel_exam_name and sel_class != "-- தேர்வு செய்க --":
                         centum_list.append(f"{s['student_name']} ({sub['subject_name']})")
                     row_raw[sub['subject_name']] = {"tot": tot, "th": th, "pr": pr, "in": in_m, "prac": sub.get('has_practical'), "pass": is_p}
                 else:
-                    row_raw[sub['subject_name']] = "ABS"
-                    fails += 1
-                    fail_subs.append(sub['subject_name'])
+                    row_raw[sub['subject_name']] = "ABS"; fails += 1; fail_subs.append(sub['subject_name'])
             
             if wrote_any:
                 stats["present"]["all"] += 1; stats["present"][gen] += 1
@@ -99,10 +96,10 @@ if sel_exam_name and sel_class != "-- தேர்வு செய்க --":
             row_raw.update({"Present": wrote_any, "Fails": fails, "மொத்தம்": total_m, "தோல்வி விவரம்": f"({', '.join(fail_subs)})" if fail_subs else ""})
             report_rows.append(row_raw)
 
-        # --- 11-A ஒட்டுமொத்தப் புள்ளிவிவரம் ---
+        # --- Dashboard ---
         st.subheader(f"📌 {sel_class} ஒட்டுமொத்தப் புள்ளிவிவரம்")
         m = st.columns(6)
-        titles = ["மொத்தம்", "எழுதியவர்", "தேர்ச்சி", "தோல்வி", "தேர்ச்சி %", "வகுப்பு சராசரி"]
+        titles = ["Total", "Present", "Pass", "Fail", "Pass %", "Class Avg"]
         
         for i, key in enumerate(["total", "present", "pass"]):
             val_all = stats[key]['all']
@@ -111,13 +108,13 @@ if sel_exam_name and sel_class != "-- தேர்வு செய்க --":
         
         f_all = stats["present"]["all"] - stats["pass"]["all"]
         f_line = f"<span class='gender-sub'>({stats['present']['F']-stats['pass']['F']}F + {stats['present']['M']-stats['pass']['M']}M)</span>" if split_gender else ""
-        m[3].markdown(f'<div class="main-stat"><div class="stat-label">தோல்வி</div><div class="stat-val">{f_all}{f_line}</div></div>', unsafe_allow_html=True)
+        m[3].markdown(f'<div class="main-stat"><div class="stat-label">Fail</div><div class="stat-val">{f_all}{f_line}</div></div>', unsafe_allow_html=True)
         
         p_per = round((stats["pass"]["all"]/stats["present"]["all"])*100, 1) if stats["present"]["all"] > 0 else 0
-        m[4].markdown(f'<div class="main-stat"><div class="stat-label">தேர்ச்சி %</div><div class="stat-val" style="color:#16a34a">{p_per}%</div></div>', unsafe_allow_html=True)
+        m[4].markdown(f'<div class="main-stat"><div class="stat-label">Pass %</div><div class="stat-val" style="color:#16a34a">{p_per}%</div></div>', unsafe_allow_html=True)
         
         cls_avg = round(sum(class_total_list)/len(class_total_list), 1) if class_total_list else 0
-        m[5].markdown(f'<div class="main-stat"><div class="stat-label">வகுப்பு சராசரி</div><div class="stat-val" style="color:#3b82f6">{cls_avg}</div></div>', unsafe_allow_html=True)
+        m[5].markdown(f'<div class="main-stat"><div class="stat-label">Class Avg</div><div class="stat-val" style="color:#3b82f6">{cls_avg}</div></div>', unsafe_allow_html=True)
 
         # --- Expanders ---
         st.divider()
@@ -127,80 +124,6 @@ if sel_exam_name and sel_class != "-- தேர்வு செய்க --":
                 for item in centum_list: st.markdown(f'<div class="info-card">🥇 {item}</div>', unsafe_allow_html=True)
         with e2:
             with st.expander(f"🚶 தேர்வுக்கே வராதவர்கள்: {len(absent_list)} பேர்"):
-                for item in absent_list: st.markdown(f'<div class="info-card abs-card">❌ {item}</div>', unsafe_allow_html=True)
+                for item in absent_list: st.markdown(f'<div class="info-card abs-card" style="border-left-color:#ef4444; background-color:#fef2f2;">❌ {item}</div>', unsafe_allow_html=True)
 
-        # --- 📈 பாடவாரி விரிவான பகுப்பாய்வு ---
-        st.divider()
-        st.subheader("📈 பாடவாரி விரிவான பகுப்பாய்வு")
-        subj_stats = []
-        for sub in relevant_subjects:
-            sn = sub['subject_name']
-            t_app, t_pas, f_app, f_pas, m_app, m_pas, marks_list = 0, 0, 0, 0, 0, 0, []
-            only_this_fail = 0
-            for r in report_rows:
-                v = r.get(sn)
-                if isinstance(v, dict):
-                    t_app += 1; marks_list.append(v['tot'])
-                    if v['pass']: 
-                        t_pas += 1
-                        if r['gender'] == 'F': f_pas += 1
-                        else: m_pas += 1
-                    else:
-                        if r['Fails'] == 1: only_this_fail += 1
-                    if r['gender'] == 'F': f_app += 1
-                    else: m_app += 1
-            if t_app > 0:
-                row_s = {"பாடம்": sn}
-                row_s["எழுதியவர்"] = f"{t_app} ({f_app}F+{m_app}M)" if split_gender else t_app
-                row_s["தேர்ச்சி"] = f"{t_pas} ({f_pas}F+{m_pas}M)" if split_gender else t_pas
-                row_s["தேர்ச்சி %"] = f"{round((t_pas/t_app)*100,1)}%"
-                row_s["அதிகபட்சம்"] = max(marks_list)
-                row_s["குறைந்தபட்சம்"] = min(marks_list)
-                row_s["தேர்ச்சி பெறாதவர்"] = t_app - t_pas
-                row_s["சராசரி மதிப்பெண்"] = round(sum(marks_list)/len(marks_list), 1)
-                row_s["இப்பாடத்தில் மட்டும் தோல்வி"] = only_this_fail
-                subj_stats.append(row_s)
-        st.dataframe(pd.DataFrame(subj_stats), use_container_width=True, hide_index=True)
-
-        # --- 📋 முழுமையான மதிப்பெண் பட்டியல் ---
-        st.divider()
-        st.subheader("📋 முழுமையான மதிப்பெண் பட்டியல்")
-        show_breakup = st.toggle("🔍 அகமதிப்பீடு மற்றும் செய்முறை மதிப்பெண்களைக் காட்டு (T+I+P)")
-        
-        final_list = []
-        for r in report_rows:
-            d_row = {"பெயர்": r['பெயர்'], "மொத்தம்": r['மொத்தம்'], "Fails": r['Fails'], "தோல்வி விவரம்": r['தோல்வி விவரம்'], "Present": r['Present']}
-            for sub in relevant_subjects:
-                v = r.get(sub['subject_name'])
-                if isinstance(v, dict):
-                    if show_breakup:
-                        breakup = f"{v['tot']}\n({v['th']}+{v['in']}+{v['pr']})" if v['prac'] else f"{v['tot']}\n({v['th']}+{v['in']})"
-                        d_row[sub['subject_name']] = breakup
-                    else: d_row[sub['subject_name']] = v['tot']
-                else: d_row[sub['subject_name']] = v
-            final_list.append(d_row)
-
-        df = pd.DataFrame(final_list).sort_values(by=["Fails", "மொத்தம்"], ascending=[True, False]).reset_index(drop=True)
-        ranks = []; rv = 1
-        for idx, row in df.iterrows():
-            if row["Fails"] == 0 and row["Present"]:
-                ranks.append(str(rv)); rv += 1
-            else: ranks.append("-")
-        df.insert(0, "Rank", ranks)
-        
-        def style_f(row):
-            styles = ['' for _ in row.index]
-            for i, col in enumerate(row.index):
-                val = row[col]
-                if col in [s['subject_name'] for s in relevant_subjects]:
-                    if val == "ABS" or (isinstance(val, int) and val < 35):
-                        styles[i] = 'color: red'
-                    elif isinstance(val, str) and '\n' in val:
-                        parts = val.split('\n')[1].strip('()').split('+')
-                        th_v, pr_v = int(parts[0]), (int(parts[2]) if len(parts)>2 else 35)
-                        if th_v < 15 or pr_v < 15 or int(val.split('\n')[0]) < 35:
-                            styles[i] = 'color: red'
-            return styles
-
-        st.dataframe(df[["Rank", "பெயர்"] + [s['subject_name'] for s in relevant_subjects] + ["மொத்தம்", "தோல்வி விவரம்"]].style.apply(style_f, axis=1)
-                     .set_properties(**{'background-color': '#f8fafc'}, subset=['மொத்தம்']), use_container_width=True, hide_index=True)
+        # --- 📈 பாடவாரி விரிவான பகுப்ப
