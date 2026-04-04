@@ -37,8 +37,8 @@ class_list = sorted(list(set([c.get('class_n') or c.get('class_name') for c in c
 sel_class = c2.selectbox("2. வகுப்பு:", ["-- தேர்வு செய்க --"] + class_list)
 
  # 🔍 Toggle Switch - மதிப்பெண் விரிவாகக் காட்ட
-        st.divider()
-        show_breakup = st.toggle("🔍 அகமதிப்பீடு மற்றும் செய்முறை மதிப்பெண்களைக் காட்டு (Theory/Internal/Practical)")
+st.divider()
+show_breakup = st.toggle("🔍 அகமதிப்பீடு மற்றும் செய்முறை மதிப்பெண்களைக் காட்டு (Theory/Internal/Practical)")
 
 if sel_exam_name and sel_class != "-- தேர்வு செய்க --":
     exam_id = next(e['id'] for e in exams_data if e['exam_name'] == sel_exam_name)
