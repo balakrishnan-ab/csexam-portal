@@ -2,13 +2,15 @@ import streamlit as st
 import pandas as pd
 from supabase import create_client, Client
 
-# 1. Supabase இணைப்பு
+# 1. Supabase இணைப்பு - இதைச் சரியாகச் சரிபார்க்கவும்
 try:
-    url: str = st.secrets["SUPABASE_URL"]
-    key: str = st.secrets["SUPABASE_KEY"]
-    supabase: Client = create_client(url, key)
+    if "supabase" not in st.session_state:
+        url: str = st.secrets["SUPABASE_URL"]
+        key: str = st.secrets["SUPABASE_KEY"]
+        st.session_state.supabase = create_client(url, key)
+    supabase = st.session_state.supabase
 except Exception as e:
-    st.error("Secrets-ல் Supabase விவரங்கள் சரியாக இல்லை!")
+    st.error(f"Supabase உடன் இணைக்க முடியவில்லை: {e}")
     st.stop()
 
 st.set_page_config(page_title="Roll No Generator", layout="wide")
