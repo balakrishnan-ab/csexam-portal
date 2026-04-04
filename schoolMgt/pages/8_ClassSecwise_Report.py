@@ -126,4 +126,83 @@ if sel_exam_name and sel_class != "-- தேர்வு செய்க --":
             with st.expander(f"🚶 தேர்வுக்கே வராதவர்கள்: {len(absent_list)} பேர்"):
                 for item in absent_list: st.markdown(f'<div class="info-card abs-card" style="border-left-color:#ef4444; background-color:#fef2f2;">❌ {item}</div>', unsafe_allow_html=True)
 
-        # --- 📈 பாடவாரி விரிவான பகுப்ப
+        # --- 📈 பாடவாரி விரிவான பகுப்பாய்வு (Short Titles) ---
+        st.divider()
+        st.subheader("📈 பாடவாரி விரிவான பகுப்பாய்வு")
+        subj_stats = []
+        for sub in relevant_subjects:
+            sn = sub['subject_name']
+            t_app, t_pas, f_app, f_pas, m_app, m_pas, marks_list = 0, 0, 0, 0, 0, 0, []
+            only_this_fail = 0
+            for r in report_rows:
+                v = r.get(sn)
+                if isinstance(v, dict):
+                    t_app += 1; marks_list.append(v['tot'])
+                    if v['pass']: 
+                        t_pas += 1
+                        if r['gender'] == 'F': f_pas += 1
+                        else: m_pas += 1
+                    else:
+                        if r['Fails'] == 1: only_this_fail += 1
+                    if r['gender'] == 'F': f_app += 1
+                    else: m_app += 1
+            
+            if t_app > 0:
+                # ஆங்கிலச் சுருக்கத் தலைப்புகள்
+                row_s = {"Subject": sn}
+                row_s["App"] = f"{t_app} ({f_app}F+{m_app}M)" if split_gender else t_app
+                row_s["Pass"] = f"{t_pas} ({f_pas}F+{m_pas}M)" if split_gender else t_pas
+                row_s["Fail"] = t_app - t_pas
+                row_s["Pass %"] = f"{round((t_pas/t_app)*100,1)}%"
+                row_s["Max"] = max(marks_list)
+                row_s["Min"] = min(marks_list)
+                row_s["Avg"] = round(sum(marks_list)/len(marks_list), 1)
+                row_s["Only This"] = only_this_fail
+                subj_stats.append(row_s)
+        
+        st.dataframe(pd.DataFrame(subj_stats), use_container_width=True, hide_index=True)
+
+        # --- 📋 முழுமையான மதிப்பெண் பட்டியல் ---
+        st.divider()
+        st.subheader("📋 முழுமையான மதிப்பெண் பட்டியல்")
+        show_breakup = st.toggle("🔍 அகமதிப்பீடு மற்றும் செய்முறை மதிப்பெண்களைக் காட்டு (T+I+P)")
+        
+        final_list = []
+        for r in report_rows:
+            d_row = {"பெயர்": r['பெயர்'], "மொத்தம்": r['மொத்தம்'], "Fails": r['Fails'], "தோல்வி விவரம்": r['தோல்வி விவரம்'], "Present": r['Present']}
+            for sub in relevant_subjects:
+                v = r.get(sub['subject_name'])
+                if isinstance(v, dict):
+                    if show_breakup:
+                        breakup = f"{v['tot']}\n({v['th']}+{v['in']}+{v['pr']})" if v['prac'] else f"{v['tot']}\n({v['th']}+{v['in']})"
+                        d_row[sub['subject_name']] = breakup
+                    else:
+                        d_row[sub['subject_name']] = v['tot']
+                else: d_row[sub['subject_name']] = v
+            final_list.append(d_row)
+
+        df = pd.DataFrame(final_list).sort_values(by=["Fails", "மொத்தம்"], ascending=[True, False]).reset_index(drop=True)
+        ranks = []; rv = 1
+        for idx, row in df.iterrows():
+            if row["Fails"] == 0 and row["Present"]:
+                ranks.append(str(rv)); rv += 1
+            else:
+                ranks.append("-")
+        df.insert(0, "Rank", ranks)
+        
+        def style_f(row):
+            styles = ['' for _ in row.index]
+            for i, col in enumerate(row.index):
+                val = row[col]
+                if col in [s['subject_name'] for s in relevant_subjects]:
+                    if val == "ABS" or (isinstance(val, int) and val < 35):
+                        styles[i] = 'color: red'
+                    elif isinstance(val, str) and '\n' in val:
+                        parts = val.split('\n')[1].strip('()').split('+')
+                        th_v, pr_v = int(parts[0]), (int(parts[2]) if len(parts)>2 else 35)
+                        if th_v < 15 or (len(parts)>2 and pr_v < 15) or int(val.split('\n')[0]) < 35:
+                            styles[i] = 'color: red'
+            return styles
+
+        st.dataframe(df[["Rank", "பெயர்"] + [s['subject_name'] for s in relevant_subjects] + ["மொத்தம்", "தோல்வி விவரம்"]].style.apply(style_f, axis=1)
+                     .set_properties(**{'background-color': '#f8fafc'}, subset=['மொத்தம்']), use_container_width=True, hide_index=True)
