@@ -10,7 +10,7 @@ def get_supabase_client():
 
 supabase = get_supabase_client()
 
-st.set_page_config(page_title="School Analysis Report", layout="wide")
+st.set_page_config(page_title="Final School Report", layout="wide")
 
 # ⚡ CSS வடிவமைப்பு
 st.markdown("""
@@ -74,10 +74,7 @@ if sel_exam_name and sel_class != "-- தேர்வு செய்க --":
                 if m and not m.get('is_absent'):
                     wrote_any = True
                     tot, th, pr, in_m = m.get('total_mark', 0), m.get('theory_mark', 0), m.get('practical_mark', 0), m.get('internal_mark', 0)
-                    
-                    # ✅ பெரியசாமி போன்ற மாணவர்களுக்கான தேர்ச்சி விதி (Theory >= 15)
                     is_p = (th >= 15 and pr >= 15 and tot >= 35) if sub.get('has_practical') else (tot >= 35)
-                    
                     total_m += tot
                     if not is_p: fails += 1; fail_subs.append(sub['subject_name'])
                     if tot == 100: centum_list.append(f"{s['student_name']} ({sub['subject_name']})")
@@ -102,4 +99,77 @@ if sel_exam_name and sel_class != "-- தேர்வு செய்க --":
         for i, key in enumerate(["total", "present", "pass"]):
             val_all = stats[key]['all']
             gender_line = f"<span class='gender-sub'>({stats[key]['F']}F + {stats[key]['M']}M)</span>" if split_gender else ""
-            m[i].markdown(f'<div class="main-stat"><div class="stat-label">{titles[i]}</div><div class="stat-val">{val_all}{gender_line}
+            m[i].markdown(f'<div class="main-stat"><div class="stat-label">{titles[i]}</div><div class="stat-val">{val_all}{gender_line}</div></div>', unsafe_allow_html=True)
+        
+        f_all = stats["present"]["all"] - stats["pass"]["all"]
+        f_line = f"<span class='gender-sub'>({stats['present']['F']-stats['pass']['F']}F + {stats['present']['M']-stats['pass']['M']}M)</span>" if split_gender else ""
+        m[3].markdown(f'<div class="main-stat"><div class="stat-label">தோல்வி</div><div class="stat-val">{f_all}{f_line}</div></div>', unsafe_allow_html=True)
+        
+        p_per = round((stats["pass"]["all"]/stats["present"]["all"])*100, 1) if stats["present"]["all"] > 0 else 0
+        m[4].markdown(f'<div class="main-stat"><div class="stat-label">தேர்ச்சி %</div><div class="stat-val" style="color:#16a34a">{p_per}%</div></div>', unsafe_allow_html=True)
+
+        # --- 🏆 Centum & Absents (Expander) ---
+        st.divider()
+        e1, e2 = st.columns(2)
+        with e1:
+            with st.expander(f"🏆 100/100 எடுத்தவர்கள்: {len(centum_list)} பேர்"):
+                if centum_list:
+                    for item in centum_list: st.markdown(f'<div class="info-card">🥇 {item}</div>', unsafe_allow_html=True)
+                else: st.write("யாரும் இல்லை")
+        with e2:
+            with st.expander(f"🚶 தேர்வுக்கே வராதவர்கள்: {len(absent_list)} பேர்"):
+                if absent_list:
+                    for item in absent_list: st.markdown(f'<div class="info-card abs-card">❌ {item}</div>', unsafe_allow_html=True)
+                else: st.write("யாரும் இல்லை")
+
+        # --- 📈 பாடவாரி பகுப்பாய்வு ---
+        st.divider()
+        st.subheader("📈 பாடவாரி விரிவான பகுப்பாய்வு")
+        subj_stats = []
+        for sub in relevant_subjects:
+            s_name = sub['subject_name']
+            t_app, t_pas, f_app, f_pas, m_app, m_pas, marks = 0, 0, 0, 0, 0, 0, []
+            for r in report_rows:
+                v = r.get(s_name)
+                if isinstance(v, dict):
+                    t_app += 1; marks.append(v['tot'])
+                    if v['pass']: 
+                        t_pas += 1
+                        if r['gender'] == 'F': f_pas += 1
+                        else: m_pas += 1
+                    if r['gender'] == 'F': f_app += 1
+                    else: m_app += 1
+            if t_app > 0:
+                row = {"பாடம்": s_name}
+                row["எழுதியவர்"] = f"{t_app} ({f_app}F+{m_app}M)" if split_gender else t_app
+                row["தேர்ச்சி"] = f"{t_pas} ({f_pas}F+{m_pas}M)" if split_gender else t_pas
+                row["தேர்ச்சி %"] = f"{round((t_pas/t_app)*100,1)}%"
+                row["அதிகபட்சம்"] = max(marks)
+                subj_stats.append(row)
+        st.table(pd.DataFrame(subj_stats))
+
+        # --- 📋 முழுமையான மதிப்பெண் பட்டியல் ---
+        st.divider()
+        st.subheader("📋 முழுமையான மதிப்பெண் பட்டியல்")
+        show_breakup = st.toggle("🔍 அகமதிப்பீடு மற்றும் செய்முறை மதிப்பெண்களைக் காட்டு (T+I+P)")
+        
+        final_list = []
+        for r in report_rows:
+            d_row = {"பெயர்": r['பெயர்'], "மொத்தம்": r['மொத்தம்'], "Fails": r['Fails'], "தோல்வி விவரம்": r['தோல்வி விவரம்'], "Present": r['Present']}
+            for sub in relevant_subjects:
+                v = r.get(sub['subject_name'])
+                if isinstance(v, dict):
+                    if show_breakup:
+                        d_row[sub['subject_name']] = f"{v['tot']}\n({v['th']}+{v['in']}+{v['pr']})" if v['prac'] else f"{v['tot']}\n({v['th']}+{v['in']})"
+                    else: d_row[sub['subject_name']] = v['tot']
+                else: d_row[sub['subject_name']] = v
+            final_list.append(d_row)
+
+        df = pd.DataFrame(final_list).sort_values(by=["Fails", "மொத்தம்"], ascending=[True, False]).reset_index(drop=True)
+        ranks = []; rv = 1
+        for idx, row in df.iterrows():
+            if row["Fails"] == 0 and row["Present"]:
+                ranks.append(str(rv)); rv += 1
+            else:
+                ranks.append("-")
+        df.insert(
