@@ -54,7 +54,7 @@ if sel_exam_name != "-- தேர்வு செய்க --":
             parts = eval_type.split('+')
             max_t, max_p, max_i = int(parts[0]), (int(parts[1]) if len(parts) > 2 else 0), int(parts[-1])
 
-            # ⚡ 3. தரவு சேமிப்பு (Session State) - இது ஒருமுறை மட்டுமே நடக்கும்
+            # ⚡ 3. Session State - தரவுகள் அழியாமல் இருக்க
             state_key = f"df_{exam_id}_{sel_class}_{sub_code}"
             if state_key not in st.session_state:
                 students = supabase.table("exam_mapping").select("exam_no, student_name, emis_no").eq("exam_id", exam_id).eq("class_name", sel_class).order("exam_no").execute().data
@@ -72,19 +72,12 @@ if sel_exam_name != "-- தேர்வு செய்க --":
                     })
                 st.session_state[state_key] = pd.DataFrame(rows)
 
-            # ⚡ 4. 10 & 20 விரைவு உள்ளீடு (Buttons)
-            st.divider()
-            f1, f2 = st.columns(2)
-            if f1.button(f"அனைவருக்கும் Internal {max_i} நிரப்புக"):
-                st.session_state[state_key]['Internal'] = max_i
-                st.rerun()
-            if max_p > 0 and f2.button(f"அனைவருக்கும் Practical {max_p} நிரப்புக"):
-                st.session_state[state_key]['Practical'] = max_p
-                st.rerun()
-
-            # ⚡ 5. எக்செல் எடிட்டர் (Form-க்குள் வைப்பதன் மூலம் 'Lag' தவிர்க்கப்படுகிறது)
-            with st.form("mark_form", clear_on_submit=False):
+            # ⚡ 4. எக்செல் எடிட்டர் (Form-க்குள் இருப்பதால் தட்டச்சு செய்யும்போது தடங்கல் இருக்காது)
+            with st.form("mark_entry_form"):
+                st.subheader(f"📝 {sel_class} - {sel_display_name}")
                 df = st.session_state[state_key]
+                
+                # காண்பிக்கப்பட வேண்டிய வரிசை
                 cols = ["Exam No", "Student Name", "Abs", "Theory"]
                 if max_p > 0: cols.append("Practical")
                 cols.extend(["Internal", "Total"])
@@ -99,25 +92,38 @@ if sel_exam_name != "-- தேர்வு செய்க --":
                         "Internal": st.column_config.NumberColumn(f"Int({max_i})"),
                         "Total": st.column_config.NumberColumn("மொத்தம்", disabled=True),
                     },
-                    hide_index=True, use_container_width=True, key="form_editor"
+                    hide_index=True, use_container_width=True, key="my_editor"
                 )
 
-                submit_button = st.form_submit_button("🚀 சரிபார்த்துச் சேமி", use_container_width=True)
+                submit = st.form_submit_button("🚀 சரிபார்த்துச் சேமி", use_container_width=True)
 
-                if submit_button:
-                    # ⚡ மொத்தம் கணக்கிடுதல்
-                    edited_df['Total'] = edited_df['Theory'].fillna(0) + edited_df['Internal'].fillna(0) + edited_df.get('Practical', 0).fillna(0)
-                    edited_df.loc[edited_df['Abs'] == True, ['Theory', 'Practical', 'Internal', 'Total']] = 0
+                if submit:
+                    # ⚡ பிழையில்லாமல் மொத்தம் கணக்கிடுதல்
+                    t_marks = pd.to_numeric(edited_df['Theory'], errors='coerce').fillna(0)
+                    i_marks = pd.to_numeric(edited_df['Internal'], errors='coerce').fillna(0)
                     
+                    # Practical இருந்தால் மட்டும் கணக்கில் கொள்ளவும்
+                    if "Practical" in edited_df.columns:
+                        p_marks = pd.to_numeric(edited_df['Practical'], errors='coerce').fillna(0)
+                    else:
+                        p_marks = 0
+                    
+                    edited_df['Total'] = t_marks + i_marks + p_marks
+                    # Abs டிக் செய்திருந்தால் மொத்தம் 0
+                    edited_df.loc[edited_df['Abs'] == True, ['Theory', 'Practical', 'Internal', 'Total']] = 0
+
+                    # டேட்டாபேஸில் சேமித்தல்
                     final_list = []
                     for idx, r in edited_df.iterrows():
                         final_list.append({
                             "exam_id": exam_id, "emis_no": df.iloc[idx]['EMIS'], "subject_id": sub_code,
-                            "theory_mark": int(r['Theory']), "practical_mark": int(r.get('Practical', 0)),
+                            "theory_mark": int(r['Theory']), 
+                            "practical_mark": int(r.get('Practical', 0)) if max_p > 0 else 0,
                             "internal_mark": int(r['Internal']), "total_mark": int(r['Total']), "is_absent": bool(r['Abs'])
                         })
                     
                     supabase.table("marks").upsert(final_list, on_conflict="exam_id, emis_no, subject_id").execute()
-                    st.session_state[state_key].update(edited_df) # மெமரியை அப்டேட் செய்கிறோம்
-                    st.success("✅ அனைத்து மதிப்பெண்களும் சேமிக்கப்பட்டன!")
+                    # மெமரியை (Session State) அப்டேட் செய்கிறோம்
+                    st.session_state[state_key].update(edited_df)
+                    st.success("✅ வெற்றிகரமாகச் சேமிக்கப்பட்டது!")
                     st.rerun()
