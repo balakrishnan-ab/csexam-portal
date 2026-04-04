@@ -31,48 +31,59 @@ if sel_exam and sel_sub and sel_cls:
 
     students = supabase.table("exam_mapping").select("*").eq("exam_id", exam_id).eq("class_name", sel_cls).order("exam_no").execute().data
 
-    # மதிப்பீடு பிரித்தல் (எ.கா: 70+20+10 அல்லது 90+10)
+    # மதிப்பீடு பிரித்தல்
     parts = eval_type.split('+')
     max_t = int(parts[0])
     max_p = int(parts[1]) if len(parts) > 2 else 0
-    max_i = int(parts[-1])
+    max_i = int(parts[-1]) # இங்கே 'max_i' எனப் பெயர் வைத்துள்ளோம்
 
-    # ⚡ தேர்ச்சி மதிப்பெண் தீர்மானித்தல் (Logic)
-    # 90-க்கு 25, 70-க்கு 15 என தானாக மாறும்
+    # ⚡ தேர்ச்சி மதிப்பெண் நிபந்தனை
     min_theory = 25 if max_t == 90 else 15
     min_total = 35
 
+    # விரைவு உள்ளீடு தர்க்கம்
     def update_all():
         for i in range(len(students)):
-            if st.session_state.m_int: st.session_state[f"int_{i}"] = max_i
-            else: st.session_state[f"int_{i}"] = 0
+            # அகமதிப்பீடு அப்டேட்
+            if st.session_state.m_int:
+                st.session_state[f"int_{i}"] = max_i
+            else:
+                st.session_state[f"int_{i}"] = 0
+            
+            # செய்முறை அப்டேட் (இருந்தால் மட்டும்)
             if max_p > 0:
-                if st.session_state.m_prac: st.session_state[f"p_{i}"] = max_p
-                else: st.session_state[f"p_{i}"] = 0
+                if st.session_state.get('m_prac'):
+                    st.session_state[f"p_{i}"] = max_p
+                else:
+                    st.session_state[f"p_{i}"] = 0
 
     st.subheader("⚙️ விரைவு உள்ளீடு")
     cf1, cf2 = st.columns(2)
-    fill_i = cf1.checkbox(f"அனைவருக்கும் முழு அகமதிப்பீடு ({max_int})", key="m_int", on_change=update_all)
-    fill_p = cf2.checkbox(f"அனைவருக்கும் முழு செய்முறை ({max_prac})", key="m_prac", on_change=update_all) if max_p > 0 else False
+    
+    # ⚡ திருத்தம்: max_int என்பதற்கு பதில் max_i என மாற்றப்பட்டுள்ளது
+    fill_i = cf1.checkbox(f"அனைவருக்கும் முழு அகமதிப்பீடு ({max_i})", key="m_int", on_change=update_all)
+    
+    fill_p = False
+    if max_p > 0:
+        fill_p = cf2.checkbox(f"அனைவருக்கும் முழு செய்முறை ({max_p})", key="m_prac", on_change=update_all)
 
     mark_list = []
     st.divider()
     
     # தலைப்புகள்
-    cols = st.columns([1, 2.5, 0.6, 1.2, 1.2, 1.2, 1])
-    cols[0].write("**எண்**"); cols[1].write("**மாணவர் பெயர்**"); cols[2].write("**Abs**")
-    cols[3].write(f"**Theo({max_t})**"); cols[4].write(f"**Prac({max_p})**"); cols[5].write(f"**Int({max_i})**"); cols[6].write("**Total**")
+    cols_h = st.columns([1, 2.5, 0.6, 1.2, 1.2, 1.2, 1])
+    cols_h[0].write("**எண்**"); cols_h[1].write("**பெயர்**"); cols_h[2].write("**Abs**")
+    cols_h[3].write(f"**Theo({max_t})**"); cols_h[4].write(f"**Prac({max_p})**"); cols_h[5].write(f"**Int({max_i})**"); cols_h[6].write("**Total**")
 
     for idx, s in enumerate(students):
-        # தற்போதைய மதிப்புகளை எடுத்தல் (Real-time update-க்காக)
+        # தற்போதைய மதிப்புகளை எடுத்தல்
         t_val = st.session_state.get(f"t_{idx}", 0)
         p_val = st.session_state.get(f"p_{idx}", 0)
         i_val = st.session_state.get(f"int_{idx}", 0)
         total = t_val + p_val + i_val
         
-        # ⚡ நிபந்தனை சரிபார்த்தல்
+        # ⚡ தோல்வி நிபந்தனை: பெயர் சிவப்பாக மாறும்
         is_fail = (t_val < min_theory) or (total < min_total)
-        
         display_name = s['student_name']
         if is_fail:
             display_name = f":red[**{s['student_name']} (Fail)**]"
@@ -87,13 +98,14 @@ if sel_exam and sel_sub and sel_cls:
             r[-1].error("ABS")
         else:
             t = r[3].number_input("T", 0, max_t, key=f"t_{idx}", label_visibility="collapsed")
+            
             p = 0
             if max_p > 0:
                 p = r[4].number_input("P", 0, max_p, key=f"p_{idx}", label_visibility="collapsed")
+            
             intn = r[5].number_input("I", 0, max_i, key=f"int_{idx}", label_visibility="collapsed")
             
             tot = t + p + intn
-            # மொத்தம் 35-க்கு கீழ் இருந்தால் சிவப்பு, மேல் இருந்தால் பச்சை
             if tot < 35: r[-1].error(f"**{tot}**")
             else: r[-1].success(f"**{tot}**")
 
@@ -103,5 +115,9 @@ if sel_exam and sel_sub and sel_cls:
         })
 
     if st.button("🚀 மதிப்பெண்களைச் சேமி", use_container_width=True, type="primary"):
-        supabase.table("marks").upsert(mark_list, on_conflict="exam_id, emis_no, subject_id").execute()
-        st.success("வெற்றிகரமாகச் சேமிக்கப்பட்டது!")
+        try:
+            supabase.table("marks").upsert(mark_list, on_conflict="exam_id, emis_no, subject_id").execute()
+            st.success("வெற்றிகரமாகச் சேமிக்கப்பட்டது!")
+            st.balloons()
+        except Exception as e:
+            st.error(f"பிழை: {e}")
