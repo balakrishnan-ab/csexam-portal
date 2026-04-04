@@ -10,7 +10,7 @@ def get_supabase_client():
 
 supabase = get_supabase_client()
 
-st.set_page_config(page_title="Advanced School Analysis", layout="wide")
+st.set_page_config(page_title="Refined School Analysis", layout="wide")
 
 # ⚡ CSS வடிவமைப்பு
 st.markdown("""
@@ -18,9 +18,8 @@ st.markdown("""
     .stDataFrame td { font-weight: bold !important; font-size: 15px !important; }
     .main-stat { background-color: #f8fafc; border: 1px solid #e2e8f0; padding: 15px; border-radius: 10px; text-align: center; }
     .stat-val { font-size: 24px; font-weight: bold; color: #1e293b; }
-    .centum-card { background-color: #fef3c7; border: 1px solid #f59e0b; padding: 8px; border-radius: 8px; text-align: center; margin-bottom: 5px; }
-    .fail-box { background-color: #fff1f2; border-left: 4px solid #e11d48; padding: 8px; margin-bottom: 5px; border-radius: 4px; font-size: 14px; }
-    .absent-box { background-color: #f1f5f9; border-left: 4px solid #64748b; padding: 8px; margin-bottom: 5px; border-radius: 4px; font-size: 14px; }
+    .stat-label { font-size: 14px; color: #64748b; font-weight: bold; }
+    .info-card { background-color: #f1f5f9; padding: 10px; border-radius: 5px; margin-bottom: 5px; border-left: 4px solid #3b82f6; font-size: 14px; }
     </style>
     """, unsafe_allow_html=True)
 
@@ -72,9 +71,7 @@ if sel_exam_name and sel_base_class != "-- தேர்வு செய்க --
 
         for s in all_students:
             row = {"பிரிவு": s['section'], "பெயர்": s['student_name']}
-            total = 0
-            fails = 0
-            fail_subs = []
+            total = 0; fails = 0; fail_subs = []
             wrote_atleast_one = False
             
             for sub in relevant_subjects:
@@ -84,10 +81,8 @@ if sel_exam_name and sel_base_class != "-- தேர்வு செய்க --
                         wrote_atleast_one = True
                         val = m.get('total_mark', 0)
                         total += val
-                        if val < 35: 
-                            fails += 1; fail_subs.append(sub['subject_name'])
-                        if val == 100:
-                            centum_winners.append({"பெயர்": s['student_name'], "பாடம்": sub['subject_name'], "பிரிவு": s['section']})
+                        if val < 35: fails += 1; fail_subs.append(sub['subject_name'])
+                        if val == 100: centum_winners.append({"பெயர்": s['student_name'], "பாடம்": sub['subject_name'], "பிரிவு": s['section']})
                     else:
                         val = "ABS"; fails += 1; fail_subs.append(sub['subject_name'])
                     row[sub['subject_name']] = val
@@ -105,9 +100,7 @@ if sel_exam_name and sel_base_class != "-- தேர்வு செய்க --
             row["தோல்வி விவரம்"] = f"({', '.join(fail_subs)})" if fail_subs else ""
             report_rows.append(row)
 
-        df = pd.DataFrame(report_rows)
-        
-        # ⚡ 1. ஒட்டுமொத்தப் புள்ளிவிவரங்கள்
+        # ⚡ 1. Dashboard
         st.subheader(f"📌 {sel_base_class}-ஆம் வகுப்பு ஒட்டுமொத்த நிலை")
         m1, m2, m3, m4, m5 = st.columns(5)
         m1.markdown(f'<div class="main-stat"><div class="stat-label">மொத்த மாணவர்கள்</div><div class="stat-val">{len(all_students)}</div></div>', unsafe_allow_html=True)
@@ -117,30 +110,34 @@ if sel_exam_name and sel_base_class != "-- தேர்வு செய்க --
         p_per = round((pass_count/present_count)*100, 1) if present_count > 0 else 0
         m5.markdown(f'<div class="main-stat"><div class="stat-label">தேர்ச்சி சதவீதம்</div><div class="stat-val" style="color:#16a34a">{p_per}%</div></div>', unsafe_allow_html=True)
 
-        # ⚡ 2. 100/100 எடுத்தவர்கள் & வராதவர்கள்
-        c_left, c_right = st.columns(2)
-        with c_left:
-            st.subheader("🏆 100/100 எடுத்தவர்கள்")
+        # ⚡ 2. செதுக்கப்பட்ட விவரங்கள் (Expanded Details)
+        st.markdown("---")
+        d_col1, d_col2 = st.columns(2)
+        
+        with d_col1:
+            # 100/100 விவரம்
+            exp_centum = st.expander(f"🏆 100/100 எடுத்தவர்கள்: **{len(centum_winners)}** பேர்")
             if centum_winners:
                 for cw in centum_winners:
-                    st.markdown(f'<div class="centum-card">🥇 <b>{cw["பெயர்"]}</b> ({cw["பிரிவு"]}) - {cw["பாடம்"]}</div>', unsafe_allow_html=True)
-            else: st.write("யாரும் இல்லை")
-        
-        with c_right:
-            st.subheader("🚶 தேர்வுக்கே வராதவர்கள் (Full Absent)")
+                    exp_centum.markdown(f'<div class="info-card">🥇 {cw["பெயர்"]} ({cw["பிரிவு"]}) - <b>{cw["பாடம்"]}</b></div>', unsafe_allow_html=True)
+            else: exp_centum.write("யாரும் இல்லை.")
+
+        with d_col2:
+            # வருகை தராதவர் விவரம்
+            exp_abs = st.expander(f"🚶 தேர்வுக்கே வராதவர்கள் (Full Absent): **{len(full_absents)}** பேர்")
             if full_absents:
                 for fa in full_absents:
-                    st.markdown(f'<div class="absent-box">❌ <b>{fa["பெயர்"]}</b> ({fa["பிரிவு"]})</div>', unsafe_allow_html=True)
-            else: st.write("அனைவரும் வந்துள்ளனர்")
+                    exp_abs.markdown(f'<div class="info-card">❌ {fa["பெயர்"]} ({fa["பிரிவு"]})</div>', unsafe_allow_html=True)
+            else: exp_abs.write("அனைவரும் வந்துள்ளனர்.")
 
         # ⚡ 3. பாடவாரி பகுப்பாய்வு
         st.divider()
-        st.subheader("📈 பாடவாரி விரிவான பகுப்பாய்வு (Subject-wise)")
+        st.subheader("📈 பாடவாரி விரிவான பகுப்பாய்வு")
         subj_stats = []
         for sub in relevant_subjects:
             s_col = sub['subject_name']
-            if s_col in df.columns:
-                v = pd.to_numeric(df[s_col], errors='coerce').dropna()
+            if s_col in report_rows[0].keys():
+                v = pd.to_numeric(pd.DataFrame(report_rows)[s_col], errors='coerce').dropna()
                 if not v.empty:
                     p_in_sub = len(v)
                     pass_in_sub = len(v[v >= 35])
@@ -152,30 +149,29 @@ if sel_exam_name and sel_base_class != "-- தேர்வு செய்க --
                     })
         st.table(pd.DataFrame(subj_stats))
 
-        # ⚡ 4. தோல்வி அடைந்தவர்கள் விவரம்
+        # ⚡ 4. தோல்வி விவரம்
         st.divider()
-        st.subheader("❌ தோல்வி அடைந்தவர்கள் (எந்தெந்தப் பாடங்கள்?)")
+        st.subheader("❌ தோல்வி அடைந்தவர்கள் விவரம்")
+        df_final = pd.DataFrame(report_rows).sort_values(by=["Fails", "மொத்தம்"], ascending=[True, False]).reset_index(drop=True)
         f_cols = st.columns(2)
-        # 1 பாடம் முதல் அனைத்துப் பாடங்கள் வரை (6 வரை)
         for i in range(1, len(relevant_subjects) + 1):
-            fail_list = df[df["Fails"] == i][["பெயர்", "பிரிவு", "தோல்வி விவரம்"]]
+            fail_list = df_final[df_final["Fails"] == i][["பெயர்", "பிரிவு", "தோல்வி விவரம்"]]
             if not fail_list.empty:
                 with f_cols[(i-1)%2].expander(f"📌 {i} பாடத்தில் தோல்வி ({len(fail_list)} பேர்)"):
                     for _, r in fail_list.iterrows():
-                        st.markdown(f'<div class="fail-box"><b>{r["பெயர்"]}</b> ({r["பிரிவு"]}) <br> <span style="color:#e11d48">{r["தோல்வி விவரம்"]}</span></div>', unsafe_allow_html=True)
+                        st.markdown(f'<b>{r["பெயர்"]}</b> ({r["பிரிவு"]}) <br> <small style="color:#e11d48">{r["தோல்வி விவரம்"]}</small><hr style="margin:5px 0">', unsafe_allow_html=True)
 
         # ⚡ 5. முழுப் பட்டியல்
         st.divider()
         st.subheader("📋 முழுமையான மதிப்பெண் பட்டியல்")
-        df = df.sort_values(by=["Fails", "மொத்தம்"], ascending=[True, False]).reset_index(drop=True)
         ranks = []
         r_val = 1
-        for idx, row in df.iterrows():
+        for idx, row in df_final.iterrows():
             if row["Fails"] == 0 and row["மொத்தம்"] > 0:
                 ranks.append(str(r_val)); r_val += 1
             else: ranks.append("-")
-        df.insert(0, "Rank", ranks)
-        st.dataframe(df.style.map(lambda v: 'color: red' if v == "ABS" or (isinstance(v, int) and v < 35) else '').set_properties(**{'background-color': '#f8fafc'}, subset=['மொத்தம்']), use_container_width=True)
+        df_final.insert(0, "Rank", ranks)
+        st.dataframe(df_final.style.map(lambda v: 'color: red' if v == "ABS" or (isinstance(v, int) and v < 35) else '').set_properties(**{'background-color': '#f8fafc'}, subset=['மொத்தம்']), use_container_width=True)
 
-        csv = df.to_csv(index=False).encode('utf-8-sig')
+        csv = df_final.to_csv(index=False).encode('utf-8-sig')
         st.download_button("📥 எக்செல் பதிவிறக்கம்", data=csv, file_name=f"{sel_base_class}_Full_Report.csv")
