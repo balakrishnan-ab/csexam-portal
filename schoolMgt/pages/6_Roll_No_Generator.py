@@ -2,7 +2,7 @@ import streamlit as st
 import pandas as pd
 from supabase import create_client, Client
 
-# --- 1. Supabase இணைப்பு (பிழை வராமல் இருக்க Session State பயன்படுத்துகிறோம்) ---
+# --- 1. Supabase இணைப்பு ---
 def get_supabase_client():
     if "supabase_instance" not in st.session_state:
         try:
@@ -19,51 +19,46 @@ supabase = get_supabase_client()
 st.set_page_config(page_title="Roll No Generator", layout="wide")
 st.title("🔢 தேர்வு எண் உருவாக்கம் (Roll No Generator)")
 
-# ⚡ தரவுகளைப் பெறும் செயல்பாடுகள்
-def fetch_exams():
-    if supabase:
-        res = supabase.table("exams").select("*").execute()
-        return res.data
-    return []
-
-def fetch_students():
-    if supabase:
-        res = supabase.table("students").select("*").execute()
-        return res.data
-    return []
-
-# --- பிரதான பகுதி ---
 if not supabase:
     st.stop()
+
+# ⚡ தரவுகளைப் பெறும் செயல்பாடுகள்
+def fetch_exams():
+    res = supabase.table("exams").select("*").execute()
+    return res.data
+
+def fetch_students():
+    res = supabase.table("students").select("*").execute()
+    return res.data
 
 exams_list = fetch_exams()
 students_list = fetch_students()
 
 if not exams_list:
-    st.warning("⚠️ முதலில் '5_Exam_Creation' பக்கத்தில் ஒரு தேர்வை உருவாக்கவும்.")
+    st.warning("⚠️ முதலில் ஒரு தேர்வை உருவாக்கவும்.")
     st.stop()
 
 # 1. தேர்வைத் தேர்ந்தெடுத்தல்
 exam_options = {f"{e['exam_name']} ({e['academic_year']})": e['id'] for e in exams_list if e['exam_status'] == 'Active'}
-selected_exam_label = st.selectbox("எந்தத் தேர்விற்கு எண்களை உருவாக்க வேண்டும்?", ["-- தேர்வு செய்க --"] + list(exam_options.keys()))
+selected_exam_label = st.selectbox("தேர்வைத் தேர்ந்தெடுக்கவும்:", ["-- தேர்வு செய்க --"] + list(exam_options.keys()))
 
 if selected_exam_label != "-- தேர்வு செய்க --":
     selected_exam_id = exam_options[selected_exam_label]
     
-    # 2. ஏற்கனவே எண்கள் உள்ளதா எனச் சரிபார்த்தல்
+    # 🔍 பிழை திருத்தப்பட்ட பகுதி: முதலில் select() செய்துவிட்டு அப்புறம் eq() செய்ய வேண்டும்
     try:
-        existing_res = supabase.table("exam_mapping").eq("exam_id", selected_exam_id).execute()
+        existing_res = supabase.table("exam_mapping").select("*").eq("exam_id", selected_exam_id).execute()
         existing_data = existing_res.data
     except Exception as e:
-        st.error(f"அட்டவணை 'exam_mapping' கண்டறியப்படவில்லை. Supabase-ல் அட்டவணையை உருவாக்கியதை உறுதி செய்யவும். பிழை: {e}")
+        st.error(f"பிழை: {e}")
         st.stop()
     
     if existing_data:
-        st.success(f"✅ ஏற்கனவே {len(existing_data)} மாணவர்களுக்கு எண்கள் உள்ளன.")
+        st.success(f"✅ ஏற்கனவே {len(existing_data)} பேருக்கு எண்கள் உள்ளன.")
         df_view = pd.DataFrame(existing_data)
         st.dataframe(df_view[['exam_no', 'student_name', 'class_name', 'emis_no']].sort_values('exam_no'), use_container_width=True, hide_index=True)
         
-        if st.button("♻️ பழைய எண்களை நீக்கிவிட்டு மீண்டும் உருவாக்கு"):
+        if st.button("♻️ எண்களை நீக்கிவிட்டு மீண்டும் உருவாக்கு"):
             supabase.table("exam_mapping").delete().eq("exam_id", selected_exam_id).execute()
             st.rerun()
     else:
@@ -75,20 +70,18 @@ if selected_exam_label != "-- தேர்வு செய்க --":
             else:
                 with st.spinner("வகைப்படுத்தப்படுகிறது..."):
                     df_st = pd.DataFrame(students_list)
-                    
-                    # வரிசைப்படுத்துதல்: Class > Gender > Name
-                    # Gender: Female (F) முதலில் வர ascending=True (F < M)
                     df_st = df_st.sort_values(by=['class_name', 'gender', 'student_name'], ascending=[True, True, True])
                     
                     new_rows = []
                     for c_name in df_st['class_name'].unique():
                         c_df = df_st[df_st['class_name'] == c_name]
                         
-                        # 6-A -> 6101 தர்க்கம்
-                        c_num = "".join(filter(str.isdigit, c_name))
-                        section = c_name.split("-")[-1].upper()
+                        # வகுப்பு எண் பிரித்தல் (எ.கா: 11-A -> 11)
+                        import re
+                        c_num_match = re.search(r'\d+', c_name)
+                        c_num = c_num_match.group() if c_num_match else "0"
                         
-                        # பிரிவு குறியீடு (A=1, B=2, C=3, D=4...)
+                        section = c_name.split("-")[-1].upper()
                         s_code = 1
                         if any(x in section for x in ['A', 'அ']): s_code = 1
                         elif any(x in section for x in ['B', 'ஆ']): s_code = 2
@@ -100,10 +93,10 @@ if selected_exam_label != "-- தேர்வு செய்க --":
                         for i, (idx, row) in enumerate(c_df.iterrows(), 1):
                             new_rows.append({
                                 "exam_id": selected_exam_id,
-                                "emis_no": row['emis_no'],
-                                "exam_no": base + i,
-                                "class_name": c_name,
-                                "student_name": row['student_name']
+                                "emis_no": str(row['emis_no']),
+                                "exam_no": int(base + i),
+                                "class_name": str(c_name),
+                                "student_name": str(row['student_name'])
                             })
                     
                     try:
