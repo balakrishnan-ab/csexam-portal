@@ -12,7 +12,7 @@ supabase = get_supabase_client()
 
 st.set_page_config(page_title="Mark Entry", layout="wide")
 
-# ⚡ தடிமனான எழுத்துக்களுக்கான CSS
+# ⚡ CSS - தடிமனான எழுத்துக்கள்
 st.markdown("<style>.stDataFrame { font-size: 19px !important; font-weight: bold !important; }</style>", unsafe_allow_html=True)
 
 st.title("📊 மதிப்பெண் பதிவேற்றம் & திருத்தம்")
@@ -52,7 +52,6 @@ if sel_exam_name != "-- தேர்வு செய்க --":
             sub_code = sub_info['subject_code']
             eval_type = sub_info.get('eval_type', '90+10')
             parts = eval_type.split('+')
-            # ⚡ மதிப்பெண் வரம்புகள் (70, 20, 10 போன்றவை)
             max_t, max_p, max_i = int(parts[0]), (int(parts[1]) if len(parts) > 2 else 0), int(parts[-1])
 
             state_key = f"df_{exam_id}_{sel_class}_{sub_code}"
@@ -79,15 +78,15 @@ if sel_exam_name != "-- தேர்வு செய்க --":
                 if max_p > 0: cols.append("Practical")
                 cols.extend(["Internal", "Total"])
 
-                # ⚡ இங்க்தான் லாக் செய்கிறோம் - min_value மற்றும் max_value
+                # ⚡ எடிட்டரில் எல்லைகளை நிர்ணயித்தல்
                 edited_df = st.data_editor(
                     df[cols],
                     column_config={
                         "Exam No": st.column_config.TextColumn("தேர்வு எண்", disabled=True, pinned=True),
                         "Student Name": st.column_config.TextColumn("பெயர்", disabled=True, pinned=True),
-                        "Theory": st.column_config.NumberColumn(f"Theo({max_t})", min_value=0, max_value=max_t, step=1),
-                        "Practical": st.column_config.NumberColumn(f"Prac({max_p})", min_value=0, max_value=max_p, step=1) if max_p > 0 else None,
-                        "Internal": st.column_config.NumberColumn(f"Int({max_i})", min_value=0, max_value=max_i, step=1),
+                        "Theory": st.column_config.NumberColumn(f"Theo({max_t})", min_value=0, max_value=max_t),
+                        "Practical": st.column_config.NumberColumn(f"Prac({max_p})", min_value=0, max_value=max_p) if max_p > 0 else None,
+                        "Internal": st.column_config.NumberColumn(f"Int({max_i})", min_value=0, max_value=max_i),
                         "Total": st.column_config.NumberColumn("மொத்தம்", disabled=True),
                     },
                     hide_index=True, use_container_width=True, key="my_editor"
@@ -96,29 +95,19 @@ if sel_exam_name != "-- தேர்வு செய்க --":
                 submit = st.form_submit_button("🚀 சரிபார்த்துச் சேமி", use_container_width=True)
 
                 if submit:
-                    # ⚡ கணக்கீட்டு பாதுகாப்பு
-                    t_marks = pd.to_numeric(edited_df['Theory'], errors='coerce').fillna(0)
-                    i_marks = pd.to_numeric(edited_df['Internal'], errors='coerce').fillna(0)
-                    p_marks = pd.to_numeric(edited_df['Practical'], errors='coerce').fillna(0) if "Practical" in edited_df.columns else 0
-                    
-                    edited_df['Total'] = t_marks + i_marks + p_marks
-                    edited_df.loc[edited_df['Abs'] == True, ['Theory', 'Practical', 'Internal', 'Total']] = 0
+                    # ⚡ 1. பிழை சரிபார்த்தல் (Validation)
+                    has_error = False
+                    error_students = []
 
-                    final_list = []
                     for idx, r in edited_df.iterrows():
-                        # தற்காப்பு: ஒருவேளை எடிட்டர் தாண்டி மதிப்பெண் வந்தால் அதை லாக் செய்தல்
-                        theory = min(int(r['Theory']), max_t)
-                        internal = min(int(r['Internal']), max_i)
-                        practical = min(int(r.get('Practical', 0)), max_p) if max_p > 0 else 0
-                        total = theory + internal + practical
+                        if r['Theory'] > max_t or r['Internal'] > max_i or (max_p > 0 and r.get('Practical', 0) > max_p):
+                            has_error = True
+                            error_students.append(str(r['Exam No']))
 
-                        final_list.append({
-                            "exam_id": exam_id, "emis_no": df.iloc[idx]['EMIS'], "subject_id": sub_code,
-                            "theory_mark": theory, "practical_mark": practical,
-                            "internal_mark": internal, "total_mark": total, "is_absent": bool(r['Abs'])
-                        })
-                    
-                    supabase.table("marks").upsert(final_list, on_conflict="exam_id, emis_no, subject_id").execute()
-                    st.session_state[state_key].update(edited_df)
-                    st.success("✅ சரியான வரம்பிற்குள் மதிப்பெண்கள் சேமிக்கப்பட்டன!")
-                    st.rerun()
+                    # ⚡ 2. பிழை இருந்தால் தடுத்தல்
+                    if has_error:
+                        st.error(f"❌ பிழை: தேர்வு எண் {', '.join(error_students)} ஆகியோருக்கு நிர்ணயிக்கப்பட்ட அதிகபட்ச மதிப்பெண்ணை விட அதிகமாக உள்ளீடு செய்யப்பட்டுள்ளது. தயவுசெய்து திருத்தவும்!")
+                    else:
+                        # பிழை இல்லை எனில் சேமித்தல்
+                        t_marks = pd.to_numeric(edited_df['Theory']).fillna(0)
+                        i_marks = pd.to_numeric(edited_df['Internal']).fillna
