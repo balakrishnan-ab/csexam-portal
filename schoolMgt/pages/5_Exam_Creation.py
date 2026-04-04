@@ -8,7 +8,7 @@ try:
     key: str = st.secrets["SUPABASE_KEY"]
     supabase: Client = create_client(url, key)
 except Exception as e:
-    st.error("Secrets-ல் Supabase விவரங்கள் சரியாக இல்லை! தயவுசெய்து சரிபார்க்கவும்.")
+    st.error("Secrets-ல் Supabase விவரங்கள் சரியாக இல்லை!")
     st.stop()
 
 st.set_page_config(page_title="Exam Management", layout="wide")
@@ -18,7 +18,7 @@ st.title("🏆 தேர்வு உருவாக்கம் (Exam Creation)
 @st.cache_data(ttl=60)
 def fetch_exams():
     try:
-        # ID அடிப்படையில் இறங்கு வரிசையில் (Newest first) தரவுகளை எடுத்தல்
+        # ID அடிப்படையில் இறங்கு வரிசையில் தரவுகளை எடுத்தல்
         response = supabase.table("exams").select("*").order("id", desc=True).execute()
         return response.data
     except Exception as e:
@@ -34,7 +34,6 @@ with st.form("create_exam_form", clear_on_submit=True):
     with col2:
         a_year = st.selectbox("கல்வி ஆண்டு", ["2025-26", "2026-27", "2027-28"])
     
-    # எந்தெந்த வகுப்புகளுக்கு இந்தத் தேர்வு பொருந்தும்?
     st.markdown("**இந்தத் தேர்வு எந்த வகுப்புகளுக்குப் பொருந்தும்?**")
     all_classes = ["6", "7", "8", "9", "10", "11", "12"]
     selected_classes = st.multiselect("வகுப்புகளைத் தேர்வு செய்க:", all_classes, default=all_classes)
@@ -42,7 +41,6 @@ with st.form("create_exam_form", clear_on_submit=True):
     if st.form_submit_button("💾 தேர்வை உருவாக்கு"):
         if e_name and selected_classes:
             try:
-                # வகுப்புகளை ஒரு கமாவால் பிரிக்கப்பட்ட வரியாக (String) மாற்றுதல்
                 classes_str = ", ".join(selected_classes)
                 
                 supabase.table("exams").insert({
@@ -53,12 +51,12 @@ with st.form("create_exam_form", clear_on_submit=True):
                 }).execute()
                 
                 st.success(f"'{e_name}' வெற்றிகரமாக உருவாக்கப்பட்டது!")
-                st.cache_data.clear() # Cache-ஐ அழித்து புதிய தரவைக் காட்ட
+                st.cache_data.clear()
                 st.rerun()
             except Exception as e:
                 st.error(f"பதிவு செய்வதில் பிழை: {e}")
         else:
-            st.warning("தேர்வின் பெயர் மற்றும் குறைந்தது ஒரு வகுப்பையாவது தேர்ந்தெடுக்கவும்.")
+            st.warning("தேர்வின் பெயர் மற்றும் வகுப்புகளைத் தேர்ந்தெடுக்கவும்.")
 
 st.divider()
 
@@ -69,8 +67,7 @@ if exams_data:
     st.subheader("📋 உருவாக்கப்பட்ட தேர்வுகள்")
     df_exams = pd.DataFrame(exams_data)
     
-    # அட்டவணையில் காட்ட வேண்டிய காலம்கள்
-    # 'id' என்பது Primary Key, இது வரிசைப்படுத்த உதவும்
+    # காட்ட வேண்டிய காலம்கள்
     display_df = df_exams[['id', 'exam_name', 'academic_year', 'applicable_classes', 'exam_status']]
     display_df.columns = ['ID', 'தேர்வின் பெயர்', 'கல்வி ஆண்டு', 'வகுப்புகள்', 'நிலை (Status)']
     
@@ -79,7 +76,7 @@ if exams_data:
     st.divider()
 
     # --- 3. தேர்வு மேலாண்மை (Status Update / Delete) ---
-    st.subheader("⚙️ தேர்வு மேலாண்மை (Edit/Delete)")
+    st.subheader("⚙️ தேர்வு மேலாண்மை")
     
     # ID மற்றும் பெயரை இணைத்துத் தேர்வுப் பட்டியலை உருவாக்குதல்
     exam_options = {f"{e['id']} - {e['exam_name']}": e['id'] for e in exams_data}
@@ -92,26 +89,25 @@ if exams_data:
         col_m1, col_m2 = st.columns(2)
         
         with col_m1:
-            st.info("🔄 நிலையை மாற்ற (Status)")
-            # தற்போதைய நிலையைப் பெறுதல்
-            current_status = df_exams[df_exams['id'] == selected_id]['exam_status'].values[0]
+            st.info("🔄 நிலையை மாற்ற")
+            current_row = df_exams[df_exams['id'] == selected_id]
+            current_status = current_row['exam_status'].values[0] if not current_row.empty else "Active"
+            
             new_status = st.radio("புதிய நிலை:", ["Active", "Completed"], 
                                  index=0 if current_status == "Active" else 1)
             
-            if st.button("🆙 நிலையை இப்போதே மாற்று"):
+            if st.button("🆙 நிலையை மாற்று"):
                 supabase.table("exams").update({"exam_status": new_status}).eq("id", selected_id).execute()
-                st.success(f"தேர்வு நிலை '{new_status}' என மாற்றப்பட்டது!")
+                st.success("நிலை மாற்றப்பட்டது!")
                 st.cache_data.clear()
                 st.rerun()
                 
         with col_m2:
-            st.warning("⚠️ ஆபத்தான பகுதி (Delete)")
-            st.write("இந்தத் தேர்வை நீக்கினால், இதனுடன் தொடர்புடைய அனைத்து மதிப்பெண்களும் நீக்கப்படும்!")
+            st.warning("⚠️ நீக்குதல்")
             if st.button(f"❌ {selected_label}-ஐ நீக்கு", type="primary"):
-                # ID-ஐ வைத்து நீக்குவதுதான் மிகவும் பாதுகாப்பானது
                 supabase.table("exams").delete().eq("id", selected_id).execute()
                 st.error("தேர்வு நீக்கப்பட்டது!")
                 st.cache_data.clear()
                 st.rerun()
 else:
-    st.info("இன்னும் தேர்வுகள் எதுவும் உருவாக்கப்படவில்லை. மேலே உள்ள படிவத்தைப் பயன்படுத்தி ஒரு தேர்வை உருவாக்கவும்.")5_Exam_Creation.py
+    st.info("தேர்வுகள் இன்னும் உருவாக்கப்படவில்லை.")
