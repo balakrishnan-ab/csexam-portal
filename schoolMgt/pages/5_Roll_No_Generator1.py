@@ -45,8 +45,6 @@ if selected_exam_label != "-- தேர்வு செய்க --":
 
     if sel_classes:
         df_stu = pd.DataFrame(students_list)
-        
-        # 🛠️ மிக முக்கியமான மாற்றம்: EMIS மற்றும் Gender-ஐச் சுத்தம் செய்தல்
         df_stu['emis_no'] = df_stu['emis_no'].astype(str).str.strip()
         df_stu['gender_clean'] = df_stu['gender'].astype(str).str.strip().str.upper()
         
@@ -58,52 +56,65 @@ if selected_exam_label != "-- தேர்வு செய்க --":
         current_num = start_val
 
         for cls in sel_classes:
-            with st.expander(f"📍 {cls} - ஒதுக்கீடு", expanded=True):
+            with st.expander(f"📍 {cls} - எண் ஒதுக்கீடு விபரம்", expanded=True):
                 if mode == "பிரிவுக்கு வேறாக (Section-wise Break)":
                     current_num = st.number_input(f"{cls} ஆரம்ப எண்:", min_value=1, value=int(current_num), key=f"inp_{cls}")
-
-                # பாலின வாரியாகப் பிரித்தல்
+                
+                # மாணவர்களைப் பிரித்தல்
                 f_students = df_stu[(df_stu['class_name'] == cls) & (df_stu['gender_clean'].str.startswith('F'))].sort_values('student_name')
                 m_students = df_stu[(df_stu['class_name'] == cls) & (df_stu['gender_clean'].str.startswith('M'))].sort_values('student_name')
-                
-                # 👩 மாணவிகள்
+
+                # --- பெண் எண்கள் கணக்கீடு ---
+                f_start = current_num if not f_students.empty else None
                 for _, row in f_students.iterrows():
-                    all_new_mappings.append({
-                        "exam_id": selected_exam_id, 
-                        "emis_no": str(row['emis_no']), 
-                        "exam_no": current_num, 
-                        "class_name": cls, 
-                        "student_name": row['student_name'], 
-                        "gender": "Female" # நேரடி ஒதுக்கீடு
-                    })
+                    all_new_mappings.append({"exam_id": selected_exam_id, "emis_no": str(row['emis_no']), "exam_no": current_num, "class_name": cls, "student_name": row['student_name'], "gender": "Female"})
                     current_num += 1
-                
-                # 👨 மாணவர்கள்
+                f_end = current_num - 1 if f_start else None
+
+                # --- ஆண் எண்கள் கணக்கீடு ---
+                m_start = current_num if not m_students.empty else None
                 for _, row in m_students.iterrows():
-                    all_new_mappings.append({
-                        "exam_id": selected_exam_id, 
-                        "emis_no": str(row['emis_no']), 
-                        "exam_no": current_num, 
-                        "class_name": cls, 
-                        "student_name": row['student_name'], 
-                        "gender": "Male" # நேரடி ஒதுக்கீடு
-                    })
+                    all_new_mappings.append({"exam_id": selected_exam_id, "emis_no": str(row['emis_no']), "exam_no": current_num, "class_name": cls, "student_name": row['student_name'], "gender": "Male"})
                     current_num += 1
-                
-                st.write(f"✅ {cls}: {len(f_students)} 👩, {len(m_students)} 👨")
+                m_end = current_num - 1 if m_start else None
+
+                # 📊 அட்டவணை வடிவில் விபரங்களைக் காட்டுதல்
+                col1, col2 = st.columns(2)
+                with col1:
+                    if f_start:
+                        st.markdown(f"""
+                        <div style="background-color: #fdf2f8; padding: 10px; border-radius: 5px; border-left: 5px solid #ec4899;">
+                            <b style="color: #ec4899;">👩 பெண் (Female)</b><br>
+                            எண்ணிக்கை: {len(f_students)}<br>
+                            தொடக்கம்: <b>{f_start}</b> | முடிவு: <b>{f_end}</b>
+                        </div>
+                        """, unsafe_allow_html=True)
+                    else:
+                        st.write("பெண் மாணவர்கள் இல்லை")
+
+                with col2:
+                    if m_start:
+                        st.markdown(f"""
+                        <div style="background-color: #eff6ff; padding: 10px; border-radius: 5px; border-left: 5px solid #3b82f6;">
+                            <b style="color: #3b82f6;">👨 ஆண் (Male)</b><br>
+                            எண்ணிக்கை: {len(m_students)}<br>
+                            தொடக்கம்: <b>{m_start}</b> | முடிவு: <b>{m_end}</b>
+                        </div>
+                        """, unsafe_allow_html=True)
+                    else:
+                        st.write("ஆண் மாணவர்கள் இல்லை")
 
         if all_new_mappings:
             st.divider()
             df_preview = pd.DataFrame(all_new_mappings)
-            st.subheader("📋 புதிய ஒதுக்கீடு பார்வை")
-            # 🔍 பிரிவியூவில் இப்போது 'Female/Male' எனத் தெளிவாகத் தெரியும்
+            st.subheader("📋 புதிய ஒதுக்கீடு பார்வை (Preview)")
             st.dataframe(df_preview[['exam_no', 'student_name', 'class_name', 'gender']], use_container_width=True, hide_index=True)
             
             if st.button("🚀 எண்களை உறுதி செய்து சேமி", use_container_width=True, type="primary"):
                 try:
                     supabase.table("exam_mapping").delete().eq("exam_id", selected_exam_id).execute()
                     supabase.table("exam_mapping").insert(all_new_mappings).execute()
-                    st.success("வெற்றிகரமாகப் பாலினத்துடன் சேமிக்கப்பட்டது!")
+                    st.success("வெற்றிகரமாகச் சேமிக்கப்பட்டது!")
                     st.balloons()
                 except Exception as e:
                     st.error(f"பிழை: {e}")
