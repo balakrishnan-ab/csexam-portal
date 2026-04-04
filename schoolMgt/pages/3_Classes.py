@@ -1,27 +1,30 @@
 import streamlit as st
-import requests
+from supabase import create_client, Client
 import pandas as pd
 
-# கூகுள் ஸ்கிரிப்ட் URL
-BASE_URL = st.secrets["BASE_URL"]
-st.set_page_config(page_title="Classes Management", layout="wide")
+# 1. Supabase இணைப்பு
+url: str = st.secrets["SUPABASE_URL"]
+key: str = st.secrets["SUPABASE_KEY"]
+supabase: Client = create_client(url, key)
 
-# ⚡ தரவுகளை வேகமாகப் பெறுதல் (Caching)
-@st.cache_data(ttl=300)
-def fetch_data(sheet_name):
+st.set_page_config(page_title="Classes Management", layout="wide")
+st.title("🏫 வகுப்புகள் மேலாண்மை (Supabase)")
+
+# ⚡ தரவுகளைப் பெறுதல்
+@st.cache_data(ttl=60)
+def fetch_table_data(table_name):
     try:
-        res = requests.get(f"{BASE_URL}?sheet={sheet_name}", allow_redirects=True)
-        return res.json()
-    except:
+        response = supabase.table(table_name).select("*").execute()
+        return response.data
+    except Exception as e:
+        st.error(f"{table_name} தரவைப் பெறுவதில் பிழை: {e}")
         return []
 
-st.title("🏫 வகுப்புகள் மேலாண்மை")
-
 # தேவையான தரவுகளைப் பெறுதல்
-classes_data = fetch_data("Classes")
-groups_data = fetch_data("Groups")
+classes_data = fetch_table_data("classes")
+groups_data = fetch_table_data("groups")
 
-# பாடப்பிரிவுகளை மட்டும் ஒரு பட்டியலாக மாற்றுதல்
+# பாடப்பிரிவுகளை மட்டும் பட்டியலாக மாற்றுதல்
 group_list = [g['group_name'] for g in groups_data] if groups_data else []
 
 # 1. புதிய வகுப்பு சேர்க்கும் படிவம்
@@ -31,14 +34,17 @@ with st.form("add_class_form", clear_on_submit=True):
     cname = col1.text_input("வகுப்பு பெயர் (எ.கா: 12-A1)").upper().strip()
     medium = col2.selectbox("பயிற்று மொழி (Medium):", ["Tamil", "English"])
     
-    selected_group = st.selectbox("பாடப்பிரிவைத் தேர்ந்தெடுக்கவும் (Select Group):", group_list)
+    selected_group = st.selectbox("பாடப்பிரிவைத் தேர்ந்தெடுக்கவும்:", group_list)
     
     if st.form_submit_button("💾 வகுப்பைச் சேமி"):
         if cname and selected_group:
-            payload = {"class_name": cname, "group_name": selected_group, "medium": medium}
             try:
-                requests.post(f"{BASE_URL}?sheet=Classes", json={"data": [payload]}, allow_redirects=True)
-                st.success(f"வகுப்பு '{cname} ({medium})' வெற்றிகரமாகச் சேர்க்கப்பட்டது!")
+                supabase.table("classes").insert({
+                    "class_name": cname, 
+                    "group_name": selected_group, 
+                    "medium": medium
+                }).execute()
+                st.success(f"வகுப்பு '{cname}' வெற்றிகரமாகச் சேர்க்கப்பட்டது!")
                 st.cache_data.clear()
                 st.rerun()
             except Exception as e:
@@ -48,56 +54,52 @@ with st.form("add_class_form", clear_on_submit=True):
 
 st.divider()
 
-# 2. வகுப்புகள் பட்டியல் (ID மறைக்கப்பட்டது)
+# 2. வகுப்புகள் பட்டியல்
 if classes_data:
     df = pd.DataFrame(classes_data)
-    # அகர வரிசைப்படி அடுடுதல்
     df_sorted = df.sort_values(by='class_name').reset_index(drop=True)
-    df_sorted.index = df_sorted.index + 1
-    df_sorted.index.name = "S.No"
     
     st.subheader("📋 வகுப்புகள் பட்டியல்")
-    # 'id' காலத்தை மறைத்துவிட்டுத் தேவையானவற்றை மட்டும் காட்டுதல்
-    # 'medium' காலமும் இப்போது அட்டவணையில் தெரியும்
-    display_cols = ['class_name', 'medium', 'group_name']
-    st.dataframe(df_sorted[display_cols], use_container_width=True)
+    st.dataframe(df_sorted[['class_name', 'medium', 'group_name']], 
+                 use_container_width=True, hide_index=True)
 
     st.divider()
 
-    # 3. திருத்துதல் மற்றும் நீக்குதல் (Edit & Delete)
-    st.subheader("⚙️ வகுப்பை மாற்றியமைக்க / நீக்க")
-    
-    c_list = ["-- வகுப்பைத் தேர்வு செய்க --"] + df_sorted['class_name'].tolist()
-    sel_class = st.selectbox("நிர்வகிக்க வேண்டிய வகுப்பு:", c_list)
+    # 3. திருத்துதல் மற்றும் நீக்குதல்
+    st.subheader("⚙️ மேலாண்மை")
+    c_names = df_sorted['class_name'].tolist()
+    sel_class = st.selectbox("நிர்வகிக்க வேண்டிய வகுப்பு:", ["-- தேர்வு செய்க --"] + c_names)
 
-    if sel_class != "-- வகுப்பைத் தேர்வு செய்க --":
+    if sel_class != "-- தேர்வு செய்க --":
         old_data = df[df['class_name'] == sel_class].iloc[0]
         
         col1, col2 = st.columns(2)
         with col1:
-            st.write("📝 திருத்துதல் (Edit)")
-            new_cname = st.text_input("புதிய வகுப்பு பெயர்:", value=old_data['class_name']).upper()
-            new_medium = st.selectbox("புதிய பயிற்று மொழி:", ["Tamil", "English"], 
-                                    index=0 if old_data.get('medium') == "Tamil" else 1)
-            new_gname = st.selectbox("புதிய பாடப்பிரிவு:", group_list, 
-                                    index=group_list.index(old_data['group_name']) if old_data['group_name'] in group_list else 0)
+            st.write("📝 திருத்துதல்")
+            new_cname = st.text_input("புதிய பெயர்:", value=old_data['class_name']).upper()
+            new_medium = st.selectbox("புதிய மொழி:", ["Tamil", "English"], 
+                                   index=0 if old_data['medium'] == "Tamil" else 1)
             
-            if st.button("🆙 திருத்து (Update)"):
-                update_url = f"{BASE_URL}?sheet=Classes&action=update&old_class={sel_class}"
-                payload = {"class_name": new_cname, "group_name": new_gname, "medium": new_medium}
-                requests.post(update_url, json={"data": [payload]}, allow_redirects=True)
+            # பழைய குரூப் இன்டெக்ஸ் கண்டறிதல்
+            g_idx = group_list.index(old_data['group_name']) if old_data['group_name'] in group_list else 0
+            new_gname = st.selectbox("புதிய பாடப்பிரிவு:", group_list, index=g_idx)
+            
+            if st.button("🆙 இற்றைப்படுத்து (Update)"):
+                supabase.table("classes").update({
+                    "class_name": new_cname, 
+                    "group_name": new_gname, 
+                    "medium": new_medium
+                }).eq("class_name", sel_class).execute()
                 st.success("மாற்றப்பட்டது!")
                 st.cache_data.clear()
                 st.rerun()
 
         with col2:
-            st.write("⚠️ நீக்குதல் (Delete)")
-            if st.checkbox(f"நான் {sel_class}-ஐ நீக்க விரும்புகிறேன்"):
-                if st.button(f"❌ {sel_class}-ஐ நீக்கு", type="primary"):
-                    del_url = f"{BASE_URL}?sheet=Classes&action=delete&class_name={sel_class}"
-                    requests.post(del_url, allow_redirects=True)
-                    st.warning("நீக்கப்பட்டது!")
-                    st.cache_data.clear()
-                    st.rerun()
+            st.write("⚠️ நீக்குதல்")
+            if st.button(f"❌ {sel_class}-ஐ நீக்கு", type="primary"):
+                supabase.table("classes").delete().eq("class_name", sel_class).execute()
+                st.warning("நீக்கப்பட்டது!")
+                st.cache_data.clear()
+                st.rerun()
 else:
-    st.info("வகுப்புகள் இல்லை.")
+    st.info("வகுப்புகள் இன்னும் இல்லை.")
