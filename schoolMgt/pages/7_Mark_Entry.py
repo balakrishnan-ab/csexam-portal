@@ -22,7 +22,7 @@ st.markdown("""
 
 st.title("📊 மதிப்பெண் பதிவேற்றம் & திருத்தம்")
 
-# --- 1. தரவுகள் ---
+# --- 1. தரவுகள் பெறுதல் ---
 exams = supabase.table("exams").select("*").eq("exam_status", "Active").execute().data
 all_classes = supabase.table("classes").select("*").execute().data
 all_groups = supabase.table("groups").select("*").execute().data
@@ -38,7 +38,7 @@ if sel_exam_name != "-- தேர்வு செய்க --":
     sel_class = c2.selectbox("2. வகுப்பு:", ["-- தேர்வு செய்க --"] + sorted(class_names))
 
     if sel_class != "-- தேர்வு செய்க --":
-        # டைனமிக் பாடங்கள் எடுத்தல்
+        # டைனமிக் பாடங்கள்
         class_info = next((c for c in all_classes if (c.get('class_n') == sel_class or c.get('class_name') == sel_class)), None)
         subject_options = {} 
         
@@ -61,7 +61,7 @@ if sel_exam_name != "-- தேர்வு செய்க --":
             parts = eval_type.split('+')
             max_t, max_p, max_i = int(parts[0]), (int(parts[1]) if len(parts) > 2 else 0), int(parts[-1])
 
-            # மாணவர் மற்றும் மதிப்பெண் பதிவுகள்
+            # மாணவர் பட்டியல் & ஏற்கனவே உள்ள மதிப்பெண்கள்
             students = supabase.table("exam_mapping").select("exam_no, student_name, emis_no").eq("exam_id", exam_id).eq("class_name", sel_class).order("exam_no").execute().data
             existing_marks = supabase.table("marks").select("*").eq("exam_id", exam_id).eq("subject_id", sub_code).execute().data
             marks_dict = {m['emis_no']: m for m in existing_marks}
@@ -80,19 +80,13 @@ if sel_exam_name != "-- தேர்வு செய்க --":
 
             df = pd.DataFrame(data)
 
-            # ⚡ 3. 10 & 20 விரைவு உள்ளீடு (Magic Checkboxes)
+            # ⚙️ விரைவு உள்ளீடு (10 & 20)
             st.divider()
-            st.subheader("⚙️ விரைவு உள்ளீடு (Bulk Fill)")
             f1, f2 = st.columns(2)
-            
-            fill_i = f1.checkbox(f"அனைவருக்கும் அகமதிப்பீடு {max_i} நிரப்புக", key="bulk_int")
-            if fill_i: df['Internal'] = max_i
-            
-            if max_p > 0:
-                fill_p = f2.checkbox(f"அனைவருக்கும் செய்முறை {max_p} நிரப்புக", key="bulk_prac")
-                if fill_p: df['Practical'] = max_p
+            if f1.checkbox(f"அனைவருக்கும் அகமதிப்பீடு {max_i} நிரப்புக", key="bulk_i"): df['Internal'] = max_i
+            if max_p > 0 and f2.checkbox(f"அனைவருக்கும் செய்முறை {max_p} நிரப்புக", key="bulk_p"): df['Practical'] = max_p
 
-            # ⚡ 4. எக்செல் எடிட்டர்
+            # ⚡ எக்செல் எடிட்டர்
             cols_order = ["Exam No", "Student Name", "Abs", "Theory"]
             if max_p > 0: cols_order.append("Practical")
             cols_order.extend(["Internal", "Total"])
@@ -102,23 +96,30 @@ if sel_exam_name != "-- தேர்வு செய்க --":
                 column_config={
                     "Exam No": st.column_config.TextColumn("தேர்வு எண்", disabled=True, pinned=True),
                     "Student Name": st.column_config.TextColumn("பெயர்", disabled=True, pinned=True),
-                    "Theory": st.column_config.NumberColumn(f"Theo({max_t})"),
-                    "Practical": st.column_config.NumberColumn(f"Prac({max_p})") if max_p > 0 else None,
-                    "Internal": st.column_config.NumberColumn(f"Int({max_i})"),
+                    "Theory": st.column_config.NumberColumn(f"Theo({max_t})", min_value=0, max_value=max_t),
+                    "Practical": st.column_config.NumberColumn(f"Prac({max_p})", min_value=0, max_value=max_p) if max_p > 0 else None,
+                    "Internal": st.column_config.NumberColumn(f"Int({max_i})", min_value=0, max_value=max_i),
                     "Total": st.column_config.NumberColumn("மொத்தம்", disabled=True),
                 },
                 hide_index=True, use_container_width=True,
                 key=f"ed_{exam_id}_{sel_class}_{sub_code}"
             )
 
-            # கணக்கீடு
-            edited_df['Total'] = edited_df['Theory'] + edited_df.get('Practical', 0) + edited_df['Internal']
+            # ⚡ மொத்தம் கணக்கீடு (ValueError தடுக்கும் முறை)
+            # காலியான இடங்களை (NaN) 0 ஆக மாற்றுகிறது
+            t_col = pd.to_numeric(edited_df['Theory']).fillna(0)
+            i_col = pd.to_numeric(edited_df['Internal']).fillna(0)
+            p_col = pd.to_numeric(edited_df['Practical']).fillna(0) if max_p > 0 else 0
+            
+            edited_df['Total'] = t_col + p_col + i_col
+            # Abs டிக் செய்திருந்தால் 0 ஆக்குதல்
             edited_df.loc[edited_df['Abs'] == True, ['Theory', 'Practical', 'Internal', 'Total']] = 0
 
-            # ⚡ 5. சேமித்தல்
-            if st.button("🚀 மாற்றங்களைச் சேமி", use_container_width=True, type="primary"):
+            # 💾 சேமித்தல்
+            if st.button("🚀 சேமிக்க", use_container_width=True, type="primary"):
                 final_list = []
                 for idx, r in edited_df.iterrows():
+                    # EMIS எண்ணை எடுக்க அசல் df-ஐப் பயன்படுத்துகிறோம்
                     final_list.append({
                         "exam_id": exam_id, "emis_no": df.iloc[idx]['EMIS'], 
                         "subject_id": sub_code, "theory_mark": int(r['Theory']), 
