@@ -1,6 +1,5 @@
 import streamlit as st
 import pandas as pd
-import numpy as np
 from supabase import create_client
 
 # --- Supabase இணைப்பு ---
@@ -13,16 +12,15 @@ supabase = get_supabase_client()
 
 st.set_page_config(page_title="Advanced Class Report", layout="wide")
 
-# ⚡ தடிமனான மற்றும் வண்ண எழுத்துக்களுக்கான CSS
+# ⚡ CSS - தடிமனான மற்றும் வண்ண எழுத்துக்கள்
 st.markdown("""
     <style>
-    .big-font { font-size:18px !important; font-weight: bold; color: #1E3A8A; }
-    .fail-text { color: red; font-weight: bold; }
-    .pass-text { color: green; font-weight: bold; }
+    .stDataFrame td { font-weight: bold !important; }
+    .main-title { font-size: 24px; font-weight: bold; color: #1E3A8A; }
     </style>
     """, unsafe_allow_html=True)
 
-st.title("📂 வகுப்பு வாரி மதிப்பெண் பகுப்பாய்வு (Result Analysis)")
+st.title("📂 வகுப்பு வாரி மதிப்பெண் பகுப்பாய்வு & தரவரிசை")
 
 # --- 1. தரவுகள் ---
 exams = supabase.table("exams").select("*").execute().data
@@ -54,6 +52,9 @@ if sel_exam_name and sel_class != "-- தேர்வு செய்க --":
         show_detailed = st.toggle("🔍 விரிவான பார்வை (T, P, I பிரித்துக்காட்டு)")
 
         report_rows = []
+        # தடிமனாகக் காட்ட வேண்டிய நெடுவரிசைகளைச் சேமிக்க
+        bold_cols = ['மொத்தம்']
+
         for s in students:
             row = {"தேர்வு எண்": s['exam_no'], "மாணவர் பெயர்": s['student_name']}
             total_score = 0
@@ -71,7 +72,6 @@ if sel_exam_name and sel_class != "-- தேர்வு செய்க --":
                     t, p, i, tot = m.get('theory_mark', 0), m.get('practical_mark', 0), m.get('internal_mark', 0), m.get('total_mark', 0)
                     if not m.get('is_absent'):
                         total_score += tot
-                        # தேர்ச்சி விதி (உதாரணமாக மொத்தம் 35)
                         if tot < 35: fail_count += 1
                     else:
                         t = p = i = tot = "ABS"
@@ -82,8 +82,10 @@ if sel_exam_name and sel_class != "-- தேர்வு செய்க --":
                         if has_prac: row[f"{s_name} (P)"] = p
                         row[f"{s_name} (I)"] = i
                         row[f"{s_name} (Σ)"] = tot
+                        if f"{s_name} (Σ)" not in bold_cols: bold_cols.append(f"{s_name} (Σ)")
                     else:
                         row[s_name] = tot
+                        if s_name not in bold_cols: bold_cols.append(s_name)
                 else:
                     row[s_name] = "-"
             
@@ -96,53 +98,17 @@ if sel_exam_name and sel_class != "-- தேர்வு செய்க --":
         df = df.sort_values(by="மொத்தம்", ascending=False).reset_index(drop=True)
         df.insert(0, 'Rank', range(1, 1 + len(df)))
 
-        # ⚡ நிறம் மாற்றுதல் (Styler)
-        def color_fails(val):
+        # ⚡ நிறம் மற்றும் தடிமனான எழுத்துக்கள் (Styler)
+        def style_logic(val):
             try:
-                if isinstance(val, (int, float)) and val < 35: return 'color: red; font-weight: bold'
-                if val == "ABS": return 'color: red'
+                if val == "ABS" or (isinstance(val, (int, float)) and val < 35):
+                    return 'color: red; font-weight: bold; font-size: 110%;'
             except: pass
             return ''
 
         st.divider()
-        st.subheader(f"📊 {sel_class} மதிப்பெண் பட்டியல்")
+        st.subheader(f"📊 {sel_class} - {sel_exam_name} பட்டியல்")
         
-        # தடிமனான எழுத்துக்களுக்கான ஸ்டைலிங்
-        styled_df = df.style.applymap(color_fails).set_properties(**{'font-weight': 'bold'}, subset=['மொத்தம்'])
-        st.dataframe(styled_df, use_container_width=True)
-
-        # ⚡ 4. பாடவாரி புள்ளிவிவரம் (Bottom Stats)
-        st.subheader("📈 பாடவாரி புள்ளிவிவரங்கள்")
-        stats_data = []
-        for sub in relevant_subjects:
-            s_name = sub['subject_name']
-            if show_detailed: s_col = f"{s_name} (Σ)"
-            else: s_col = s_name
-            
-            if s_col in df.columns:
-                valid_marks = pd.to_numeric(df[s_col], errors='coerce').dropna()
-                if not valid_marks.empty:
-                    stats_data.append({
-                        "பாடம்": s_name,
-                        "சராசரி": round(valid_marks.mean(), 2),
-                        "அதிகபட்சம்": valid_marks.max(),
-                        "குறைந்தபட்சம்": valid_marks.min(),
-                        "தோல்வியுற்றோர்": len(valid_marks[valid_marks < 35])
-                    })
-        
-        if stats_data:
-            st.table(pd.DataFrame(stats_data))
-
-        # ⚡ 5. தோல்விப் பட்டியல் (Fail Category)
-        st.divider()
-        st.subheader("❌ தோல்வி அடைந்தவர்களின் விவரம்")
-        
-        for i in range(1, 7):
-            fail_list = df[df["தோல்வி பாடங்கள்"] == i][["மாணவர் பெயர்", "மொத்தம்"]]
-            if not fail_list.empty:
-                with st.expander(f"📌 {i} பாடத்தில் தோல்வி அடைந்தவர்கள் ({len(fail_list)} பேர்)"):
-                    st.write(", ".join(fail_list["மாணவர் பெயர்"].tolist()))
-
-        # Download
-        csv = df.to_csv(index=False).encode('utf-8-sig')
-        st.download_button("📥 முழு அறிக்கையை பதிவிறக்கு", data=csv, file_name=f"{sel_class}_Result.csv")
+        # 'applymap' பிழையைத் தவிர்க்க 'map' பயன்படுத்தப்பட்டுள்ளது
+        styled_df = df.style.map(style_logic).set_properties(**{'background-color': '#f0f2f6', 'font-size': '18px'}, subset=bold_cols)
+        st.
