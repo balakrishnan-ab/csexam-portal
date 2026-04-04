@@ -12,7 +12,7 @@ supabase = get_supabase_client()
 
 st.set_page_config(page_title="Mark Entry", layout="wide")
 
-# ⚡ பெரிய மற்றும் தடிமனான எழுத்துக்களுக்கான CSS
+# ⚡ CSS - தடிமனான மற்றும் பெரிய எழுத்துக்கள்
 st.markdown("""
     <style>
     .stDataFrame { font-size: 19px !important; font-weight: bold !important; }
@@ -22,7 +22,7 @@ st.markdown("""
 
 st.title("📊 மதிப்பெண் பதிவேற்றம் & திருத்தம்")
 
-# --- 1. தரவுகள் பெறுதல் ---
+# --- 1. தரவுகள் ---
 exams = supabase.table("exams").select("*").eq("exam_status", "Active").execute().data
 all_classes = supabase.table("classes").select("*").execute().data
 all_groups = supabase.table("groups").select("*").execute().data
@@ -61,38 +61,48 @@ if sel_exam_name != "-- தேர்வு செய்க --":
             parts = eval_type.split('+')
             max_t, max_p, max_i = int(parts[0]), (int(parts[1]) if len(parts) > 2 else 0), int(parts[-1])
 
-            # மாணவர் பட்டியல் & ஏற்கனவே உள்ள மதிப்பெண்கள்
-            students = supabase.table("exam_mapping").select("exam_no, student_name, emis_no").eq("exam_id", exam_id).eq("class_name", sel_class).order("exam_no").execute().data
-            existing_marks = supabase.table("marks").select("*").eq("exam_id", exam_id).eq("subject_id", sub_code).execute().data
-            marks_dict = {m['emis_no']: m for m in existing_marks}
+            # ⚡ மாணவர் பட்டியல் - Session State-ல் சேமிக்கிறோம் (Update செய்ய வசதியாக)
+            state_key = f"df_{exam_id}_{sel_class}_{sub_code}"
+            
+            if state_key not in st.session_state:
+                students = supabase.table("exam_mapping").select("exam_no, student_name, emis_no").eq("exam_id", exam_id).eq("class_name", sel_class).order("exam_no").execute().data
+                existing_marks = supabase.table("marks").select("*").eq("exam_id", exam_id).eq("subject_id", sub_code).execute().data
+                marks_dict = {m['emis_no']: m for m in existing_marks}
 
-            data = []
-            for s in students:
-                m = marks_dict.get(s['emis_no'], {})
-                row = {
-                    "Exam No": s['exam_no'], "Student Name": s['student_name'], "EMIS": s['emis_no'],
-                    "Abs": m.get('is_absent', False), "Theory": m.get('theory_mark', 0),
-                    "Internal": m.get('internal_mark', 0)
-                }
-                if max_p > 0: row["Practical"] = m.get('practical_mark', 0)
-                row["Total"] = m.get('total_mark', 0)
-                data.append(row)
+                data = []
+                for s in students:
+                    m = marks_dict.get(s['emis_no'], {})
+                    row = {
+                        "Exam No": s['exam_no'], "Student Name": s['student_name'], "EMIS": s['emis_no'],
+                        "Abs": m.get('is_absent', False), "Theory": m.get('theory_mark', 0),
+                        "Internal": m.get('internal_mark', 0), "Practical": m.get('practical_mark', 0) if max_p > 0 else 0,
+                        "Total": m.get('total_mark', 0)
+                    }
+                    data.append(row)
+                st.session_state[state_key] = pd.DataFrame(data)
 
-            df = pd.DataFrame(data)
+            df = st.session_state[state_key]
 
             # ⚙️ விரைவு உள்ளீடு (10 & 20)
             st.divider()
             f1, f2 = st.columns(2)
-            if f1.checkbox(f"அனைவருக்கும் அகமதிப்பீடு {max_i} நிரப்புக", key="bulk_i"): df['Internal'] = max_i
-            if max_p > 0 and f2.checkbox(f"அனைவருக்கும் செய்முறை {max_p} நிரப்புக", key="bulk_p"): df['Practical'] = max_p
+            if f1.checkbox(f"அனைவருக்கும் அகமதிப்பீடு {max_i} நிரப்புக", key="bulk_i"):
+                df['Internal'] = max_i
+                df['Total'] = df['Theory'] + df['Internal'] + df['Practical']
+                st.session_state[state_key] = df
+            
+            if max_p > 0 and f2.checkbox(f"அனைவருக்கும் செய்முறை {max_p} நிரப்புக", key="bulk_p"):
+                df['Practical'] = max_p
+                df['Total'] = df['Theory'] + df['Internal'] + df['Practical']
+                st.session_state[state_key] = df
 
             # ⚡ எக்செல் எடிட்டர்
-            cols_order = ["Exam No", "Student Name", "Abs", "Theory"]
-            if max_p > 0: cols_order.append("Practical")
-            cols_order.extend(["Internal", "Total"])
+            cols_show = ["Exam No", "Student Name", "Abs", "Theory"]
+            if max_p > 0: cols_show.append("Practical")
+            cols_show.extend(["Internal", "Total"])
 
             edited_df = st.data_editor(
-                df[cols_order],
+                df[cols_show],
                 column_config={
                     "Exam No": st.column_config.TextColumn("தேர்வு எண்", disabled=True, pinned=True),
                     "Student Name": st.column_config.TextColumn("பெயர்", disabled=True, pinned=True),
@@ -102,24 +112,18 @@ if sel_exam_name != "-- தேர்வு செய்க --":
                     "Total": st.column_config.NumberColumn("மொத்தம்", disabled=True),
                 },
                 hide_index=True, use_container_width=True,
-                key=f"ed_{exam_id}_{sel_class}_{sub_code}"
+                key="editor_widget"
             )
 
-            # ⚡ மொத்தம் கணக்கீடு (ValueError தடுக்கும் முறை)
-            # காலியான இடங்களை (NaN) 0 ஆக மாற்றுகிறது
-            t_col = pd.to_numeric(edited_df['Theory']).fillna(0)
-            i_col = pd.to_numeric(edited_df['Internal']).fillna(0)
-            p_col = pd.to_numeric(edited_df['Practical']).fillna(0) if max_p > 0 else 0
-            
-            edited_df['Total'] = t_col + p_col + i_col
-            # Abs டிக் செய்திருந்தால் 0 ஆக்குதல்
+            # ⚡ உடனுக்குடன் மொத்தம் அப்டேட் செய்ய:
+            # எடிட்டரில் நடந்த மாற்றங்களை அசல் டேட்டாபிரேமுடன் இணைத்தல்
+            edited_df['Total'] = edited_df['Theory'].fillna(0) + edited_df['Internal'].fillna(0) + edited_df.get('Practical', 0).fillna(0)
             edited_df.loc[edited_df['Abs'] == True, ['Theory', 'Practical', 'Internal', 'Total']] = 0
-
-            # 💾 சேமித்தல்
-            if st.button("🚀 சேமிக்க", use_container_width=True, type="primary"):
+            
+            # மாற்றங்களை சேமிக்க ஒரு பட்டன்
+            if st.button("🚀 மதிப்பெண்களை உறுதி செய்து சேமி", use_container_width=True, type="primary"):
                 final_list = []
                 for idx, r in edited_df.iterrows():
-                    # EMIS எண்ணை எடுக்க அசல் df-ஐப் பயன்படுத்துகிறோம்
                     final_list.append({
                         "exam_id": exam_id, "emis_no": df.iloc[idx]['EMIS'], 
                         "subject_id": sub_code, "theory_mark": int(r['Theory']), 
@@ -128,3 +132,6 @@ if sel_exam_name != "-- தேர்வு செய்க --":
                     })
                 supabase.table("marks").upsert(final_list, on_conflict="exam_id, emis_no, subject_id").execute()
                 st.success("✅ வெற்றிகரமாகச் சேமிக்கப்பட்டது!")
+                # சேமித்த பிறகு session state-ஐ புதுப்பிக்கலாம்
+                st.session_state.pop(state_key)
+                st.rerun()
