@@ -10,9 +10,9 @@ def get_supabase_client():
 supabase = get_supabase_client()
 
 st.set_page_config(page_title="Mark Entry", layout="wide")
-st.title("✍️ மதிப்பெண் பதிவேற்றம் & கண்காணிப்பு")
+st.title("✍️ மதிப்பெண் பதிவேற்றம்")
 
-# தரவுகளைப் பெறுதல்
+# ⚡ தரவுகளைப் பெறுதல்
 exams = supabase.table("exams").select("*").eq("exam_status", "Active").execute().data
 subjects = supabase.table("subjects").select("*").execute().data
 classes = supabase.table("classes").select("*").execute().data
@@ -35,89 +35,77 @@ if sel_exam and sel_sub and sel_cls:
     parts = eval_type.split('+')
     max_t = int(parts[0])
     max_p = int(parts[1]) if len(parts) > 2 else 0
-    max_i = int(parts[-1]) # இங்கே 'max_i' எனப் பெயர் வைத்துள்ளோம்
+    max_i = int(parts[-1])
 
-    # ⚡ தேர்ச்சி மதிப்பெண் நிபந்தனை
+    # தேர்ச்சி நிபந்தனை
     min_theory = 25 if max_t == 90 else 15
     min_total = 35
 
-    # விரைவு உள்ளீடு தர்க்கம்
     def update_all():
         for i in range(len(students)):
-            # அகமதிப்பீடு அப்டேட்
-            if st.session_state.m_int:
-                st.session_state[f"int_{i}"] = max_i
-            else:
-                st.session_state[f"int_{i}"] = 0
-            
-            # செய்முறை அப்டேட் (இருந்தால் மட்டும்)
+            st.session_state[f"int_{i}"] = max_i if st.session_state.m_int else 0
             if max_p > 0:
-                if st.session_state.get('m_prac'):
-                    st.session_state[f"p_{i}"] = max_p
-                else:
-                    st.session_state[f"p_{i}"] = 0
+                st.session_state[f"p_{i}"] = max_p if st.session_state.get('m_prac') else 0
 
     st.subheader("⚙️ விரைவு உள்ளீடு")
     cf1, cf2 = st.columns(2)
-    
-    # ⚡ திருத்தம்: max_int என்பதற்கு பதில் max_i என மாற்றப்பட்டுள்ளது
     fill_i = cf1.checkbox(f"அனைவருக்கும் முழு அகமதிப்பீடு ({max_i})", key="m_int", on_change=update_all)
-    
-    fill_p = False
-    if max_p > 0:
-        fill_p = cf2.checkbox(f"அனைவருக்கும் முழு செய்முறை ({max_p})", key="m_prac", on_change=update_all)
+    fill_p = cf2.checkbox(f"அனைவருக்கும் முழு செய்முறை ({max_p})", key="m_prac", on_change=update_all) if max_p > 0 else False
 
-    mark_list = []
     st.divider()
     
-    # தலைப்புகள்
-    cols_h = st.columns([1, 2.5, 0.6, 1.2, 1.2, 1.2, 1])
-    cols_h[0].write("**எண்**"); cols_h[1].write("**பெயர்**"); cols_h[2].write("**Abs**")
-    cols_h[3].write(f"**Theo({max_t})**"); cols_h[4].write(f"**Prac({max_p})**"); cols_h[5].write(f"**Int({max_i})**"); cols_h[6].write("**Total**")
+    # ⚡ 2. அட்டவணை தலைப்புகள் (மிகவும் நெருக்கமான விகிதத்தில்)
+    # [Roll No, Name, Abs, Theory, Prac, Int, Total]
+    col_ratios = [1, 2.5, 0.5, 1, 1, 1, 1] if max_p > 0 else [1, 3, 0.5, 1.2, 0.1, 1.2, 1]
+    
+    h = st.columns(col_ratios)
+    h[0].caption("**தேர்வு எண்**")
+    h[1].caption("**மாணவர் பெயர்**")
+    h[2].caption("**Abs**")
+    h[3].caption(f"**Theo({max_t})**")
+    if max_p > 0: h[4].caption(f"**Prac({max_p})**")
+    h[5].caption(f"**Int({max_i})**")
+    h[6].caption("**Total**")
+
+    mark_list = []
 
     for idx, s in enumerate(students):
-        # தற்போதைய மதிப்புகளை எடுத்தல்
         t_val = st.session_state.get(f"t_{idx}", 0)
         p_val = st.session_state.get(f"p_{idx}", 0)
         i_val = st.session_state.get(f"int_{idx}", 0)
         total = t_val + p_val + i_val
         
-        # ⚡ தோல்வி நிபந்தனை: பெயர் சிவப்பாக மாறும்
         is_fail = (t_val < min_theory) or (total < min_total)
         display_name = s['student_name']
-        if is_fail:
-            display_name = f":red[**{s['student_name']} (Fail)**]"
+        name_color = "red" if is_fail else "black"
 
-        r = st.columns([1, 2.5, 0.6, 1.2, 1.2, 1.2, 1])
-        r[0].write(s['exam_no'])
-        r[1].markdown(display_name)
-        is_abs = r[2].checkbox("", key=f"abs_{idx}")
+        # ⚡ ஒவ்வொரு மாணவரும் ஒரு வரிசையில்
+        r = st.columns(col_ratios)
+        
+        r[0].write(f"`{s['exam_no']}`")
+        r[1].markdown(f"<p style='color:{name_color}; font-weight:bold; margin:0;'>{display_name}</p>", unsafe_allow_html=True)
+        is_abs = r[2].checkbox("", key=f"abs_{idx}", label_visibility="collapsed")
 
         if is_abs:
             t, p, intn, tot = 0, 0, 0, 0
-            r[-1].error("ABS")
+            r[6].error("ABS")
         else:
-            t = r[3].number_input("T", 0, max_t, key=f"t_{idx}", label_visibility="collapsed")
-            
+            t = r[3].number_input("", 0, max_t, key=f"t_{idx}", label_visibility="collapsed")
             p = 0
             if max_p > 0:
-                p = r[4].number_input("P", 0, max_p, key=f"p_{idx}", label_visibility="collapsed")
-            
-            intn = r[5].number_input("I", 0, max_i, key=f"int_{idx}", label_visibility="collapsed")
+                p = r[4].number_input("", 0, max_p, key=f"p_{idx}", label_visibility="collapsed")
+            intn = r[5].number_input("", 0, max_i, key=f"int_{idx}", label_visibility="collapsed")
             
             tot = t + p + intn
-            if tot < 35: r[-1].error(f"**{tot}**")
-            else: r[-1].success(f"**{tot}**")
+            if tot < 35: r[6].markdown(f"<div style='background-color:#ffcccc; padding:5px; border-radius:5px; text-align:center;'><b>{tot}</b></div>", unsafe_allow_html=True)
+            else: r[6].markdown(f"<div style='background-color:#ccffcc; padding:5px; border-radius:5px; text-align:center;'><b>{tot}</b></div>", unsafe_allow_html=True)
 
         mark_list.append({
             "exam_id": exam_id, "emis_no": s['emis_no'], "subject_id": sub_code,
             "theory_mark": t, "practical_mark": p, "internal_mark": intn, "total_mark": tot, "is_absent": is_abs
         })
 
-    if st.button("🚀 மதிப்பெண்களைச் சேமி", use_container_width=True, type="primary"):
-        try:
-            supabase.table("marks").upsert(mark_list, on_conflict="exam_id, emis_no, subject_id").execute()
-            st.success("வெற்றிகரமாகச் சேமிக்கப்பட்டது!")
-            st.balloons()
-        except Exception as e:
-            st.error(f"பிழை: {e}")
+    st.divider()
+    if st.button("🚀 மதிப்பெண்களை உறுதி செய்து சேமி", use_container_width=True, type="primary"):
+        supabase.table("marks").upsert(mark_list, on_conflict="exam_id, emis_no, subject_id").execute()
+        st.success("வெற்றிகரமாகச் சேமிக்கப்பட்டது!")
