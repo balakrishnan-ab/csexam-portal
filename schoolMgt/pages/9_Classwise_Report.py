@@ -12,7 +12,7 @@ supabase = get_supabase_client()
 
 st.set_page_config(page_title="Evaluation Type Based Analysis", layout="wide")
 
-# ⚡ CSS - ஸ்டைலிங்
+# ⚡ CSS - ஸ்டைலிங் (படத்தில் உள்ள அதே வடிவமைப்பு)
 st.markdown("""
     <style>
     .stDataFrame td { font-weight: bold !important; font-size: 14px !important; white-space: pre !important; }
@@ -61,9 +61,7 @@ if sel_exam_name and sel_base_class != "-- தேர்வு செய்க --
                     if gs not in union_subs: union_subs.append(gs)
 
     marks_data = supabase.table("marks").select("*").eq("exam_id", exam_id).execute().data
-    # ✅ பாடங்களின் தகவல்களை ஒரு அகராதியாக (Dictionary) மாற்றிக்கொள்கிறோம் (eval_type-ஐ எளிதாக எடுக்க)
     sub_info_map = {s['subject_name']: s for s in subjects_data}
-    relevant_subjects = [s for s in subjects_data if s['subject_name'] in union_subs]
 
     if all_students:
         report_rows, centum_list, absent_list = [], [], []
@@ -71,7 +69,7 @@ if sel_exam_name and sel_base_class != "-- தேர்வு செய்க --
         all_marks_list = {"A": [], "M": [], "F": []}
         fail_cats = {1: [], 2: [], 3: [], 4: [], 5: [], "All": []}
 
-        # --- ⚡ 2. eval_type அடிப்படையில் தேர்ச்சி கணக்கீடு ---
+        # --- ⚡ 2. தேர்ச்சி கணக்கீடு (Logic Correction) ---
         for s in all_students:
             raw_gen = str(s.get('gender', 'Male')).strip().upper()
             gen = 'F' if raw_gen.startswith('F') else 'M'
@@ -93,21 +91,24 @@ if sel_exam_name and sel_base_class != "-- தேர்வு செய்க --
                     wrote_any = True
                     tot, th, pr = m.get('total_mark', 0), m.get('theory_mark', 0), m.get('practical_mark', 0)
                     
-                    # 🔍 eval_type-ஐப் பொறுத்து தேர்ச்சி விதிமுறை மாறுபடும்
+                    # 🔍 மதிப்பீட்டு வகை (eval_type) அடிப்படையில் தேர்ச்சி விதிமுறை
                     eval_type = s_obj.get('eval_type', '90+10')
                     is_subj_pass = True
                     
                     if eval_type == '70+20+10':
-                        # கருத்தியலில் (Theory) 15 & செய்முறை (Practical) 15 & மொத்தம் 35 கட்டாயம்
-                        if th < 15 or pr < 15 or tot < 35: is_subj_pass = False
+                        # தியரி >= 15 மற்றும் பிராக்டிகல் >= 15 மற்றும் மொத்தம் >= 35 இருக்க வேண்டும்
+                        if th < 15 or pr < 15 or tot < 35: 
+                            is_subj_pass = False
                     else:
                         # 90+10 வகை: மொத்தம் 35 இருந்தால் போதும்
-                        if tot < 35: is_subj_pass = False
+                        if tot < 35: 
+                            is_subj_pass = False
                     
                     total_m += tot
                     if not is_subj_pass: 
                         fails += 1; fail_subs.append(sn)
-                    if tot == 100: centum_list.append(f"{s['student_name']} ({s['section']} - {sn})")
+                    if tot == 100: 
+                        centum_list.append(f"{s['student_name']} ({s['section']} - {sn})")
                     row_raw[sn] = {"tot": tot, "pass": is_subj_pass, "th": th, "pr": pr}
                 else:
                     row_raw[sn] = "ABS"; fails += 1; fail_subs.append(sn)
@@ -121,15 +122,17 @@ if sel_exam_name and sel_base_class != "-- தேர்வு செய்க --
                     txt = f"{s['student_name']} ({s['section']} - {', '.join(fail_subs)})"
                     if fails >= len(my_subs): fail_cats["All"].append(txt)
                     elif fails in [1,2,3,4,5]: fail_cats[fails].append(txt)
-            else: absent_list.append(f"{s['student_name']} ({s['section']})")
+            else: 
+                absent_list.append(f"{s['student_name']} ({s['section']})")
 
             row_raw.update({"மொத்தம்": total_m, "Fails": fails, "தோல்வி விவரம்": f"({', '.join(fail_subs)})" if fail_subs else ""})
             report_rows.append(row_raw)
 
-        # --- 📊 3. Dashboard ---
+        # --- 📊 3. Dashboard (Visuals) ---
         st.subheader(f"📌 {sel_base_class}-ஆம் வகுப்பு ஒட்டுமொத்தப் புள்ளிவிவரம்")
         m_dash = st.columns(6)
         titles = ["மொத்தம்", "எழுதியவர்", "தேர்ச்சி", "தோல்வி", "தேர்ச்சி %", "வகுப்பு சராசரி"]
+        
         for i, k in enumerate(["total", "present", "pass"]):
             val = st_count[k]["A"]
             gen_txt = f"<span class='gender-sub'>({st_count[k]['F']}F | {st_count[k]['M']}M)</span>" if split_gender else ""
@@ -141,7 +144,7 @@ if sel_exam_name and sel_base_class != "-- தேர்வு செய்க --
         
         p_a = round((st_count["pass"]["A"]/st_count["present"]["A"])*100, 1) if st_count["present"]["A"]>0 else 0
         p_gen = f"<span class='gender-sub'>({round((st_count['pass']['F']/st_count['present']['F'])*100,1) if st_count['present']['F']>0 else 0}% | {round((st_count['pass']['M']/st_count['present']['M'])*100,1) if st_count['present']['M']>0 else 0}%)</span>" if split_gender else ""
-        m_dash[4].markdown(f'<div class="main-stat"><div class="stat-label">தேர்ச்சி %</div><div class="stat-val" style="color:#16a34a">{p_a}%{p_gt if "p_gt" in locals() else p_gen}</div></div>', unsafe_allow_html=True)
+        m_dash[4].markdown(f'<div class="main-stat"><div class="stat-label">தேர்ச்சி %</div><div class="stat-val" style="color:#16a34a">{p_a}%{p_gen}</div></div>', unsafe_allow_html=True)
         
         avg_a = round(sum(all_marks_list["A"])/len(all_marks_list["A"]), 1) if all_marks_list["A"] else 0
         m_dash[5].markdown(f'<div class="main-stat"><div class="stat-label">வகுப்பு சராசரி</div><div class="stat-val" style="color:#3b82f6">{avg_a}</div></div>', unsafe_allow_html=True)
@@ -178,7 +181,17 @@ if sel_exam_name and sel_base_class != "-- தேர்வு செய்க --
             else: ranks.append("-")
         df_f.insert(0, "Rank", ranks)
 
-        st.dataframe(df_f.style.apply(lambda x: ['color: red' if 'ABS' in str(v) or (isinstance(v, int) and v < 35) or (isinstance(v, str) and '\n' in v and int(v.split('\n')[0]) < 35) else '' for v in x], axis=1), use_container_width=True, hide_index=True)
+        # மதிப்பெண் குறைபாடுகளை சிகப்பு நிறத்தில் காட்ட (Style)
+        def color_fails(val):
+            if val == 'ABS' or val == '-': return 'color: red'
+            if isinstance(val, str) and '\n' in val:
+                try:
+                    score = int(val.split('\n')[0])
+                    if score < 35: return 'color: red'
+                except: pass
+            return ''
+
+        st.dataframe(df_f.style.applymap(color_fails), use_container_width=True, hide_index=True)
 
         # --- ❌ 6. தோல்விப் பட்டியல் (Bottom) ---
         st.divider()
