@@ -12,7 +12,7 @@ supabase = get_supabase_client()
 
 st.set_page_config(page_title="Evaluation Type Based Analysis", layout="wide")
 
-# ⚡ CSS - ஸ்டைலிங் (படத்தில் உள்ள அதே வடிவமைப்பு)
+# ⚡ CSS - ஸ்டைலிங்
 st.markdown("""
     <style>
     .stDataFrame td { font-weight: bold !important; font-size: 14px !important; white-space: pre !important; }
@@ -69,7 +69,7 @@ if sel_exam_name and sel_base_class != "-- தேர்வு செய்க --
         all_marks_list = {"A": [], "M": [], "F": []}
         fail_cats = {1: [], 2: [], 3: [], 4: [], 5: [], "All": []}
 
-        # --- ⚡ 2. தேர்ச்சி கணக்கீடு (Logic Correction) ---
+        # --- ⚡ 2. மேம்படுத்தப்பட்ட தேர்ச்சி கணக்கீடு (Logic Fix) ---
         for s in all_students:
             raw_gen = str(s.get('gender', 'Male')).strip().upper()
             gen = 'F' if raw_gen.startswith('F') else 'M'
@@ -91,12 +91,12 @@ if sel_exam_name and sel_base_class != "-- தேர்வு செய்க --
                     wrote_any = True
                     tot, th, pr = m.get('total_mark', 0), m.get('theory_mark', 0), m.get('practical_mark', 0)
                     
-                    # 🔍 மதிப்பீட்டு வகை (eval_type) அடிப்படையில் தேர்ச்சி விதிமுறை
-                    eval_type = s_obj.get('eval_type', '90+10')
+                    eval_type_str = str(s_obj.get('eval_type', '90+10'))
                     is_subj_pass = True
                     
-                    if eval_type == '70+20+10':
-                        # தியரி >= 15 மற்றும் பிராக்டிகல் >= 15 மற்றும் மொத்தம் >= 35 இருக்க வேண்டும்
+                    # 🔍 '70' என்ற எண் eval_type-இல் இருந்தால் அது செய்முறை பாடம்
+                    if '70' in eval_type_str:
+                        # நிபந்தனை: தியரி >= 15, பிராக்டிகல் >= 15, மொத்தம் >= 35
                         if th < 15 or pr < 15 or tot < 35: 
                             is_subj_pass = False
                     else:
@@ -111,6 +111,7 @@ if sel_exam_name and sel_base_class != "-- தேர்வு செய்க --
                         centum_list.append(f"{s['student_name']} ({s['section']} - {sn})")
                     row_raw[sn] = {"tot": tot, "pass": is_subj_pass, "th": th, "pr": pr}
                 else:
+                    # ABSENT அல்லது மதிப்பெண் இல்லை எனில் தோல்வி
                     row_raw[sn] = "ABS"; fails += 1; fail_subs.append(sn)
 
             if wrote_any:
@@ -128,7 +129,7 @@ if sel_exam_name and sel_base_class != "-- தேர்வு செய்க --
             row_raw.update({"மொத்தம்": total_m, "Fails": fails, "தோல்வி விவரம்": f"({', '.join(fail_subs)})" if fail_subs else ""})
             report_rows.append(row_raw)
 
-        # --- 📊 3. Dashboard (Visuals) ---
+        # --- 📊 3. Dashboard ---
         st.subheader(f"📌 {sel_base_class}-ஆம் வகுப்பு ஒட்டுமொத்தப் புள்ளிவிவரம்")
         m_dash = st.columns(6)
         titles = ["மொத்தம்", "எழுதியவர்", "தேர்ச்சி", "தோல்வி", "தேர்ச்சி %", "வகுப்பு சராசரி"]
@@ -159,7 +160,7 @@ if sel_exam_name and sel_base_class != "-- தேர்வு செய்க --
             with st.expander(f"🚶 தேர்வுக்கே வராதவர்கள்: {len(absent_list)} பேர்"):
                 for itm in absent_list: st.markdown(f'<div class="info-card" style="border-left-color:#ef4444; background-color:#fef2f2;">❌ {itm}</div>', unsafe_allow_html=True)
 
-        # --- 📉 5. முழுப் பட்டியல் ---
+        # --- 📉 5. முழுப் பட்டியல் (Error Corrected) ---
         st.divider()
         st.subheader("📋 முழுமையான மதிப்பெண் பட்டியல்")
         show_t_p = st.toggle("🔍 தியரி மற்றும் செய்முறை மதிப்பெண்களைக் காட்டு (T+P)", value=True)
@@ -181,7 +182,7 @@ if sel_exam_name and sel_base_class != "-- தேர்வு செய்க --
             else: ranks.append("-")
         df_f.insert(0, "Rank", ranks)
 
-        # மதிப்பெண் குறைபாடுகளை சிகப்பு நிறத்தில் காட்ட (Style)
+        # 🛠 பிழை நீக்கப்பட்ட ஸ்டைலிங் (AttributeError Fix)
         def color_fails(val):
             if val == 'ABS' or val == '-': return 'color: red'
             if isinstance(val, str) and '\n' in val:
@@ -189,11 +190,13 @@ if sel_exam_name and sel_base_class != "-- தேர்வு செய்க --
                     score = int(val.split('\n')[0])
                     if score < 35: return 'color: red'
                 except: pass
+            if isinstance(val, (int, float)) and val < 35: return 'color: red'
             return ''
 
-        st.dataframe(df_f.style.applymap(color_fails), use_container_width=True, hide_index=True)
+        # map() பங்க்ஷன் பயன்படுத்தப்பட்டுள்ளது
+        st.dataframe(df_f.style.map(color_fails), use_container_width=True, hide_index=True)
 
-        # --- ❌ 6. தோல்விப் பட்டியல் (Bottom) ---
+        # --- ❌ 6. தோல்விப் பட்டியல் ---
         st.divider()
         st.subheader("📉 தோல்வி அடைந்த மாணவர்களின் விவரம்")
         b1, b2 = st.columns(2)
