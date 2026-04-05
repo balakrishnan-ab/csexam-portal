@@ -10,7 +10,7 @@ def get_supabase_client():
 
 supabase = get_supabase_client()
 
-st.set_page_config(page_title="Corrected Class Analysis", layout="wide")
+st.set_page_config(page_title="Final Corrected Analysis", layout="wide")
 
 # ⚡ CSS வடிவமைப்பு
 st.markdown("""
@@ -28,7 +28,7 @@ st.markdown("""
 
 st.title("📊 வகுப்பு வாரி விரிவான தேர்ச்சிப் பகுப்பாய்வு")
 
-# --- தரவுகள் பெறுதல் ---
+# --- 1. தரவுகள் பெறுதல் ---
 exams_data = supabase.table("exams").select("*").execute().data
 classes_data = supabase.table("classes").select("*").execute().data
 groups_data = supabase.table("groups").select("*").execute().data
@@ -72,7 +72,7 @@ if sel_exam_name and sel_base_class != "-- தேர்வு செய்க --
         all_present_marks = {"A": [], "M": [], "F": []}
         fail_cats = {1: [], 2: [], 3: [], 4: [], 5: [], "All": []}
 
-        # ⚡ 1. முக்கிய கணக்கீடு மற்றும் தேர்ச்சி சரிபார்ப்பு
+        # --- 2. முக்கிய கணக்கீடு (Strict Pass Rule) ---
         for s in all_students:
             raw_gen = str(s.get('gender', 'Male')).strip().upper()
             gen = 'F' if raw_gen.startswith('F') else 'M'
@@ -87,9 +87,8 @@ if sel_exam_name and sel_base_class != "-- தேர்வு செய்க --
                     wrote_any = True
                     tot, th, pr, in_m = m.get('total_mark',0), m.get('theory_mark',0), m.get('practical_mark',0), m.get('internal_mark',0)
                     
-                    # ✅ துல்லியமான தேர்ச்சி விதி: Theory >= 15 & Practical >= 15 & Total >= 35
+                    # ✅ தேர்ச்சி விதி: கருத்தியல் 15 & செய்முறை 15 & மொத்தம் 35
                     is_p = (th >= 15 and pr >= 15 and tot >= 35) if sub.get('has_practical') else (tot >= 35)
-                    
                     total_m += tot
                     if not is_p: 
                         fails += 1; fail_subs.append(sub['subject_name'])
@@ -97,14 +96,12 @@ if sel_exam_name and sel_base_class != "-- தேர்வு செய்க --
                     row_raw[sub['subject_name']] = {"tot": tot, "th": th, "pr": pr, "in": in_m, "prac": sub.get('has_practical'), "pass": is_p}
                 else:
                     row_raw[sub['subject_name']] = "ABS"
-                    if m and m.get('is_absent'): 
-                        fails += 1; fail_subs.append(sub['subject_name'])
+                    # ABS ஆன பாடத்தையும் தோல்வியில் சேர்த்தல்
+                    fails += 1; fail_subs.append(sub['subject_name'])
 
             if wrote_any:
                 stats["present"]["A"] += 1; stats["present"][gen] += 1
                 all_present_marks["A"].append(total_m); all_present_marks[gen].append(total_m)
-                
-                # ✅ ஒட்டுமொத்தப் புள்ளிவிவர தேர்ச்சி இங்கேதான் சரியாகக் கணக்கிடப்படுகிறது
                 if fails == 0: 
                     stats["pass"]["A"] += 1; stats["pass"][gen] += 1
                 else:
@@ -117,7 +114,7 @@ if sel_exam_name and sel_base_class != "-- தேர்வு செய்க --
             row_raw.update({"Present": wrote_any, "மொத்தம்": total_m, "Fails": fails, "தோல்வி விவரம்": f"({', '.join(fail_subs)})" if fail_subs else ""})
             report_rows.append(row_raw)
 
-        # --- 2. Dashboard (இப்போது 7 பேர் தோல்வி என்பது சரியாகக் காட்டும்) ---
+        # --- 3. Dashboard ---
         st.subheader(f"📌 {sel_base_class}-ஆம் வகுப்பு ஒட்டுமொத்தப் புள்ளிவிவரம்")
         m = st.columns(6)
         lbls = ["Total", "Present", "Pass", "Fail", "Pass %", "Class Avg"]
@@ -134,7 +131,21 @@ if sel_exam_name and sel_base_class != "-- தேர்வு செய்க --
         c_avg = round(sum(all_present_marks["A"])/len(all_present_marks["A"]), 1) if all_present_marks["A"] else 0
         m[5].markdown(f'<div class="main-stat"><div class="stat-label">Class Avg</div><div class="stat-val" style="color:#3b82f6">{c_avg}</div></div>', unsafe_allow_html=True)
 
-        # --- 3. பாடவாரி விரிவான பகுப்பாய்வு ---
+        # --- 4. Centum & Absents ---
+        st.divider()
+        e_c1, e_c2 = st.columns(2)
+        with e_c1:
+            if centum_list:
+                with st.expander(f"🏆 100/100 எடுத்தவர்கள்: {len(centum_list)} பேர்"):
+                    for item in centum_list: st.markdown(f'<div class="info-card">🥇 {item}</div>', unsafe_allow_html=True)
+            else: st.info("100% எடுத்தவர்கள் யாரும் இல்லை")
+        with e_c2:
+            if absent_list:
+                with st.expander(f"🚶 தேர்வுக்கே வராதவர்கள்: {len(absent_list)} பேர்"):
+                    for item in absent_list: st.markdown(f'<div class="info-card critical-card" style="border-left-color:#ef4444; background-color:#fef2f2;">❌ {item}</div>', unsafe_allow_html=True)
+            else: st.info("தேர்வுக்கே வராதவர்கள் யாரும் இல்லை")
+
+        # --- 5. பாடவாரி ஆய்வு ---
         st.divider()
         st.subheader("📈 பாடவாரி விரிவான பகுப்பாய்வு")
         subj_stats = []
@@ -161,9 +172,9 @@ if sel_exam_name and sel_base_class != "-- தேர்வு செய்க --
                     "Pass %": f"{round((t_pas/t_app)*100,1)}%", 
                     "Max": max(marks_list), "Avg": round(sum(marks_list)/len(marks_list),1), "Only This": only_this
                 })
-        st.dataframe(pd.DataFrame(subj_stats), use_container_width=True, hide_index=True)
+        st.table(pd.DataFrame(subj_stats))
 
-        # --- 4. முழுமையான மதிப்பெண் பட்டியல் ---
+        # --- 6. முழு மதிப்பெண் பட்டியல் ---
         st.divider()
         st.subheader("📋 முழுமையான மதிப்பெண் பட்டியல்")
         show_breakup = st.toggle("🔍 அகமதிப்பீடு மற்றும் செய்முறை மதிப்பெண்களைக் காட்டு (T+I+P)", value=True)
@@ -184,30 +195,13 @@ if sel_exam_name and sel_base_class != "-- தேர்வு செய்க --
         df = pd.DataFrame(final_list).sort_values(by=["Fails", "மொத்தம்"], ascending=[True, False]).reset_index(drop=True)
         ranks = []; rv = 1
         for idx, row in df.iterrows():
-            # Rank கொடுக்கும்போது Fails 0 ஆக இருக்க வேண்டும் (Theory/Practical விதிமுறைப்படி)
             if int(row["Fails"]) == 0 and row["Present"]: ranks.append(str(rv)); rv += 1
             else: ranks.append("-")
         df.insert(0, "Rank", ranks)
         
-        def style_f(row):
-            styles = ['' for _ in row.index]
-            for i, col in enumerate(row.index):
-                val = row[col]
-                if col in [s['subject_name'] for s in relevant_subjects]:
-                    if val == "ABS": styles[i] = 'color: red'
-                    elif isinstance(val, str) and '\n' in val:
-                        parts = val.split('\n')[1].strip('()').split('+')
-                        th_v, pr_v = int(parts[0]), (int(parts[2]) if len(parts)>2 else 35)
-                        if th_v < 15 or pr_v < 15 or int(val.split('\n')[0]) < 35:
-                            styles[i] = 'color: red'
-                    elif isinstance(val, (int, float)) and val < 35:
-                        styles[i] = 'color: red'
-            return styles
+        st.dataframe(df[["Rank", "பிரிவு", "பெயர்"] + [s['subject_name'] for s in relevant_subjects] + ["மொத்தம்", "தோல்வி விவரம்"]].style.apply(lambda x: ['color: red' if (isinstance(v, str) and ('\n' in v or 'ABS' in v)) or (isinstance(v, (int, float)) and v < 35) else '' for v in x], axis=1), use_container_width=True, hide_index=True)
 
-        st.dataframe(df[["Rank", "பிரிவு", "பெயர்"] + [s['subject_name'] for s in relevant_subjects] + ["மொத்தம்", "தோல்வி விவரம்"]].style.apply(style_f, axis=1)
-                     .set_properties(**{'background-color': '#f8fafc'}, subset=['மொத்தம்']), use_container_width=True, hide_index=True)
-
-        # --- 5. தோல்விப் பட்டியல் (Expander) ---
+        # --- 7. தோல்விப் பட்டியல் (Bottom) ---
         st.divider()
         st.subheader("📉 தோல்வி அடைந்த மாணவர்களின் விவரம்")
         b1, b2 = st.columns(2)
