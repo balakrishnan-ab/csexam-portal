@@ -36,8 +36,10 @@ subjects_data = supabase.table("subjects").select("*").execute().data
 
 c1, c2 = st.columns(2)
 sel_exam_name = c1.selectbox("1. தேர்வு:", [e['exam_name'] for e in exams_data])
-class_list = sorted(list(set([c.get('class_n') or c.get('class_name') for c in classes_data])))
-sel_class = c2.selectbox("2. வகுப்பு:", ["-- தேர்வு செய்க --"] + class_list)
+all_classes_raw = [c.get('class_n') or c.get('class_name') for c in classes_data]
+base_classes = sorted(list(set([str(c).split('-')[0].strip() for c in all_classes_raw if c])), key=lambda x: int(x) if x.isdigit() else x)
+sel_base_class = c2.selectbox("2. வகுப்பு:", ["-- தேர்வு செய்க --"] + base_classes)
+
 
 if sel_exam_name and sel_class != "-- தேர்வு செய்க --":
     exam_id = next(e['id'] for e in exams_data if e['exam_name'] == sel_exam_name)
