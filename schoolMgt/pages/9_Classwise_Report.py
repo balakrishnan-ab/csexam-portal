@@ -72,40 +72,58 @@ if sel_exam_name and sel_base_class != "-- தேர்வு செய்க --
         all_present_marks = {"A": [], "M": [], "F": []}
         fail_cats = {1: [], 2: [], 3: [], 4: [], 5: [], "All": []}
 
-        for s in all_students:
-            raw_gen = str(s.get('gender', 'Male')).strip().upper()
-            gen = 'F' if raw_gen.startswith('F') else 'M'
-            stats["total"]["A"] += 1; stats["total"][gen] += 1
+     # --- மாணவர் வாரியான கணக்கீடு (Loop-க்குள்) ---
+    for s in students:
+        row_raw = {"பெயர்": s['student_name'], "emis_no": s['emis_no']}
+        total_m, fails, fail_subs = 0, 0, []
+        wrote_any = False
+    
+        for sub in relevant_subjects:
+            m = next((m for m in marks_data if m['emis_no'] == s['emis_no'] and m['subject_id'] == sub['subject_code']), None)
+        
+            if m and not m.get('is_absent'):
+                wrote_any = True
+                tot = m.get('total_mark', 0)
+                th = m.get('theory_mark', 0)
+                pr = m.get('practical_mark', 0)
+                in_m = m.get('internal_mark', 0)
             
-            row_raw = {"பிரிவு": s['section'], "பெயர்": s['student_name'], "gender": gen, "emis_no": s['emis_no']}
-            total_m, fails, wrote_any, fail_subs = 0, 0, False, []
+                # ⚡ மிக முக்கியமான தேர்ச்சி விதி (Pass Logic)
+                is_p = True
+                if sub.get('has_practical'):
+                    # தியரி 15 & செய்முறை 15 & மொத்தம் 35 இருக்க வேண்டும்
+                    if th < 15 or pr < 15 or tot < 35:
+                        is_p = False
+                else:
+                    # செய்முறை இல்லாத பாடங்களுக்கு மொத்தம் 35 போதும்
+                    if tot < 35:
+                        is_p = False
             
-            for sub in relevant_subjects:
-                m = next((m for m in marks_data if m['emis_no'] == s['emis_no'] and m['subject_id'] == sub['subject_code']), None)
-                if m and not m.get('is_absent'):
-                    wrote_any = True
-                    tot, th, pr, in_m = m.get('total_mark',0), m.get('theory_mark',0), m.get('practical_mark',0), m.get('internal_mark',0)
-                    is_p = (th >= 15 and pr >= 15 and tot >= 35) if sub.get('has_practical') else (tot >= 35)
-                    total_m += tot
-                    if not is_p: fails += 1; fail_subs.append(sub['subject_name'])
-                    if tot == 100: centum_list.append(f"{s['student_name']} ({s['section']} - {sub['subject_name']})")
-                    row_raw[sub['subject_name']] = {"tot": tot, "th": th, "pr": pr, "in": in_m, "prac": sub.get('has_practical'), "pass": is_p}
-                else:
-                    row_raw[sub['subject_name']] = "ABS"
-                    if m and m.get('is_absent'): fails += 1; fail_subs.append(sub['subject_name'])
+                total_m += tot
+            
+                # தோல்வி அடைந்தால் பாடத்தை விவரத்தில் சேர்த்தல்
+                if not is_p:
+                    fails += 1
+                    fail_subs.append(sub['subject_name']) # 👈 தோல்வி விவரத்தில் பாடம் சேர்ப்பு
+            
+                # டேட்டாபிரேமிற்காக சேமித்தல்
+                row_raw[sub['subject_name']] = {
+                    "tot": tot, "th": th, "pr": pr, "in": in_m, 
+                    "prac": sub.get('has_practical'), "pass": is_p
+                }
+            else:
+                # வருகை புரியாதவர் (Absent)
+                row_raw[sub['subject_name']] = "ABS"
+                fails += 1
+                fail_subs.append(sub['subject_name']) # 👈 ABS ஆன பாடமும் தோல்வி விவரத்தில் வரும்
 
-            if wrote_any:
-                stats["present"]["A"] += 1; stats["present"][gen] += 1
-                all_present_marks["A"].append(total_m); all_present_marks[gen].append(total_m)
-                if fails == 0: stats["pass"]["A"] += 1; stats["pass"][gen] += 1
-                else:
-                    s_fail_txt = f"{s['student_name']} ({s['section']} - {', '.join(fail_subs)})"
-                    if fails >= len(relevant_subjects): fail_cats["All"].append(s_fail_txt)
-                    elif fails in fail_cats: fail_cats[fails].append(s_fail_txt)
-            else: absent_list.append(f"{s['student_name']} ({s['section']})")
-
-            row_raw.update({"Present": wrote_any, "மொத்தம்": total_m, "Fails": fails, "தோல்வி விவரம்": f"({', '.join(fail_subs)})" if fail_subs else ""})
-            report_rows.append(row_raw)
+        row_raw.update({
+            "Present": wrote_any, 
+            "மொத்தம்": total_m, 
+            "Fails": fails, 
+            "தோல்வி விவரம்": f"({', '.join(fail_subs)})" if fail_subs else "" # 👈 அடைப்புக்குறிக்குள் பாடங்கள்
+        })
+        report_rows.append(row_raw)
 
         # --- Dashboard ---
         st.subheader(f"📌 {sel_base_class}-ஆம் வகுப்பு ஒட்டுமொத்தப் புள்ளிவிவரம்")
