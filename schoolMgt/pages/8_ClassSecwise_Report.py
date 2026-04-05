@@ -26,7 +26,7 @@ st.markdown("""
     </style>
     """, unsafe_allow_html=True)
 
-st.title("📊 வகுப்பு வாரி விரிவான தேர்ச்சிப் பகுப்பாய்வு")
+st.title("📊 வகுப்பு பிரிவுகள் வாரி விரிவான தேர்ச்சிப் பகுப்பாய்வு")
 
 # --- தரவுகள் பெறுதல் ---
 exams_data = supabase.table("exams").select("*").execute().data
