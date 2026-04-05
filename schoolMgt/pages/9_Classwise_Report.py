@@ -68,8 +68,10 @@ if sel_exam_name and sel_base_class != "-- தேர்வு செய்க --
         st_count = {"total": {"A": 0, "M": 0, "F": 0}, "present": {"A": 0, "M": 0, "F": 0}, "pass": {"A": 0, "M": 0, "F": 0}}
         all_marks_list = {"A": [], "M": [], "F": []}
         fail_cats = {1: [], 2: [], 3: [], 4: [], 5: [], "All": []}
+        
+        # பாடவாரி தரவுகளை சேமிக்க (Subject Analysis Storage)
+        subject_stats = {sn: {"app": 0, "pass": 0, "fail": 0, "marks": [], "only_this": 0} for sn in union_subs}
 
-        # --- ⚡ 2. மேம்படுத்தப்பட்ட தேர்ச்சி கணக்கீடு (Logic Fix) ---
         for s in all_students:
             raw_gen = str(s.get('gender', 'Male')).strip().upper()
             gen = 'F' if raw_gen.startswith('F') else 'M'
@@ -89,125 +91,4 @@ if sel_exam_name and sel_base_class != "-- தேர்வு செய்க --
                 m = next((m for m in marks_data if m['emis_no'] == s['emis_no'] and m['subject_id'] == s_obj['subject_code']), None)
                 if m and not m.get('is_absent'):
                     wrote_any = True
-                    tot, th, pr = m.get('total_mark', 0), m.get('theory_mark', 0), m.get('practical_mark', 0)
-                    
-                    eval_type_str = str(s_obj.get('eval_type', '90+10'))
-                    is_subj_pass = True
-                    
-                    # 🔍 '70' என்ற எண் eval_type-இல் இருந்தால் அது செய்முறை பாடம்
-                    if '70' in eval_type_str:
-                        # நிபந்தனை: தியரி >= 15, பிராக்டிகல் >= 15, மொத்தம் >= 35
-                        if th < 15 or pr < 15 or tot < 35: 
-                            is_subj_pass = False
-                    else:
-                        # 90+10 வகை: மொத்தம் 35 இருந்தால் போதும்
-                        if tot < 35: 
-                            is_subj_pass = False
-                    
-                    total_m += tot
-                    if not is_subj_pass: 
-                        fails += 1; fail_subs.append(sn)
-                    if tot == 100: 
-                        centum_list.append(f"{s['student_name']} ({s['section']} - {sn})")
-                    row_raw[sn] = {"tot": tot, "pass": is_subj_pass, "th": th, "pr": pr}
-                else:
-                    # ABSENT அல்லது மதிப்பெண் இல்லை எனில் தோல்வி
-                    row_raw[sn] = "ABS"; fails += 1; fail_subs.append(sn)
-
-            if wrote_any:
-                st_count["present"]["A"] += 1; st_count["present"][gen] += 1
-                all_marks_list["A"].append(total_m); all_marks_list[gen].append(total_m)
-                if fails == 0:
-                    st_count["pass"]["A"] += 1; st_count["pass"][gen] += 1
-                else:
-                    txt = f"{s['student_name']} ({s['section']} - {', '.join(fail_subs)})"
-                    if fails >= len(my_subs): fail_cats["All"].append(txt)
-                    elif fails in [1,2,3,4,5]: fail_cats[fails].append(txt)
-            else: 
-                absent_list.append(f"{s['student_name']} ({s['section']})")
-
-            row_raw.update({"மொத்தம்": total_m, "Fails": fails, "தோல்வி விவரம்": f"({', '.join(fail_subs)})" if fail_subs else ""})
-            report_rows.append(row_raw)
-
-        # --- 📊 3. Dashboard ---
-        st.subheader(f"📌 {sel_base_class}-ஆம் வகுப்பு ஒட்டுமொத்தப் புள்ளிவிவரம்")
-        m_dash = st.columns(6)
-        titles = ["மொத்தம்", "எழுதியவர்", "தேர்ச்சி", "தோல்வி", "தேர்ச்சி %", "வகுப்பு சராசரி"]
-        
-        for i, k in enumerate(["total", "present", "pass"]):
-            val = st_count[k]["A"]
-            gen_txt = f"<span class='gender-sub'>({st_count[k]['F']}F | {st_count[k]['M']}M)</span>" if split_gender else ""
-            m_dash[i].markdown(f'<div class="main-stat"><div class="stat-label">{titles[i]}</div><div class="stat-val">{val}{gen_txt}</div></div>', unsafe_allow_html=True)
-        
-        f_a = st_count["present"]["A"] - st_count["pass"]["A"]
-        f_gen = f"<span class='gender-sub'>({st_count['present']['F']-st_count['pass']['F']}F | {st_count['present']['M']-st_count['pass']['M']}M)</span>" if split_gender else ""
-        m_dash[3].markdown(f'<div class="main-stat"><div class="stat-label">தோல்வி</div><div class="stat-val">{f_a}{f_gen}</div></div>', unsafe_allow_html=True)
-        
-        p_a = round((st_count["pass"]["A"]/st_count["present"]["A"])*100, 1) if st_count["present"]["A"]>0 else 0
-        p_gen = f"<span class='gender-sub'>({round((st_count['pass']['F']/st_count['present']['F'])*100,1) if st_count['present']['F']>0 else 0}% | {round((st_count['pass']['M']/st_count['present']['M'])*100,1) if st_count['present']['M']>0 else 0}%)</span>" if split_gender else ""
-        m_dash[4].markdown(f'<div class="main-stat"><div class="stat-label">தேர்ச்சி %</div><div class="stat-val" style="color:#16a34a">{p_a}%{p_gen}</div></div>', unsafe_allow_html=True)
-        
-        avg_a = round(sum(all_marks_list["A"])/len(all_marks_list["A"]), 1) if all_marks_list["A"] else 0
-        m_dash[5].markdown(f'<div class="main-stat"><div class="stat-label">வகுப்பு சராசரி</div><div class="stat-val" style="color:#3b82f6">{avg_a}</div></div>', unsafe_allow_html=True)
-
-        # --- 🏆 4. Expander Lists ---
-        st.divider()
-        e_c1, e_c2 = st.columns(2)
-        with e_c1:
-            with st.expander(f"🏆 100/100 எடுத்தவர்கள்: {len(centum_list)} பேர்"):
-                for itm in centum_list: st.markdown(f'<div class="info-card">🥇 {itm}</div>', unsafe_allow_html=True)
-        with e_c2:
-            with st.expander(f"🚶 தேர்வுக்கே வராதவர்கள்: {len(absent_list)} பேர்"):
-                for itm in absent_list: st.markdown(f'<div class="info-card" style="border-left-color:#ef4444; background-color:#fef2f2;">❌ {itm}</div>', unsafe_allow_html=True)
-
-        # --- 📉 5. முழுப் பட்டியல் (Error Corrected) ---
-        st.divider()
-        st.subheader("📋 முழுமையான மதிப்பெண் பட்டியல்")
-        show_t_p = st.toggle("🔍 தியரி மற்றும் செய்முறை மதிப்பெண்களைக் காட்டு (T+P)", value=True)
-        
-        final_list = []
-        for r in report_rows:
-            d_row = {"பிரிவு": r['பிரிவு'], "பெயர்": r['பெயர்'], "மொத்தம்": r['மொத்தம்'], "Fails": r['Fails'], "தோல்வி விவரம்": r['தோல்வி விவரம்']}
-            for sn in union_subs:
-                v = r.get(sn)
-                if isinstance(v, dict):
-                    d_row[sn] = f"{v['tot']}\n({v['th']}+{v['pr']})" if show_t_p else v['tot']
-                else: d_row[sn] = v
-            final_list.append(d_row)
-        
-        df_f = pd.DataFrame(final_list).sort_values(by=["Fails", "மொத்தம்"], ascending=[True, False]).reset_index(drop=True)
-        ranks, rv = [], 1
-        for idx, row in df_f.iterrows():
-            if int(row["Fails"]) == 0: ranks.append(str(rv)); rv += 1
-            else: ranks.append("-")
-        df_f.insert(0, "Rank", ranks)
-
-        # 🛠 பிழை நீக்கப்பட்ட ஸ்டைலிங் (AttributeError Fix)
-        def color_fails(val):
-            if val == 'ABS' or val == '-': return 'color: red'
-            if isinstance(val, str) and '\n' in val:
-                try:
-                    score = int(val.split('\n')[0])
-                    if score < 35: return 'color: red'
-                except: pass
-            if isinstance(val, (int, float)) and val < 35: return 'color: red'
-            return ''
-
-        # map() பங்க்ஷன் பயன்படுத்தப்பட்டுள்ளது
-        st.dataframe(df_f.style.map(color_fails), use_container_width=True, hide_index=True)
-
-        # --- ❌ 6. தோல்விப் பட்டியல் ---
-        st.divider()
-        st.subheader("📉 தோல்வி அடைந்த மாணவர்களின் விவரம்")
-        b1, b2 = st.columns(2)
-        with b1:
-            for n in [1, 2, 3]:
-                if fail_cats[n]:
-                    with st.expander(f"❌ {n} பாடத்தில் தோல்வி: {len(fail_cats[n])} பேர்"):
-                        for itm in fail_cats[n]: st.markdown(f'<div class="info-card" style="border-left-color:#f59e0b; background-color:#fffbeb;">⚠️ {itm}</div>', unsafe_allow_html=True)
-        with b2:
-            for n in [4, 5, "All"]:
-                if fail_cats[n]:
-                    label = f"{n} பாடத்தில் தோல்வி" if n != "All" else "அனைத்துப் பாடங்களிலும் தோல்வி"
-                    with st.expander(f"🔴 {label}: {len(fail_cats[n])} பேர்"):
-                        for itm in fail_cats[n]: st.markdown(f'<div class="info-card" style="border-left-color:#ef4444; background-color:#fef2f2;">🚩 {itm}</div>', unsafe_allow_html=True)
+                    tot, th, pr = m.
