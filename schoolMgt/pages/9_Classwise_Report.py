@@ -10,9 +10,9 @@ def get_supabase_client():
 
 supabase = get_supabase_client()
 
-st.set_page_config(page_title="Complete Class Analysis", layout="wide")
+st.set_page_config(page_title="Refined Class Analysis", layout="wide")
 
-# ⚡ CSS - ஸ்டைலிங்
+# ⚡ CSS வடிவமைப்பு
 st.markdown("""
     <style>
     .stDataFrame td { font-weight: bold !important; font-size: 14px !important; white-space: pre !important; }
@@ -85,6 +85,8 @@ if sel_exam_name and sel_base_class != "-- தேர்வு செய்க --
                 if m and not m.get('is_absent'):
                     wrote_any = True
                     tot, th, pr, in_m = m.get('total_mark',0), m.get('theory_mark',0), m.get('practical_mark',0), m.get('internal_mark',0)
+                    
+                    # ⚡ தேர்ச்சி விதி: கருத்தியல் 15 & செய்முறை 15 & மொத்தம் 35
                     is_p = (th >= 15 and pr >= 15 and tot >= 35) if sub.get('has_practical') else (tot >= 35)
                     total_m += tot
                     if not is_p: 
@@ -93,7 +95,8 @@ if sel_exam_name and sel_base_class != "-- தேர்வு செய்க --
                     row_raw[sub['subject_name']] = {"tot": tot, "th": th, "pr": pr, "in": in_m, "prac": sub.get('has_practical'), "pass": is_p}
                 else:
                     row_raw[sub['subject_name']] = "ABS"
-                    if m and m.get('is_absent'): fails += 1; fail_subs.append(sub['subject_name'])
+                    if m and m.get('is_absent'): 
+                        fails += 1; fail_subs.append(sub['subject_name'])
 
             if wrote_any:
                 stats["present"]["A"] += 1; stats["present"][gen] += 1
