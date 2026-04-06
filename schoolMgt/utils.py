@@ -8,36 +8,37 @@ def add_school_header():
         <style>
         .school-header-container {{
             background-color: #1e3a8a; 
-            padding: clamp(15px, 4vw, 30px); /* பேடிங் சற்று அதிகரிப்பு */
+            padding: clamp(15px, 4vw, 30px); 
             border-radius: 12px; 
             text-align: center; 
             margin-bottom: 25px;
-            box-shadow: 0 4px 6px rgba(0,0,0,0.1); /* லேசான நிழல் - அழகுக்காக */
+            box-shadow: 0 6px 15px rgba(0,0,0,0.2);
+            width: 100%;
         }}
         .school-title {{
-            color: white !important; 
+            /* வெள்ளை நிறத்தை உறுதி செய்கிறது */
+            color: #FFFFFF !important; 
             margin: 0; 
-            /* குறைந்தபட்சம் 22px, திரையின் அகலத்தில் 5%, அதிகபட்சம் 40px */
-            font-size: clamp(22px, 5vw, 40px) !important; 
-            font-weight: 800;
-            text-shadow: 2px 2px 4px rgba(0,0,0,0.3); /* எழுத்துக்கள் பளிச்சென்று தெரிய */
+            /* திரைக்கு ஏற்ப அளவு மாறுதல் */
+            font-size: clamp(20px, 5.5vw, 38px) !important; 
+            font-weight: 800 !important;
+            line-height: 1.3;
+            /* எழுத்துக்கள் பின்னணியுடன் கலக்காமல் இருக்க நிழல் */
+            text-shadow: 2px 2px 8px rgba(0,0,0,0.5) !important;
+            display: block;
         }}
         .school-address {{
-            color: #d1d5db !important; 
-            margin: 8px 0 0 0; 
-            font-size: clamp(14px, 2.5vw, 20px) !important;
+            color: #E2E8F0 !important; 
+            margin: 10px 0 0 0; 
+            font-size: clamp(13px, 2.5vw, 18px) !important;
+            font-weight: 500;
             letter-spacing: 0.5px;
+            text-shadow: 1px 1px 3px rgba(0,0,0,0.4) !important;
         }}
         </style>
         
         <div class="school-header-container">
-            <h1 class="school-title">{school_name}</h1>
-            <p class="school-address">{address}</p>
-        </div>
-    """, unsafe_allow_html=True)
-        
-        <div class="school-header-container">
-            <h1 class="school-title">{school_name}</h1>
-            <p class="school-address">{address}</p>
+            <span class="school-title">{school_name}</span>
+            <span class="school-address">{address}</span>
         </div>
     """, unsafe_allow_html=True)
