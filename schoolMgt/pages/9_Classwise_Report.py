@@ -18,7 +18,7 @@ st.set_page_config(page_title="Evaluation Analysis", layout="wide")
 # ⚡ CSS - ஸ்டைலிங்
 st.markdown("""
     <style>
-    .stDataFrame td { font-weight: bold !important; font-size: 14px !important; white-space: pre !important; }
+    .stDataFrame td { font-weight: bold !important; font-size: 12px !important; white-space: pre !important; }
     .main-stat { background-color: #f8fafc; border: 1px solid #e2e8f0; padding: 10px; border-radius: 10px; text-align: center; min-height: 100px; }
     .stat-val { font-size: 20px; font-weight: bold; color: #1e293b; line-height: 1.2; }
     .stat-label { font-size: 13px; color: #64748b; font-weight: bold; margin-bottom: 5px; }
