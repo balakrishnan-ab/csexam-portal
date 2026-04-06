@@ -1,6 +1,13 @@
 import streamlit as st
 import pandas as pd
 from supabase import create_client
+from utils import add_school_header 
+
+# --- பக்க அமைப்பு (config முதலில் இருக்க வேண்டும்) ---
+st.set_page_config(page_title="Section-wise Analysis", layout="wide")
+
+# பள்ளியின் பொதுவான தலைப்பை utils.py-லிருந்து அழைத்தல்
+add_school_header()
 
 # --- Supabase இணைப்பு ---
 def get_supabase_client():
@@ -10,21 +17,64 @@ def get_supabase_client():
 
 supabase = get_supabase_client()
 
-st.set_page_config(page_title="Section-wise Analysis", layout="wide")
-
-# ⚡ CSS - ஸ்டைலிங்
+# ⚡ CSS - Responsive ஸ்டைலிங்
 st.markdown("""
     <style>
-    .stDataFrame td { font-weight: bold !important; font-size: 14px !important; white-space: pre !important; }
-    .main-stat { background-color: #f8fafc; border: 1px solid #e2e8f0; padding: 10px; border-radius: 10px; text-align: center; min-height: 100px; }
-    .stat-val { font-size: 22px; font-weight: bold; color: #1e293b; line-height: 1.2; }
-    .stat-label { font-size: 14px; color: #64748b; font-weight: bold; margin-bottom: 5px; }
-    .gender-sub { font-size: 12px; color: #3b82f6; font-weight: bold; display: block; margin-top: 3px; }
-    .info-card { padding: 10px; border-radius: 5px; margin-bottom: 5px; border-left: 4px solid #10b981; background-color: #f0fdf4; font-size: 14px; font-weight: bold; }
+    /* டேபிள் ஸ்டைல் */
+    .stDataFrame td { font-weight: bold !important; font-size: 13px !important; white-space: pre !important; }
+    
+    /* 📱 1. புள்ளிவிவரக் கட்டங்களுக்கான (Metric Cards) Responsive ஸ்டைல் */
+    .metric-container {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 10px;
+        justify-content: space-between;
+        width: 100%;
+        margin-bottom: 20px;
+    }
+    .metric-card {
+        background-color: #f8fafc;
+        border: 1px solid #e2e8f0;
+        padding: 12px 8px;
+        border-radius: 10px;
+        text-align: center;
+        flex: 1 1 calc(15% - 10px); 
+        min-width: 110px; 
+        box-shadow: 0 2px 4px rgba(0,0,0,0.05);
+    }
+    .stat-val { font-size: clamp(18px, 3vw, 24px); font-weight: bold; color: #1e293b; line-height: 1.2; }
+    .stat-label { font-size: 12px; color: #64748b; font-weight: bold; margin-bottom: 4px; text-transform: uppercase; }
+    .gender-sub { font-size: 11px; color: #3b82f6; font-weight: bold; display: block; margin-top: 2px; }
+
+    /* 📱 2. தலைப்புகளுக்கான Responsive ஸ்டைல் */
+    .responsive-header {
+        font-size: clamp(20px, 4.5vw, 30px);
+        font-weight: bold;
+        color: #1e293b;
+        text-align: left;
+        padding: 10px 0;
+        line-height: 1.4;
+    }
+    .responsive-subtitle {
+        font-size: clamp(16px, 3.5vw, 22px);
+        font-weight: bold;
+        color: #334155;
+        text-align: left;
+        padding: 8px 0;
+        border-bottom: 2px solid #e2e8f0;
+        margin: 15px 0 10px 0;
+    }
+
+    /* தகவல் கார்டுகள் (Centum/Absent) */
+    .info-card { padding: 10px; border-radius: 6px; margin-bottom: 8px; border-left: 4px solid #10b981; background-color: #f0fdf4; font-size: 14px; font-weight: bold; }
+
+    @media (max-width: 600px) {
+        .metric-card { flex: 1 1 calc(45% - 10px); } /* மொபைலில் ஒரு வரிசைக்கு 2 கட்டங்கள் */
+    }
     </style>
     """, unsafe_allow_html=True)
 
-st.title("📌 வகுப்பு & பிரிவு வாரி விரிவான தேர்ச்சிப் பகுப்பாய்வு")
+st.markdown('<div class="responsive-header">📌 வகுப்பு & பிரிவு வாரி விரிவான தேர்ச்சிப் பகுப்பாய்வு</div>', unsafe_allow_html=True)
 
 # --- 1. தரவுகள் பெறுதல் ---
 exams_data = supabase.table("exams").select("*").execute().data
@@ -34,8 +84,6 @@ subjects_data = supabase.table("subjects").select("*").execute().data
 
 col1, col2 = st.columns(2)
 sel_exam_name = col1.selectbox("1. தேர்வு:", [e['exam_name'] for e in exams_data])
-
-# பிரிவுகளுடன் கூடிய பட்டியல் (எ.கா: 11-A, 11-B)
 all_sections = sorted(list(set([c.get('class_n') or c.get('class_name') for c in classes_data if c.get('class_n') or c.get('class_name')])))
 sel_section = col2.selectbox("2. வகுப்பு மற்றும் பிரிவு:", ["-- தேர்வு செய்க --"] + all_sections)
 
@@ -44,9 +92,7 @@ if sel_exam_name and sel_section != "-- தேர்வு செய்க --":
     st.divider()
     split_gender = st.toggle("🔍 ஆண் பெண் பிரித்து காட்டு", value=True)
 
-    # குறிப்பிட்ட பிரிவின் மாணவர்களை மட்டும் எடுத்தல்
     studs = supabase.table("exam_mapping").select("exam_no, student_name, emis_no, gender").eq("exam_id", exam_id).eq("class_name", sel_section).execute().data
-    
     c_info = next((c for c in classes_data if (c.get('class_n') == sel_section or c.get('class_name') == sel_section)), None)
     
     if studs and c_info:
@@ -98,7 +144,7 @@ if sel_exam_name and sel_section != "-- தேர்வு செய்க --":
                     
                     total_m += tot
                     if tot == 100: student_centums.append(sn)
-                    row_raw[sn] = {"tot": tot, "tag": tag}
+                    row_raw[sn] = {"tot": tot, "tag": tag, "pass": is_subj_pass}
                 else:
                     row_raw[sn] = "ABS"; fails += 1; fail_subs.append(sn)
                     subject_stats[sn]["app"] += 1; subject_stats[sn]["fail"] += 1
@@ -122,20 +168,26 @@ if sel_exam_name and sel_section != "-- தேர்வு செய்க --":
             row_raw.update({"மொத்தம்": total_m, "Fails": fails, "தோல்வி விவரம்": f"({', '.join(fail_subs)})" if fail_subs else ""})
             report_rows.append(row_raw)
 
-        # --- Dashboard ---
-        st.subheader(f"📊 {sel_section} பிரிவு ஒட்டுமொத்தப் புள்ளிவிவரம்")
-        m_dash = st.columns(6)
-        titles = ["Total", "Present", "Pass", "Fail", "Pass %", "Avg"]
-        for i, k in enumerate(["total", "present", "pass"]):
-            v = st_count[k]["A"]; gt = f"<span class='gender-sub'>({st_count[k]['F']}F|{st_count[k]['M']}M)</span>" if split_gender else ""
-            m_dash[i].markdown(f'<div class="main-stat"><div class="stat-label">{titles[i]}</div><div class="stat-val">{v}{gt}</div></div>', unsafe_allow_html=True)
+        # --- 📱 Dashboard (Metric Cards) ---
+        st.markdown(f'<div class="responsive-subtitle">📊 {sel_section} பிரிவு ஒட்டுமொத்தப் புள்ளிவிவரம்</div>', unsafe_allow_html=True)
         
-        f_a = st_count["present"]["A"] - st_count["pass"]["A"]; f_gt = f"<span class='gender-sub'>({st_count['present']['F']-st_count['pass']['F']}F|{st_count['present']['M']-st_count['pass']['M']}M)</span>" if split_gender else ""
-        m_dash[3].markdown(f'<div class="main-stat"><div class="stat-label">Fail</div><div class="stat-val">{f_a}{f_gt}</div></div>', unsafe_allow_html=True)
+        f_a = st_count["present"]["A"] - st_count["pass"]["A"]
         p_a = round((st_count["pass"]["A"]/st_count["present"]["A"])*100, 1) if st_count["present"]["A"]>0 else 0
-        m_dash[4].markdown(f'<div class="main-stat"><div class="stat-label">Pass %</div><div class="stat-val" style="color:#16a34a">{p_a}%</div></div>', unsafe_allow_html=True)
         avg_v = round(sum(all_marks_list["A"])/len(all_marks_list["A"]),1) if all_marks_list["A"] else 0
-        m_dash[5].markdown(f'<div class="main-stat"><div class="stat-label">Avg</div><div class="stat-val" style="color:#3b82f6">{avg_v}</div></div>', unsafe_allow_html=True)
+
+        def get_gt(k): return f"<span class='gender-sub'>({st_count[k]['F']}F|{st_count[k]['M']}M)</span>" if split_gender else ""
+        f_gt = f"<span class='gender-sub'>({st_count['present']['F']-st_count['pass']['F']}F|{st_count['present']['M']-st_count['pass']['M']}M)</span>" if split_gender else ""
+
+        st.markdown(f"""
+            <div class="metric-container">
+                <div class="metric-card"><div class="stat-label">Total</div><div class="stat-val">{st_count['total']['A']}{get_gt('total')}</div></div>
+                <div class="metric-card"><div class="stat-label">Present</div><div class="stat-val">{st_count['present']['A']}{get_gt('present')}</div></div>
+                <div class="metric-card"><div class="stat-label">Pass</div><div class="stat-val" style="color:#16a34a">{st_count['pass']['A']}{get_gt('pass')}</div></div>
+                <div class="metric-card"><div class="stat-label">Fail</div><div class="stat-val" style="color:#ef4444">{f_a}{f_gt}</div></div>
+                <div class="metric-card"><div class="stat-label">Pass %</div><div class="stat-val" style="color:#16a34a">{p_a}%</div></div>
+                <div class="metric-card"><div class="stat-label">Avg</div><div class="stat-val" style="color:#3b82f6">{avg_v}</div></div>
+            </div>
+        """, unsafe_allow_html=True)
 
         st.divider()
         c_e1, c_e2 = st.columns(2)
@@ -147,7 +199,7 @@ if sel_exam_name and sel_section != "-- தேர்வு செய்க --":
                 for itm in absent_list: st.markdown(f'<div class="info-card" style="border-left-color:#ef4444; background-color:#fef2f2;">❌ {itm}</div>', unsafe_allow_html=True)
 
         # --- பாடவாரி விரிவான பகுப்பாய்வு ---
-        st.subheader("📈 பாடவாரி விரிவான பகுப்பாய்வு")
+        st.markdown('<div class="responsive-subtitle">📈 பாடவாரி விரிவான பகுப்பாய்வு</div>', unsafe_allow_html=True)
         sub_df = []
         for sn in g_list:
             stt = subject_stats[sn]; avg_s = round(sum(stt["marks"])/len(stt["marks"]),1) if stt["marks"] else 0
@@ -157,7 +209,7 @@ if sel_exam_name and sel_section != "-- தேர்வு செய்க --":
 
         # --- முழுமையான மதிப்பெண் பட்டியல் ---
         st.divider()
-        st.subheader("📋 முழுமையான மதிப்பெண் பட்டியல்")
+        st.markdown('<div class="responsive-subtitle">📋 முழுமையான மதிப்பெண் பட்டியல்</div>', unsafe_allow_html=True)
         show_det = st.toggle("🔍 மதிப்பீட்டு விவரங்களைக் காட்டு (T+P+I / T+I)", value=True)
         
         final_list = []
@@ -178,8 +230,10 @@ if sel_exam_name and sel_section != "-- தேர்வு செய்க --":
             s = str(val)
             if 'ABS' in s or '-' in s: return 'color: red'
             if '\n' in s:
-                score = int(s.split('\n')[0])
-                if score < 35: return 'color: red'
+                try:
+                    score = int(s.split('\n')[0])
+                    if score < 35: return 'color: red'
+                except: pass
             elif isinstance(val, (int, float)) and val < 35: return 'color: red'
             return ''
 
@@ -187,7 +241,7 @@ if sel_exam_name and sel_section != "-- தேர்வு செய்க --":
 
         # --- விரிவான தோல்விப் பட்டியல் ---
         st.divider()
-        st.subheader("📉 தோல்வி அடைந்த மாணவர்களின் விரிவான விவரம்")
+        st.markdown('<div class="responsive-subtitle">📉 தோல்வி அடைந்த மாணவர்களின் விரிவான விவரம்</div>', unsafe_allow_html=True)
         b1, b2 = st.columns(2)
         with b1:
             for n in [1, 2, 3]:
