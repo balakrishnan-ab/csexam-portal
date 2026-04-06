@@ -2,8 +2,8 @@ import streamlit as st
 
 def add_school_header():
     # இங்கே உங்கள் பள்ளியின் பெயரை மாற்றிக்கொள்ளுங்கள்
-    school_name = "அரசு மேல்நிலைப் பள்ளி, சென்னை" 
-    address = "123, கல்விச் சாலை, சென்னை - 600001"
+    school_name = "அரசு மேல்நிலைப் பள்ளி,தேவனாங்குறிச்சி " 
+    address = "திருச்செங்கோடு வட்டம், நாமக்கல் - 638209."
     
     st.markdown(f"""
         <div style="background-color:#1e3a8a; padding:20px; border-radius:10px; text-align:center; margin-bottom:20px;">
