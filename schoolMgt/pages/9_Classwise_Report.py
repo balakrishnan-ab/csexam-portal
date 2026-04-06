@@ -157,7 +157,8 @@ if sel_exam_name and sel_base_class != "-- தேர்வு செய்க --
             report_rows.append(row_raw)
 
         # --- Dashboard ---
-        st.subheader(f"📌 {sel_base_class}-ஆம் வகுப்பு புள்ளிவிவரம்")
+        st.markdown('<div class="responsive-subtitle">f"📌 {sel_base_class}-ஆம் வகுப்பு புள்ளிவிவரம்"</div>', unsafe_allow_html=True)
+        #st.subheader(f"📌 {sel_base_class}-ஆம் வகுப்பு புள்ளிவிவரம்")
         m_dash = st.columns(6)
         titles = ["Total", "Present", "Pass", "Fail", "Pass %", "Class Avg"]
         for i, k in enumerate(["total", "present", "pass"]):
