@@ -18,17 +18,26 @@ st.set_page_config(page_title="Evaluation Analysis", layout="wide")
 # ⚡ CSS - ஸ்டைலிங்
 st.markdown("""
     <style>
-    .stDataFrame td { font-weight: bold !important; font-size: 12px !important; white-space: pre !important; }
+    .stDataFrame td { font-weight: bold !important; font-size: 1px !important; white-space: pre !important; }
     .main-stat { background-color: #f8fafc; border: 1px solid #e2e8f0; padding: 10px; border-radius: 10px; text-align: center; min-height: 100px; }
     .stat-val { font-size: 20px; font-weight: bold; color: #1e293b; line-height: 1.2; }
     .stat-label { font-size: 13px; color: #64748b; font-weight: bold; margin-bottom: 5px; }
     .gender-sub { font-size: 12px; color: #3b82f6; font-weight: bold; display: block; margin-top: 3px; }
     .info-card { padding: 8px; border-radius: 5px; margin-bottom: 5px; border-left: 4px solid #10b981; background-color: #f0fdf4; font-size: 14px; }
+    .responsive-header {
+        font-size: clamp(18px, 4vw, 30px); /* மொபைலில் 18px, கணினியில் அதிகபட்சம் 30px என தானாக மாறும் */
+        font-weight: bold;
+        color: #1e293b;
+        text-align: center;
+        padding: 10px;
+        line-height: 1.4;
+        width: 100%;
+    }
+    
     </style>
     """, unsafe_allow_html=True)
 
-st.title("📊 வகுப்பு வாரி விரிவான தேர்ச்சிப் பகுப்பாய்வு")
-
+st.markdown('<div class="responsive-header">📊 வகுப்பு வாரி விரிவான தேர்ச்சிப் பகுப்பாய்வு</div>', unsafe_allow_html=True)
 # --- 1. தரவுகள் பெறுதல் ---
 exams_data = supabase.table("exams").select("*").execute().data
 classes_data = supabase.table("classes").select("*").execute().data
