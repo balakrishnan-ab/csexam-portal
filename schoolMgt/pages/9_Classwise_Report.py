@@ -1,10 +1,14 @@
 import streamlit as st
 import pandas as pd
 from supabase import create_client
-from utils import add_school_header # utils-லிருந்து தலைப்பை எடுக்கிறது
+from utils import add_school_header 
 
-# ஏற்கனவே உள்ள st.set_page_config-க்கு கீழே இதை அழைக்கவும்
+# --- பக்க அமைப்பு (config முதலில் இருக்க வேண்டும்) ---
+st.set_page_config(page_title="Evaluation Analysis", layout="wide")
+
+# பள்ளியின் பொதுவான தலைப்பை அழைத்தல்
 add_school_header()
+
 # --- Supabase இணைப்பு ---
 def get_supabase_client():
     if "supabase_instance" not in st.session_state:
@@ -13,40 +17,67 @@ def get_supabase_client():
 
 supabase = get_supabase_client()
 
-st.set_page_config(page_title="Evaluation Analysis", layout="wide")
-
-# ⚡ CSS - ஸ்டைலிங்
+# ⚡ CSS - முழுமையான ஸ்டைலிங் (Metric Cards உட்பட)
 st.markdown("""
     <style>
-    .stDataFrame td { font-weight: bold !important; font-size: 1px !important; white-space: pre !important; }
-    .main-stat { background-color: #f8fafc; border: 1px solid #e2e8f0; padding: 10px; border-radius: 10px; text-align: center; min-height: 100px; }
-    .stat-val { font-size: 20px; font-weight: bold; color: #1e293b; line-height: 1.2; }
-    .stat-label { font-size: 13px; color: #64748b; font-weight: bold; margin-bottom: 5px; }
-    .gender-sub { font-size: 12px; color: #3b82f6; font-weight: bold; display: block; margin-top: 3px; }
-    .info-card { padding: 8px; border-radius: 5px; margin-bottom: 5px; border-left: 4px solid #10b981; background-color: #f0fdf4; font-size: 14px; }
+    /* டேபிள் ஸ்டைல் */
+    .stDataFrame td { font-weight: bold !important; font-size: 13px !important; white-space: pre !important; }
+    
+    /* 📱 1. புள்ளிவிவரக் கட்டங்களுக்கான (Metric Cards) Responsive ஸ்டைல் */
+    .metric-container {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 10px;
+        justify-content: space-between;
+        width: 100%;
+        margin-bottom: 20px;
+    }
+    .metric-card {
+        background-color: #f8fafc;
+        border: 1px solid #e2e8f0;
+        padding: 12px 8px;
+        border-radius: 10px;
+        text-align: center;
+        flex: 1 1 calc(15% - 10px); /* கணினியில் 6 கட்டங்கள் */
+        min-width: 110px; /* மொபைலில் மிகச் சிறியதாகாமல் இருக்க */
+        box-shadow: 0 2px 4px rgba(0,0,0,0.05);
+    }
+    .stat-val { font-size: clamp(18px, 3vw, 24px); font-weight: bold; color: #1e293b; line-height: 1.2; }
+    .stat-label { font-size: 12px; color: #64748b; font-weight: bold; margin-bottom: 4px; text-transform: uppercase; }
+    .gender-sub { font-size: 11px; color: #3b82f6; font-weight: bold; display: block; margin-top: 2px; }
+
+    /* 📱 2. தலைப்புகளுக்கான Responsive ஸ்டைல் */
     .responsive-header {
-        font-size: clamp(18px, 4vw, 30px); /* மொபைலில் 18px, கணினியில் அதிகபட்சம் 30px என தானாக மாறும் */
+        font-size: clamp(20px, 4.5vw, 30px);
         font-weight: bold;
         color: #1e293b;
         text-align: left;
-        padding: 10px;
+        padding: 10px 0;
         line-height: 1.4;
-        width: 100%;
     }
-   .responsive-subtitle {
-        font-size: clamp(16px, 3.5vw, 24px); /* குறைந்தபட்சம் 16px, அதிகபட்சம் 24px */
+    .responsive-subtitle {
+        font-size: clamp(16px, 3.5vw, 22px);
         font-weight: bold;
-        color: #334155; /* சற்று மங்கலான கருப்பு நிறம் */
+        color: #334155;
         text-align: left;
-        padding: 5px 0px;
-        border-bottom: 2px solid #e2e8f0; /* கீழே ஒரு மெல்லிய கோடு (அழகுக்காக) */
-        margin-top: 15px;
-        margin-bottom: 10px;
-    } 
+        padding: 8px 0;
+        border-bottom: 2px solid #e2e8f0;
+        margin: 15px 0 10px 0;
+    }
+
+    /* தகவல் கார்டுகள் (Centum/Absent) */
+    .info-card { padding: 10px; border-radius: 6px; margin-bottom: 8px; border-left: 4px solid #10b981; background-color: #f0fdf4; font-size: 14px; font-weight: 500; }
+
+    /* மொபைல் போன்களுக்கான பிரத்யேக அட்ஜஸ்ட்மென்ட் */
+    @media (max-width: 600px) {
+        .metric-card { flex: 1 1 calc(45% - 10px); } /* மொபைலில் ஒரு வரிசைக்கு 2 கட்டங்கள் */
+        .metric-container { justify-content: center; }
+    }
     </style>
     """, unsafe_allow_html=True)
 
 st.markdown('<div class="responsive-header">📊 வகுப்பு வாரி விரிவான தேர்ச்சிப் பகுப்பாய்வு</div>', unsafe_allow_html=True)
+
 # --- 1. தரவுகள் பெறுதல் ---
 exams_data = supabase.table("exams").select("*").execute().data
 classes_data = supabase.table("classes").select("*").execute().data
@@ -136,7 +167,6 @@ if sel_exam_name and sel_base_class != "-- தேர்வு செய்க --
                     row_raw[sn] = "ABS"; fails += 1; fail_subs.append(sn)
                     subject_stats[sn]["app"] += 1; subject_stats[sn]["fail"] += 1
 
-            # 🥇 100/100 எடுத்தவர்களைப் பாடங்களுடன் சேர்த்தல்
             if student_centums:
                 centum_list.append(f"{s['student_name']} ({s['section']} - {', '.join(student_centums)})")
 
@@ -156,20 +186,28 @@ if sel_exam_name and sel_base_class != "-- தேர்வு செய்க --
             row_raw.update({"மொத்தம்": total_m, "Fails": fails, "தோல்வி விவரம்": f"({', '.join(fail_subs)})" if fail_subs else ""})
             report_rows.append(row_raw)
 
-        # --- Dashboard ---
-        st.markdown(f'<div class="responsive-subtitle">📌 {sel_base_class}-ஆம் வகுப்பு புள்ளிவிவரம்</div>', unsafe_allow_html=True)    #st.subheader(f"📌 {sel_base_class}-ஆம் வகுப்பு புள்ளிவிவரம்")
-        m_dash = st.columns(6)
-        titles = ["Total", "Present", "Pass", "Fail", "Pass %", "Class Avg"]
-        for i, k in enumerate(["total", "present", "pass"]):
-            v = st_count[k]["A"]; gt = f"<span class='gender-sub'>({st_count[k]['F']}F|{st_count[k]['M']}M)</span>" if split_gender else ""
-            m_dash[i].markdown(f'<div class="main-stat"><div class="stat-label">{titles[i]}</div><div class="stat-val">{v}{gt}</div></div>', unsafe_allow_html=True)
+        # --- 📱 Dashboard (New Metric Container) ---
+        st.markdown(f'<div class="responsive-subtitle">📌 {sel_base_class}-ஆம் வகுப்பு புள்ளிவிவரம்</div>', unsafe_allow_html=True)
         
-        f_a = st_count["present"]["A"] - st_count["pass"]["A"]; f_gt = f"<span class='gender-sub'>({st_count['present']['F']-st_count['pass']['F']}F|{st_count['present']['M']-st_count['pass']['M']}M)</span>" if split_gender else ""
-        m_dash[3].markdown(f'<div class="main-stat"><div class="stat-label">Fail</div><div class="stat-val">{f_a}{f_gt}</div></div>', unsafe_allow_html=True)
+        # கணக்கீடுகள்
+        f_a = st_count["present"]["A"] - st_count["pass"]["A"]
         p_a = round((st_count["pass"]["A"]/st_count["present"]["A"])*100, 1) if st_count["present"]["A"]>0 else 0
-        m_dash[4].markdown(f'<div class="main-stat"><div class="stat-label">Pass %</div><div class="stat-val" style="color:#16a34a">{p_a}%</div></div>', unsafe_allow_html=True)
         avg_v = round(sum(all_marks_list["A"])/len(all_marks_list["A"]),1) if all_marks_list["A"] else 0
-        m_dash[5].markdown(f'<div class="main-stat"><div class="stat-label">Class Avg</div><div class="stat-val" style="color:#3b82f6">{avg_v}</div></div>', unsafe_allow_html=True)
+        
+        # HTML Metric Cards
+        def get_gt(k): return f"<span class='gender-sub'>({st_count[k]['F']}F|{st_count[k]['M']}M)</span>" if split_gender else ""
+        f_gt = f"<span class='gender-sub'>({st_count['present']['F']-st_count['pass']['F']}F|{st_count['present']['M']-st_count['pass']['M']}M)</span>" if split_gender else ""
+
+        st.markdown(f"""
+            <div class="metric-container">
+                <div class="metric-card"><div class="stat-label">Total</div><div class="stat-val">{st_count['total']['A']}{get_gt('total')}</div></div>
+                <div class="metric-card"><div class="stat-label">Present</div><div class="stat-val">{st_count['present']['A']}{get_gt('present')}</div></div>
+                <div class="metric-card"><div class="stat-label">Pass</div><div class="stat-val" style="color:#16a34a">{st_count['pass']['A']}{get_gt('pass')}</div></div>
+                <div class="metric-card"><div class="stat-label">Fail</div><div class="stat-val" style="color:#ef4444">{f_a}{f_gt}</div></div>
+                <div class="metric-card"><div class="stat-label">Pass %</div><div class="stat-val" style="color:#16a34a">{p_a}%</div></div>
+                <div class="metric-card"><div class="stat-label">Class Avg</div><div class="stat-val" style="color:#3b82f6">{avg_v}</div></div>
+            </div>
+        """, unsafe_allow_html=True)
 
         st.divider()
         c_exp1, c_exp2 = st.columns(2)
