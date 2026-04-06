@@ -28,12 +28,21 @@ st.markdown("""
         font-size: clamp(18px, 4vw, 30px); /* மொபைலில் 18px, கணினியில் அதிகபட்சம் 30px என தானாக மாறும் */
         font-weight: bold;
         color: #1e293b;
-        text-align: center;
+        text-align: left;
         padding: 10px;
         line-height: 1.4;
         width: 100%;
     }
-    
+   .responsive-subtitle {
+        font-size: clamp(16px, 3.5vw, 24px); /* குறைந்தபட்சம் 16px, அதிகபட்சம் 24px */
+        font-weight: bold;
+        color: #334155; /* சற்று மங்கலான கருப்பு நிறம் */
+        text-align: left;
+        padding: 5px 0px;
+        border-bottom: 2px solid #e2e8f0; /* கீழே ஒரு மெல்லிய கோடு (அழகுக்காக) */
+        margin-top: 15px;
+        margin-bottom: 10px;
+    } 
     </style>
     """, unsafe_allow_html=True)
 
@@ -172,7 +181,7 @@ if sel_exam_name and sel_base_class != "-- தேர்வு செய்க --
                 for itm in absent_list: st.markdown(f'<div class="info-card" style="border-left-color:#ef4444; background-color:#fef2f2;">❌ {itm}</div>', unsafe_allow_html=True)
 
         # --- பாடவாரி பகுப்பாய்வு ---
-        st.subheader("📈 பாடவாரி விரிவான பகுப்பாய்வு")
+        st.markdown('<div class="responsive-subtitle">📈 பாடவாரி விரிவான பகுப்பாய்வு</div>', unsafe_allow_html=True)
         sub_df = []
         for sn in union_subs:
             stt = subject_stats[sn]; avg_s = round(sum(stt["marks"])/len(stt["marks"]),1) if stt["marks"] else 0
@@ -182,7 +191,8 @@ if sel_exam_name and sel_base_class != "-- தேர்வு செய்க --
 
         # --- முழுமையான மதிப்பெண் பட்டியல் ---
         st.divider()
-        st.subheader("📋 முழுமையான மதிப்பெண் பட்டியல்")
+        st.markdown('<div class="responsive-subtitle">📋 முழுமையான மதிப்பெண் பட்டியல்</div>', unsafe_allow_html=True)
+    
         show_detail = st.toggle("🔍 மதிப்பீட்டு விவரங்களைக் காட்டு (T+P+I / T+I)", value=True)
         
         final_list = []
@@ -214,7 +224,7 @@ if sel_exam_name and sel_base_class != "-- தேர்வு செய்க --
 
         # --- விரிவான தோல்விப் பட்டியல் ---
         st.divider()
-        st.subheader("📉 தோல்வி அடைந்த மாணவர்களின் விரிவான விவரம்")
+        st.markdown('<div class="responsive-subtitle">📉 தோல்வி அடைந்த மாணவர்களின் விரிவான விவரம்</div>', unsafe_allow_html=True)
         b1, b2 = st.columns(2)
         with b1:
             for n in [1, 2, 3]:
