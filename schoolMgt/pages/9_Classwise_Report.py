@@ -1,7 +1,10 @@
 import streamlit as st
 import pandas as pd
 from supabase import create_client
+from utils import add_school_header # utils-லிருந்து தலைப்பை எடுக்கிறது
 
+# ஏற்கனவே உள்ள st.set_page_config-க்கு கீழே இதை அழைக்கவும்
+add_school_header()
 # --- Supabase இணைப்பு ---
 def get_supabase_client():
     if "supabase_instance" not in st.session_state:
