@@ -27,7 +27,7 @@ with st.form("add_subject_form", clear_on_submit=True):
     col1, col2, col3 = st.columns([1, 2, 2])
     scode = col1.text_input("Code", placeholder="001").strip()
     sname = col2.text_input("பாடம் பெயர்").upper().strip()
-    etype = col3.selectbox("மதிப்பீட்டு முறை", ["90 + 10", "70 + 20 + 10","100","60+40"])
+    etype = col3.selectbox("மதிப்பீட்டு முறை", ["90 + 10", "70 + 20 + 10","100","75+25","60+40"])
     
     if st.form_submit_button("💾 பாடத்தைச் சேமி"):
         if scode and sname:
@@ -72,7 +72,7 @@ if subjects_data:
         col1, col2 = st.columns(2)
         with col1:
             new_name = st.text_input("பெயர் மாற்று:", value=row['subject_name']).upper()
-            new_etype = st.selectbox("முறை மாற்று:", ["90 + 10", "70 + 20 + 10"], 
+            new_etype = st.selectbox("முறை மாற்று:", ["90 + 10", "70 + 20 + 10","100","75+25","60+40"], 
                                    index=0 if row['eval_type'] == "90 + 10" else 1)
             
             if st.button("🆙 இற்றைப்படுத்து (Update)"):
