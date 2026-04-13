@@ -27,7 +27,7 @@ with st.form("add_subject_form", clear_on_submit=True):
     col1, col2, col3 = st.columns([1, 2, 2])
     scode = col1.text_input("Code", placeholder="001").strip()
     sname = col2.text_input("பாடம் பெயர்").upper().strip()
-    etype = col3.selectbox("மதிப்பீட்டு முறை", ["90 + 10", "70 + 20 + 10"])
+    etype = col3.selectbox("மதிப்பீட்டு முறை", ["90 + 10", "70 + 20 + 10","100","60+40"])
     
     if st.form_submit_button("💾 பாடத்தைச் சேமி"):
         if scode and sname:
