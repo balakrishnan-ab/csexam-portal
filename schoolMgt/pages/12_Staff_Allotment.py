@@ -95,4 +95,34 @@ if allotment_data:
     with tab1:
         st.subheader("அனைத்து ஒதுக்கீடுகள்")
         display_df = df[['ஆசிரியர்', 'class_name', 'subject_name', 'periods_per_week']]
-        display_df.columns = ['ஆசிரியர்', 'வகுப்பு', 'பாடம்', '
+        display_df.columns = ['ஆசிரியர்', 'வகுப்பு', 'பாடம்', 'பாடவேளைகள்']
+        st.dataframe(display_df, use_container_width=True, hide_index=True)
+
+    with tab2:
+        st.subheader("🔢 ஒரு வாரத்திற்கான மொத்த பாடவேளைகள்")
+        workload = display_df.groupby('ஆசிரியர்')['பாடவேளைகள்'].sum().reset_index()
+        workload.columns = ['ஆசிரியர் பெயர்', 'மொத்த பீரியடுகள்']
+        
+        # Highlighting logic: 28-க்கு மேல் இருந்தால் சிவப்பு நிறம்
+        def highlight_load(val):
+            color = 'red' if isinstance(val, (int, float)) and val > 28 else 'black'
+            return f'color: {color}'
+        
+        # st.table-க்கு பதில் st.dataframe பயன்படுத்தி பிழையைத் தவிர்த்தல்
+        styled_workload = workload.style.applymap(highlight_load, subset=['மொத்த பீரியடுகள்'])
+        st.dataframe(styled_workload, use_container_width=True, hide_index=True)
+        st.info("💡 குறிப்பு: ஒரு ஆசிரியருக்கு 28 பீரியடுக்கு மேல் இருந்தால் அது சிவப்பு நிறத்தில் காட்டப்படும்.")
+
+    # --- 4. நீக்குதல் வசதி ---
+    st.divider()
+    with st.expander("🗑️ ஒரு ஒதுக்கீட்டை நீக்க"):
+        del_options = {f"{row['ஆசிரியர்']} - {row['class_name']} ({row['subject_name']})": row['id'] for _, row in df.iterrows()}
+        selected_del = st.selectbox("தேர்வு செய்க:", ["-- தேர்வு செய்க --"] + list(del_options.keys()))
+        
+        if selected_del != "-- தேர்வு செய்க --":
+            if st.button("Delete Allocation", type="primary"):
+                supabase.table("staff_allotment").delete().eq("id", del_options[selected_del]).execute()
+                st.cache_data.clear()
+                st.rerun()
+else:
+    st.info("ℹ️ இன்னும் ஒதுக்கீடுகள் செய்யப்படவில்லை.")
