@@ -27,8 +27,8 @@ def get_color(text):
 # --- ⚡ FETCH DATA ---
 @st.cache_data(ttl=60)
 def fetch_teachers():
-    res = supabase.table("teachers").select("emis_id, short_name").order("short_name").execute()
-    return {f"{t['short_name']} ({t['emis_id']})": (t['emis_id'], t['short_name']) for t in res.data}
+    res = supabase.table("teachers").select("full_name, short_name").order("short_name").execute()
+    return {f"{t['short_name']} ({t['full_name']})": (t['full_name'], t['short_name']) for t in res.data}
 
 @st.cache_data(ttl=60)
 def fetch_subjects():
