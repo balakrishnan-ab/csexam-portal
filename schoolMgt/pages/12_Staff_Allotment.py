@@ -16,12 +16,14 @@ st.set_page_config(page_title="Staff Allotment", layout="wide", page_icon="📝"
 
 # --- 🎨 DYNAMIC COLOR GENERATOR ---
 def get_color(text):
-    """பெயரை அடிப்படையாகக் கொண்டு ஒரு நிலையான வண்ணத்தை (Hex Code) உருவாக்கும்"""
+    """பெயரை அடிப்படையாகக் கொண்டு ஒரு நிலையான வெளிர் வண்ணத்தை உருவாக்கும்"""
     hash_object = hashlib.md5(text.encode())
     hex_hash = hash_object.hexdigest()
-    # அடர் வண்ணங்களைத் தவிர்க்க வெளிர் வண்ணங்களாக (Pastel Colors) மாற்றுதல்
-    color = f"#{hex_hash[:6]}"
-    return color
+    # வெளிர் வண்ணங்களுக்காக (Pastel) RGB மதிப்புகளை உயர்த்துதல்
+    r = (int(hex_hash[:2], 16) % 128) + 127
+    g = (int(hex_hash[2:4], 16) % 128) + 127
+    b = (int(hex_hash[4:6], 16) % 128) + 127
+    return f'#{r:02x}{g:02x}{b:02x}'
 
 # --- ⚡ FETCH DATA ---
 @st.cache_data(ttl=60)
@@ -57,10 +59,10 @@ comb_groups = fetch_combined_data()
 all_dropdown_classes = base_classes + list(comb_groups.keys())
 allotment_list = fetch_allotment_data()
 
-st.title("👨‍🏫 ஆசிரியர் பாடவேளை ஒதுக்கீடு")
+st.title("👨‍🏫 ஆசிரியர் பாடவேளை ஒதுக்கீடு (Staff Allotment)")
 
 # --- 📐 LAYOUT ---
-col_form, col_visual = st.columns([1.6, 1.4])
+col_form, col_visual = st.columns([1.5, 1.5])
 
 with col_form:
     with st.form("allotment_form", clear_on_submit=True):
@@ -90,18 +92,17 @@ with col_form:
         st.subheader("📋 ஒதுக்கீடு பட்டியல்")
         df_allot = pd.DataFrame(allotment_list)
         
-        # அட்டவணையில் பாடங்களுக்கு நிலையான வண்ணம் பூசுதல்
-        def highlight_subjects(val):
-            color = get_color(val)
-            return f'background-color: {color}; color: black; font-weight: bold'
-
         df_display = df_allot[['teacher_id', 'teacher_name', 'class_name', 'subject_name', 'periods_per_week']]
         df_display.columns = ['EMIS ID', 'ஆசிரியர்', 'வகுப்பு', 'பாடம்', 'பீரியட்கள்']
         
-        st.dataframe(df_display.style.applymap(highlight_subjects, subset=['பாடம்']), use_container_width=True, hide_index=True)
+        # பிழையைத் தவிர்க்க map பயன்படுத்தப்பட்டுள்ளது
+        def style_sub(val):
+            return f'background-color: {get_color(val)}; color: black; font-weight: bold'
+        
+        st.dataframe(df_display.style.map(style_sub, subset=['பாடம்']), use_container_width=True, hide_index=True)
         
         with st.expander("🗑️ நீக்குதல்"):
-            del_opt = {f"{r['teacher_name']} - {r['class_name']} ({r['subject_name']})": r['id'] for r in allotment_list}
+            del_opt = {f"{r['teacher_name']} - {r['class_name']}": r['id'] for r in allotment_list}
             to_del = st.selectbox("தேர்வு செய்க:", ["-- Select --"] + list(del_opt.keys()))
             if st.button("Delete Now") and to_del != "-- Select --":
                 supabase.table("staff_allotment").delete().eq("id", del_opt[to_del]).execute()
@@ -111,7 +112,7 @@ with col_form:
 with col_visual:
     st.subheader("🏫 வகுப்பு வாரியான பாடவேளைகள்")
     
-    # --- 🧮 கணக்கீடு ---
+    # கணக்கீடு
     class_totals = {c: 0 for c in base_classes}
     for entry in allotment_list:
         target = entry['class_name']
@@ -122,8 +123,8 @@ with col_visual:
         elif target in class_totals:
             class_totals[target] += periods
 
-    # --- 🎨 Grid Layout (1 வரிசைக்கு 4 முதல் 6 வகுப்புகள்) ---
-    cols_per_row = 5 
+    # --- 🎨 Grid Layout (எண்கள் பெரிதாக்கப்பட்டுள்ளது) ---
+    cols_per_row = 4
     class_list = list(class_totals.items())
     
     for i in range(0, len(class_list), cols_per_row):
@@ -131,23 +132,21 @@ with col_visual:
         for j in range(cols_per_row):
             if i + j < len(class_list):
                 cls, total = class_list[i + j]
-                
-                # வகுப்பிற்கான நிலையான வண்ணம்
                 bg_color = get_color(cls)
-                # 45-க்கு மேல் போனால் பார்டர் சிவப்பாக மாறும்
-                border_style = "3px solid red" if total > 45 else f"1px solid {bg_color}"
+                # 45-க்கு மேல் போனால் பார்டர் தடிமனாக சிவப்பில் வரும்
+                border_style = "3px solid #FF4B4B" if total > 45 else f"1px solid #ddd"
                 
                 row_cols[j].markdown(f"""
                     <div style="
                         background-color: {bg_color};
-                        padding: 10px;
-                        border-radius: 8px;
+                        padding: 15px 5px;
+                        border-radius: 10px;
                         border: {border_style};
                         text-align: center;
                         margin-bottom: 10px;
-                        box-shadow: 2px 2px 5px rgba(0,0,0,0.1);
+                        box-shadow: 2px 2px 5px rgba(0,0,0,0.05);
                     ">
-                        <div style="font-size: 14px; font-weight: bold; color: black;">{cls}</div>
-                        <div style="font-size: 22px; font-weight: 900; color: black;">{total}</div>
+                        <div style="font-size: 16px; font-weight: bold; color: #333; margin-bottom: 5px;">{cls}</div>
+                        <div style="font-size: 32px; font-weight: 900; color: #000; line-height: 1;">{total}</div>
                     </div>
                 """, unsafe_allow_html=True)
