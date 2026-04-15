@@ -16,13 +16,12 @@ st.set_page_config(page_title="Staff Allotment", layout="wide", page_icon="📝"
 
 # --- 🎨 DYNAMIC COLOR GENERATOR ---
 def get_color(text):
-    """பெயரை அடிப்படையாகக் கொண்டு ஒரு நிலையான வெளிர் வண்ணத்தை உருவாக்கும்"""
+    """பெயரை அடிப்படையாகக் கொண்டு ஒரு நிலையான மென்மையான வண்ணத்தை உருவாக்கும்"""
     hash_object = hashlib.md5(text.encode())
     hex_hash = hash_object.hexdigest()
-    # வெளிர் வண்ணங்களுக்காக (Pastel) RGB மதிப்புகளை உயர்த்துதல்
-    r = (int(hex_hash[:2], 16) % 128) + 127
-    g = (int(hex_hash[2:4], 16) % 128) + 127
-    b = (int(hex_hash[4:6], 16) % 128) + 127
+    r = (int(hex_hash[:2], 16) % 100) + 155
+    g = (int(hex_hash[2:4], 16) % 100) + 155
+    b = (int(hex_hash[4:6], 16) % 100) + 155
     return f'#{r:02x}{g:02x}{b:02x}'
 
 # --- ⚡ FETCH DATA ---
@@ -69,11 +68,13 @@ with col_form:
         st.subheader("🆕 புதிய ஒதுக்கீடு")
         c1, c2 = st.columns(2)
         with c1:
+            # லேபிள் மாற்றப்பட்டுள்ளது
             selected_label = st.selectbox("ஆசிரியர்:", list(teachers_data.keys()))
             c_name = st.selectbox("வகுப்பு / குழு:", all_dropdown_classes)
         with c2:
             s_name = st.selectbox("பாடம்:", subjects_list)
-            p_count = st.number_input("பாடவேளைகள்:", min_value=1, value=5)
+            # இயல்புநிலை (Default) மதிப்பு 7 ஆக மாற்றப்பட்டுள்ளது
+            p_count = st.number_input("பாடவேளைகள்:", min_value=1, value=7)
         
         if st.form_submit_button("💾 ஒதுக்கீட்டைச் சேமி"):
             e_id, t_name = teachers_data[selected_label]
@@ -87,15 +88,12 @@ with col_form:
             st.cache_data.clear()
             st.rerun()
 
-    # --- 📋 ஒதுக்கீடு பட்டியல் ---
     if allotment_list:
         st.subheader("📋 ஒதுக்கீடு பட்டியல்")
         df_allot = pd.DataFrame(allotment_list)
-        
         df_display = df_allot[['teacher_id', 'teacher_name', 'class_name', 'subject_name', 'periods_per_week']]
         df_display.columns = ['EMIS ID', 'ஆசிரியர்', 'வகுப்பு', 'பாடம்', 'பீரியட்கள்']
         
-        # பிழையைத் தவிர்க்க map பயன்படுத்தப்பட்டுள்ளது
         def style_sub(val):
             return f'background-color: {get_color(val)}; color: black; font-weight: bold'
         
@@ -112,7 +110,6 @@ with col_form:
 with col_visual:
     st.subheader("🏫 வகுப்பு வாரியான பாடவேளைகள்")
     
-    # கணக்கீடு
     class_totals = {c: 0 for c in base_classes}
     for entry in allotment_list:
         target = entry['class_name']
@@ -123,8 +120,8 @@ with col_visual:
         elif target in class_totals:
             class_totals[target] += periods
 
-    # --- 🎨 Grid Layout (எண்கள் பெரிதாக்கப்பட்டுள்ளது) ---
-    cols_per_row = 4
+    # --- 🎨 Grid Layout (பெட்டிகள் சிறியதாக மாற்றப்பட்டுள்ளன) ---
+    cols_per_row = 5 # வரிசைக்கு 5 ஆக அதிகரிக்கப்பட்டுள்ளது
     class_list = list(class_totals.items())
     
     for i in range(0, len(class_list), cols_per_row):
@@ -133,20 +130,19 @@ with col_visual:
             if i + j < len(class_list):
                 cls, total = class_list[i + j]
                 bg_color = get_color(cls)
-                # 45-க்கு மேல் போனால் பார்டர் தடிமனாக சிவப்பில் வரும்
-                border_style = "3px solid #FF4B4B" if total > 45 else f"1px solid #ddd"
+                border_style = "2px solid #FF4B4B" if total > 45 else f"1px solid #ccc"
                 
                 row_cols[j].markdown(f"""
                     <div style="
                         background-color: {bg_color};
-                        padding: 15px 5px;
-                        border-radius: 10px;
+                        padding: 5px;
+                        border-radius: 6px;
                         border: {border_style};
                         text-align: center;
-                        margin-bottom: 10px;
-                        box-shadow: 2px 2px 5px rgba(0,0,0,0.05);
+                        margin-bottom: 5px;
+                        min-height: 60px;
                     ">
-                        <div style="font-size: 16px; font-weight: bold; color: #333; margin-bottom: 5px;">{cls}</div>
-                        <div style="font-size: 32px; font-weight: 900; color: #000; line-height: 1;">{total}</div>
+                        <div style="font-size: 13px; font-weight: bold; color: #333;">{cls}</div>
+                        <div style="font-size: 24px; font-weight: 900; color: #000; line-height: 1.1;">{total}</div>
                     </div>
                 """, unsafe_allow_html=True)
