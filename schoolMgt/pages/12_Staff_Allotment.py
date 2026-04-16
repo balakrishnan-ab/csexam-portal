@@ -16,6 +16,7 @@ st.set_page_config(page_title="Staff Allotment", layout="wide", page_icon="📝"
 
 # --- 🎨 COLOR GENERATOR ---
 def get_color(text):
+    """பெயரை அடிப்படையாகக் கொண்டு ஒரு நிலையான மென்மையான வண்ணத்தை உருவாக்கும்"""
     hash_object = hashlib.md5(text.encode()).hexdigest()
     r = (int(hash_object[:2], 16) % 100) + 155
     g = (int(hash_object[2:4], 16) % 100) + 155
@@ -25,8 +26,9 @@ def get_color(text):
 # --- ⚡ FETCH DATA ---
 @st.cache_data(ttl=60)
 def fetch_teachers():
+    """ஆசிரியர்களின் முழுப்பெயர் மற்றும் EMIS ID-ஐ எடுக்க"""
     res = supabase.table("teachers").select("emis_id, full_name, short_name").order("full_name").execute()
-    # Display format: LAVANYA A (LA)
+    # Display: LAVANYA A (LA)
     return {f"{t['full_name']} ({t['short_name']})": (t['emis_id'], t['short_name'], t['full_name']) for t in res.data}
 
 @st.cache_data(ttl=60)
@@ -46,11 +48,11 @@ def fetch_combined_data():
 
 @st.cache_data(ttl=60)
 def fetch_allotment_data():
-    # teachers table-உடன் ஜாயின் செய்து முழுப்பெயரை எடுக்கிறோம்
-    res = supabase.table("staff_allotment").select("*, teachers(full_name)").execute()
+    """ஒதுக்கீடு தரவுகளை மட்டும் எடுக்க (பிழையைத் தவிர்க்க Join நீக்கப்பட்டுள்ளது)"""
+    res = supabase.table("staff_allotment").select("*").execute()
     return res.data
 
-# தரவுகள்
+# தரவுகள் தயார் செய்தல்
 teachers_dict = fetch_teachers()
 subjects_list = fetch_subjects()
 base_classes = fetch_classes_only()
@@ -67,6 +69,7 @@ col_form, col_visual = st.columns([1.3, 1.7])
 with col_form:
     st.subheader("📝 ஒதுக்கீடு படிவம்")
     
+    # 1. ஆசிரியர் தேர்வு
     teacher_options = ["Select Teacher"] + list(teachers_dict.keys())
     selected_teacher_label = st.selectbox("ஆசிரியரைத் தேர்வு செய்க:", teacher_options)
     
@@ -89,18 +92,22 @@ with col_form:
             if not is_teacher_selected:
                 st.error("தயவுசெய்து ஒரு ஆசிரியரைத் தேர்வு செய்யவும்!")
             else:
-                supabase.table("staff_allotment").insert({
-                    "teacher_id": e_id, 
-                    "teacher_name": t_short,
-                    "class_name": c_name, 
-                    "subject_name": s_name, 
-                    "periods_per_week": p_count
-                }).execute()
-                st.cache_data.clear()
-                st.rerun()
+                try:
+                    supabase.table("staff_allotment").insert({
+                        "teacher_id": e_id, 
+                        "teacher_name": f"{t_full} ({t_short})", # முழுப்பெயரையும் சுருக்கத்தையும் சேமிக்கிறோம்
+                        "class_name": c_name, 
+                        "subject_name": s_name, 
+                        "periods_per_week": p_count
+                    }).execute()
+                    st.cache_data.clear()
+                    st.success("வெற்றிகரமாகச் சேமிக்கப்பட்டது!")
+                    st.rerun()
+                except Exception as e:
+                    st.error(f"சேமிப்பதில் பிழை: {e}")
 
 with col_visual:
-    # --- 🏫 வகுப்பு சில்லுகள் ---
+    # --- 🏫 வகுப்பு சில்லுகள் (Row of 6) ---
     st.markdown("##### 🏫 வகுப்பு வாரியாக (மொத்த பீரியட்கள்)")
     class_totals = {c: 0 for c in base_classes}
     if not df_allot.empty:
@@ -117,44 +124,43 @@ with col_visual:
         for idx, (cls, tot) in enumerate(row):
             bg = get_color(cls)
             border = "2px solid red" if tot > 45 else "1px solid #ddd"
-            cols[idx].markdown(f"""<div style="background:{bg}; padding:2px; border-radius:4px; border:{border}; text-align:center; margin-bottom:4px;">
-                <div style="font-size:10px; font-weight:bold;">{cls}</div>
-                <div style="font-size:16px; font-weight:bold;">{tot}</div>
+            cols[idx].markdown(f"""<div style="background:{bg}; padding:2px; border-radius:4px; border:{border}; text-align:center; margin-bottom:4px; height:50px;">
+                <div style="font-size:10px; font-weight:bold; color:black;">{cls}</div>
+                <div style="font-size:16px; font-weight:bold; color:black;">{tot}</div>
             </div>""", unsafe_allow_html=True)
 
     st.divider()
 
-    # --- 👨‍🏫 ஆசிரியர் சில்லுகள் ---
+    # --- 👨‍🏫 ஆசிரியர் சில்லுகள் (Row of 6) ---
     st.markdown("##### 👨‍🏫 ஆசிரியர் வாரியாக (மொத்த பீரியட்கள்)")
     if not df_allot.empty:
+        # சுருக்கப் பெயரைப் பயன்படுத்தி குரூப் செய்கிறோம்
         t_workload = df_allot.groupby('teacher_name')['periods_per_week'].sum().reset_index()
         t_rows = [t_workload.iloc[i:i+6] for i in range(0, len(t_workload), 6)]
         for row_df in t_rows:
             cols = st.columns(6)
             for idx, (_, r) in enumerate(row_df.iterrows()):
-                bg = get_color(r['teacher_name'])
-                cols[idx].markdown(f"""<div style="background:{bg}; padding:2px; border-radius:4px; border:1px solid #ccc; text-align:center; margin-bottom:4px;">
-                    <div style="font-size:10px; font-weight:bold;">{r['teacher_name']}</div>
-                    <div style="font-size:16px; font-weight:bold;">{r['periods_per_week']}</div>
+                name_to_show = r['teacher_name'].split('(')[-1].replace(')', '') # சுருக்கப் பெயரை மட்டும் காட்ட
+                bg = get_color(name_to_show)
+                cols[idx].markdown(f"""<div style="background:{bg}; padding:2px; border-radius:4px; border:1px solid #ccc; text-align:center; margin-bottom:4px; height:50px;">
+                    <div style="font-size:10px; font-weight:bold; color:black;">{name_to_show}</div>
+                    <div style="font-size:16px; font-weight:bold; color:black;">{r['periods_per_week']}</div>
                 </div>""", unsafe_allow_html=True)
 
-# --- 📊 அட்டவணை (ஆசிரியர் முழுப்பெயருடன்) ---
+# --- 📊 அட்டவணை (Filter வசதியுடன்) ---
 st.divider()
 if is_teacher_selected:
+    # தேர்வு செய்யப்பட்ட ஆசிரியரின் பெயர் 'LAVANYA A (LA)' வடிவில் இருப்பதால் அதைத் தேடுகிறோம்
+    mask = df_allot['teacher_id'] == e_id
+    display_df = df_allot[mask] if not df_allot.empty else pd.DataFrame()
     st.subheader(f"📊 {selected_teacher_label} - ஒதுக்கீடு விவரம்")
-    display_df = df_allot[df_allot['teacher_id'] == e_id].copy() if not df_allot.empty else pd.DataFrame()
 else:
+    display_df = df_allot
     st.subheader("📊 அனைத்து ஆசிரியர் ஒதுக்கீடு விவரங்கள்")
-    display_df = df_allot.copy() if not df_allot.empty else pd.DataFrame()
 
 if not display_df.empty:
-    # அட்டவணையில் 'முழுப்பெயர் (சுருக்கப்பெயர்)' காட்ட ஜாயின் செய்த தரவை பயன்படுத்துகிறோம்
-    display_df['full_display'] = display_df.apply(
-        lambda x: f"{x['teachers']['full_name']} ({x['teacher_name']})", axis=1
-    )
-    
-    df_show = display_df[['full_display', 'class_name', 'subject_name', 'periods_per_week']]
-    df_show.columns = ['ஆசிரியர்', 'வகுப்பு', 'பாடம்', 'பீரியட்கள்']
+    df_show = display_df[['teacher_name', 'class_name', 'subject_name', 'periods_per_week']]
+    df_show.columns = ['ஆசிரியர் (முழுபெயர்)', 'வகுப்பு', 'பாடம்', 'பீரியட்கள்']
     
     st.dataframe(
         df_show.style.map(lambda x: f'background-color: {get_color(str(x))}; color: black;', subset=['பாடம்']), 
@@ -162,10 +168,12 @@ if not display_df.empty:
         hide_index=True
     )
     
-    with st.expander("🗑️ நீக்க"):
-        del_opt = {f"{r['ஆசிரியர்']} - {r['வகுப்பு']} ({r['பாடம்']})": display_df.iloc[idx]['id'] for idx, r in df_show.reset_index().iterrows()}
+    with st.expander("🗑️ ஒரு ஒதுக்கீட்டை நீக்க"):
+        del_opt = {f"{r['ஆசிரியர் (முழுபெயர்)']} - {r['வகுப்பு']} ({r['பாடம்']})": display_df.iloc[idx]['id'] for idx, r in df_show.reset_index().iterrows()}
         to_del = st.selectbox("தேர்வு செய்க:", ["-- Select --"] + list(del_opt.keys()))
-        if st.button("Delete") and to_del != "-- Select --":
+        if st.button("நீக்கு (Delete)", type="primary") and to_del != "-- Select --":
             supabase.table("staff_allotment").delete().eq("id", del_opt[to_del]).execute()
             st.cache_data.clear()
             st.rerun()
+else:
+    st.info("தகவல்கள் எதுவும் இல்லை.")
