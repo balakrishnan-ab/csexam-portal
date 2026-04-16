@@ -26,7 +26,8 @@ def get_color(text):
 @st.cache_data(ttl=60)
 def fetch_teachers():
     res = supabase.table("teachers").select("emis_id, full_name, short_name").order("full_name").execute()
-    return {f"{t['full_name']} ({t['short_name']})": (t['emis_id'], t['short_name']) for t in res.data}
+    # Display format: LAVANYA A (LA)
+    return {f"{t['full_name']} ({t['short_name']})": (t['emis_id'], t['short_name'], t['full_name']) for t in res.data}
 
 @st.cache_data(ttl=60)
 def fetch_subjects():
@@ -45,7 +46,8 @@ def fetch_combined_data():
 
 @st.cache_data(ttl=60)
 def fetch_allotment_data():
-    res = supabase.table("staff_allotment").select("*").execute()
+    # teachers table-உடன் ஜாயின் செய்து முழுப்பெயரை எடுக்கிறோம்
+    res = supabase.table("staff_allotment").select("*, teachers(full_name)").execute()
     return res.data
 
 # தரவுகள்
@@ -60,18 +62,19 @@ df_allot = pd.DataFrame(allotment_list) if allotment_list else pd.DataFrame()
 st.title("👨‍🏫 ஆசிரியர் பாடவேளை ஒதுக்கீடு")
 
 # --- 📐 LAYOUT ---
-col_form, col_visual = st.columns([1.4, 1.6])
+col_form, col_visual = st.columns([1.3, 1.7])
 
 with col_form:
     st.subheader("📝 ஒதுக்கீடு படிவம்")
     
-    # 1. ஆசிரியர் தேர்வு (Select Teacher ஆப்ஷனுடன்)
     teacher_options = ["Select Teacher"] + list(teachers_dict.keys())
     selected_teacher_label = st.selectbox("ஆசிரியரைத் தேர்வு செய்க:", teacher_options)
     
     is_teacher_selected = selected_teacher_label != "Select Teacher"
     
-        
+    if is_teacher_selected:
+        e_id, t_short, t_full = teachers_dict[selected_teacher_label]
+    
     with st.form("allotment_form", clear_on_submit=True):
         f1, f2 = st.columns(2)
         with f1:
@@ -87,15 +90,18 @@ with col_form:
                 st.error("தயவுசெய்து ஒரு ஆசிரியரைத் தேர்வு செய்யவும்!")
             else:
                 supabase.table("staff_allotment").insert({
-                    "teacher_id": e_id, "teacher_name": t_short,
-                    "class_name": c_name, "subject_name": s_name, "periods_per_week": p_count
+                    "teacher_id": e_id, 
+                    "teacher_name": t_short,
+                    "class_name": c_name, 
+                    "subject_name": s_name, 
+                    "periods_per_week": p_count
                 }).execute()
                 st.cache_data.clear()
                 st.rerun()
 
 with col_visual:
-    # --- 🏫 வகுப்பு சில்லுகள் (Row of 6) ---
-    st.markdown("##### 🏫 வகுப்பு வாரியாக")
+    # --- 🏫 வகுப்பு சில்லுகள் ---
+    st.markdown("##### 🏫 வகுப்பு வாரியாக (மொத்த பீரியட்கள்)")
     class_totals = {c: 0 for c in base_classes}
     if not df_allot.empty:
         for _, entry in df_allot.iterrows():
@@ -118,8 +124,8 @@ with col_visual:
 
     st.divider()
 
-    # --- 👨‍🏫 ஆசிரியர் சில்லுகள் (Row of 6) ---
-    st.markdown("##### 👨‍🏫 ஆசிரியர் வாரியாக (பீரியட்கள்)")
+    # --- 👨‍🏫 ஆசிரியர் சில்லுகள் ---
+    st.markdown("##### 👨‍🏫 ஆசிரியர் வாரியாக (மொத்த பீரியட்கள்)")
     if not df_allot.empty:
         t_workload = df_allot.groupby('teacher_name')['periods_per_week'].sum().reset_index()
         t_rows = [t_workload.iloc[i:i+6] for i in range(0, len(t_workload), 6)]
@@ -132,19 +138,29 @@ with col_visual:
                     <div style="font-size:16px; font-weight:bold;">{r['periods_per_week']}</div>
                 </div>""", unsafe_allow_html=True)
 
-# --- 📊 வடிகட்டப்பட்ட அட்டவணை ---
+# --- 📊 அட்டவணை (ஆசிரியர் முழுப்பெயருடன்) ---
 st.divider()
 if is_teacher_selected:
     st.subheader(f"📊 {selected_teacher_label} - ஒதுக்கீடு விவரம்")
-    display_df = df_allot[df_allot['teacher_id'] == e_id] if not df_allot.empty else pd.DataFrame()
+    display_df = df_allot[df_allot['teacher_id'] == e_id].copy() if not df_allot.empty else pd.DataFrame()
 else:
     st.subheader("📊 அனைத்து ஆசிரியர் ஒதுக்கீடு விவரங்கள்")
-    display_df = df_allot
+    display_df = df_allot.copy() if not df_allot.empty else pd.DataFrame()
 
 if not display_df.empty:
-    df_show = display_df[['teacher_name', 'class_name', 'subject_name', 'periods_per_week']]
+    # அட்டவணையில் 'முழுப்பெயர் (சுருக்கப்பெயர்)' காட்ட ஜாயின் செய்த தரவை பயன்படுத்துகிறோம்
+    display_df['full_display'] = display_df.apply(
+        lambda x: f"{x['teachers']['full_name']} ({x['teacher_name']})", axis=1
+    )
+    
+    df_show = display_df[['full_display', 'class_name', 'subject_name', 'periods_per_week']]
     df_show.columns = ['ஆசிரியர்', 'வகுப்பு', 'பாடம்', 'பீரியட்கள்']
-    st.dataframe(df_show.style.map(lambda x: f'background-color: {get_color(str(x))}; color: black;', subset=['பாடம்']), use_container_width=True, hide_index=True)
+    
+    st.dataframe(
+        df_show.style.map(lambda x: f'background-color: {get_color(str(x))}; color: black;', subset=['பாடம்']), 
+        use_container_width=True, 
+        hide_index=True
+    )
     
     with st.expander("🗑️ நீக்க"):
         del_opt = {f"{r['ஆசிரியர்']} - {r['வகுப்பு']} ({r['பாடம்']})": display_df.iloc[idx]['id'] for idx, r in df_show.reset_index().iterrows()}
@@ -153,5 +169,3 @@ if not display_df.empty:
             supabase.table("staff_allotment").delete().eq("id", del_opt[to_del]).execute()
             st.cache_data.clear()
             st.rerun()
-else:
-    st.info("தகவல்கள் இல்லை.")
