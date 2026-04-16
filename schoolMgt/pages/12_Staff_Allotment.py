@@ -71,12 +71,7 @@ with col_form:
     
     is_teacher_selected = selected_teacher_label != "Select Teacher"
     
-    if is_teacher_selected:
-        e_id, t_short = teachers_dict[selected_teacher_label]
-        teacher_allots = df_allot[df_allot['teacher_id'] == e_id] if not df_allot.empty else pd.DataFrame()
-        total_p = teacher_allots['periods_per_week'].sum() if not teacher_allots.empty else 0
-        st.metric(f"{t_short} - மொத்த பீரியட்கள்", total_p)
-    
+        
     with st.form("allotment_form", clear_on_submit=True):
         f1, f2 = st.columns(2)
         with f1:
