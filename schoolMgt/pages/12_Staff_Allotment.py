@@ -162,21 +162,23 @@ if not df_allot.empty:
             edit_options = {f"{r['ஆசிரியர்_பெயர்']} - {r['class_name']} ({r['subject_name']})": r['id'] for _, r in display_df.iterrows()}
             selected_edit = st.selectbox("மாற்ற வேண்டிய பதிவைத் தேர்வு செய்க:", ["-- Select --"] + list(edit_options.keys()))
             
-            if selected_edit != "-- Select --":
+        if selected_edit != "-- Select --":
                 record_id = edit_options[selected_edit]
                 row = display_df[display_df['id'] == record_id].iloc[0]
                 
-                c1, c2, c3 = st.columns(3)
-                new_periods = c1.number_input("புதிய பீரியட்கள்:", value=int(row['periods_per_week']), key="edit_p")
-                new_double = c2.number_input("புதிய தொடர்:", value=int(row['double_period_count']), key="edit_d")
+                # பிழையைத் தவிர்க்க '0' default மதிப்பைக் கொடுத்தல்
+                current_p = int(row['periods_per_week']) if pd.notnull(row['periods_per_week']) else 0
+                current_d = int(row['double_period_count']) if pd.notnull(row['double_period_count']) else 0
+                
+                c1, c2 = st.columns(2)
+                new_periods = c1.number_input("புதிய பீரியட்கள்:", value=current_p, key="edit_p")
+                new_double = c2.number_input("புதிய தொடர்:", value=current_d, key="edit_d")
                 
                 col_btn1, col_btn2 = st.columns(2)
                 if col_btn1.button("💾 மாற்றத்தைச் சேமி", use_container_width=True):
-                    supabase.table("staff_allotment").update({"periods_per_week": new_periods, "double_period_count": new_double}).eq("id", record_id).execute()
-                    st.cache_data.clear()
-                    st.rerun()
-                
-                if col_btn2.button("🗑️ ஒதுக்கீட்டை நீக்கு", use_container_width=True, type="primary"):
-                    supabase.table("staff_allotment").delete().eq("id", record_id).execute()
+                    supabase.table("staff_allotment").update({
+                        "periods_per_week": new_periods, 
+                        "double_period_count": new_double
+                    }).eq("id", record_id).execute()
                     st.cache_data.clear()
                     st.rerun()
