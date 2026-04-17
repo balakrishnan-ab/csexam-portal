@@ -164,4 +164,14 @@ if not display_df.empty:
     with st.expander("🗑️ ஒரு ஒதுக்கீட்டை நீக்க"):
         # Unique keys for deletion using the original dataframe index
         del_dict = {}
-        for idx, row in display_df.iterrows
+        for idx, row in display_df.iterrows():
+            label = f"{row['teacher_name']} - {row['class_name']} ({row['subject_name']})"
+            del_dict[label] = row['id']
+            
+        to_del = st.selectbox("நீக்க வேண்டிய ஒதுக்கீட்டைத் தேர்வு செய்க:", ["-- Select --"] + list(del_dict.keys()))
+        if st.button("Delete Now", type="primary") and to_del != "-- Select --":
+            supabase.table("staff_allotment").delete().eq("id", del_dict[to_del]).execute()
+            st.cache_data.clear()
+            st.rerun()
+else:
+    st.info("தகவல்கள் எதுவும் இல்லை.")
