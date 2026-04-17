@@ -129,52 +129,49 @@ with col_visual:
                 <div style="font-size:16px; font-weight:bold; color:black;">{tot}</div>
             </div>""", unsafe_allow_html=True)
 
-# --- 📊 அட்டவணை பகுதி (Dynamic Filter வசதியுடன்) ---
-st.divider()
+    st.divider()
 
-# 1. EMIS ID மூலம் ஆசிரியரின் முழுப் பெயரை உருவாக்குதல்
+    # --- 🆕 மீட்கப்பட்ட ஆசிரியர் சில்லுகள் (Teacher Chips) ---
+    st.markdown("##### 👨‍🏫 ஆசிரியர் வாரியாக மொத்த சுமை")
+    if not df_allot.empty:
+        # EMIS ID மூலம் ஒவ்வொரு ஆசிரியரின் மொத்த பீரியட்களையும் கணக்கிடுதல்
+        teacher_workload = df_allot.groupby('teacher_id')['periods_per_week'].sum().reset_index()
+        
+        t_rows = [teacher_workload.iloc[i:i+6] for i in range(0, len(teacher_workload), 6)]
+        for row_df in t_rows:
+            cols = st.columns(6)
+            for idx, (_, r) in enumerate(row_df.iterrows()):
+                # EMIS ID-யை வைத்து சுருக்கப் பெயரை (Short Name) மட்டும் காட்டுகிறோம்
+                full_label = emis_to_full.get(r['teacher_id'], "Unknown")
+                short_name_display = full_label.split('(')[-1].replace(')', '') if '(' in full_label else full_label[:5]
+                
+                bg = get_color(short_name_display)
+                cols[idx].markdown(f"""<div style="background:{bg}; padding:2px; border-radius:4px; border:1px solid #ccc; text-align:center; margin-bottom:4px; height:50px;">
+                    <div style="font-size:10px; font-weight:bold; color:black;">{short_name_display}</div>
+                    <div style="font-size:16px; font-weight:bold; color:black;">{r['periods_per_week']}</div>
+                </div>""", unsafe_allow_html=True)
+    else:
+        st.info("ஆசிரியர்களுக்கு இன்னும் பணிகள் ஒதுக்கப்படவில்லை.")
+
+# --- 📊 அட்டவணை பகுதி ---
+st.divider()
 if not df_allot.empty:
     df_allot['ஆசிரியர்_பெயர்'] = df_allot['teacher_id'].map(emis_to_full).fillna(df_allot['teacher_name'])
 
-    # 🎯 புதிய வடிகட்டி (Filtering Logic)
     if is_teacher_selected:
-        # ஆசிரியர் தேர்ந்தெடுக்கப்பட்டால் அவர் விவரம் மட்டும்
         display_df = df_allot[df_allot['teacher_id'] == e_id].copy()
         st.subheader(f"📊 {selected_teacher_label} - ஒதுக்கீடு விவரங்கள்")
     else:
-        # ஆசிரியர் தேர்ந்தெடுக்கப்படாத போது அனைத்து விவரங்களும்
         display_df = df_allot.copy()
         st.subheader("📊 அனைத்து ஆசிரியர் ஒதுக்கீடு விவரங்கள்")
 
     if not display_df.empty:
-        # தேவையான காலங்களை மட்டும் எடுத்தல்
         cols_to_show = ['ஆசிரியர்_பெயர்', 'class_name', 'subject_name', 'periods_per_week', 'double_period_count']
         df_show = display_df[cols_to_show].copy()
-        
-        # நெடுவரிசை பெயர்களைத் தமிழில் மாற்றுதல்
-        column_mapping = {
-            'ஆசிரியர்_பெயர்': 'ஆசிரியர்',
-            'class_name': 'வகுப்பு',
-            'subject_name': 'பாடம்',
-            'periods_per_week': 'மொத்த பீரியட்கள்',
-            'double_period_count': 'தொடர் பாடவேளைகள்'
-        }
-        df_show.rename(columns=column_mapping, inplace=True)
+        df_show.columns = ['ஆசிரியர்', 'வகுப்பு', 'பாடம்', 'மொத்த பீரியட்கள்', 'தொடர் பாடவேளைகள்']
         
         st.dataframe(
             df_show.style.map(lambda x: f'background-color: {get_color(str(x))}; color: black;', subset=['பாடம்']), 
             use_container_width=True, 
             hide_index=True
         )
-        
-        with st.expander("🗑️ ஒரு ஒதுக்கீட்டை நீக்க"):
-            del_dict = {f"{r['ஆசிரியர்']} - {r['வகுப்பு']} ({r['பாடம்']})": r_id for r_id, r in zip(display_df['id'], df_show.to_dict('records'))}
-            to_del = st.selectbox("தேர்வு செய்க:", ["-- Select --"] + list(del_dict.keys()))
-            if st.button("Delete") and to_del != "-- Select --":
-                supabase.table("staff_allotment").delete().eq("id", del_dict[to_del]).execute()
-                st.cache_data.clear()
-                st.rerun()
-    else:
-        st.info("இந்த ஆசிரியருக்கு இன்னும் ஒதுக்கீடுகள் செய்யப்படவில்லை.")
-else:
-    st.info("தகவல்கள் எதுவும் இல்லை.")
