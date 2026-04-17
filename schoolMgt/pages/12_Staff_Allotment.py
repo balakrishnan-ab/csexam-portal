@@ -56,8 +56,6 @@ comb_groups = fetch_combined_data()
 all_dropdown_classes = base_classes + list(comb_groups.keys())
 allotment_list = fetch_allotment_data()
 df_allot = pd.DataFrame(allotment_list) if allotment_list else pd.DataFrame()
-
-# EMIS ID Map (பெயர் பிழையைத் தவிர்க்க)
 emis_to_full = {val[0]: key for key, val in teachers_dict.items()}
 
 st.title("👨‍🏫 ஆசிரியர் பாடவேளை ஒதுக்கீடு")
@@ -85,7 +83,8 @@ with col_form:
             s_name = st.selectbox("பாடம்:", subjects_list, index=default_sub_index)
         with f2:
             p_count = st.number_input("வாரத்தின் மொத்த பீரியட்கள்:", min_value=1, value=7)
-            double_freq = st.number_input("தொடர் பாடவேளைகள் எண்ணிக்கை:", min_value=0, max_value=5, value=0)
+            # நீங்கள் கேட்டபடி லேபிள் சுருக்கப்பட்டுள்ளது
+            double_freq = st.number_input("தொடர் பாடவேளைகள்:", min_value=0, max_value=5, value=0)
             
             submit = st.form_submit_button("💾 ஒதுக்கீட்டைச் சேமி", use_container_width=True)
         
@@ -105,7 +104,7 @@ with col_form:
                     st.cache_data.clear()
                     st.rerun()
                 except Exception as e:
-                    st.error(f"Error: {e}")
+                    st.error(f"பிழை: {e}")
 
 with col_visual:
     # --- 🏫 வகுப்பு சில்லுகள் ---
@@ -131,19 +130,30 @@ with col_visual:
                 <div style="font-size:16px; font-weight:bold; color:black;">{tot}</div>
             </div>""", unsafe_allow_html=True)
 
-# --- 📊 அட்டவணை பகுதி (KeyError சரிசெய்யப்பட்ட பகுதி) ---
+# --- 📊 அட்டவணை பகுதி (KeyError பிழை நீக்கப்பட்டது) ---
 st.divider()
 st.subheader("📊 அனைத்து ஆசிரியர் ஒதுக்கீடு விவரங்கள்")
 
 if not df_allot.empty:
-    # 1. முதலில் EMIS ID மூலம் பெயரை மேப் செய்து புதிய காலம் உருவாக்குதல்
-    df_allot['ஆசிரியர்_பெயர்'] = df_allot['teacher_id'].map(emis_to_full).fillna(df_allot['teacher_name'])
+    # 1. EMIS ID மூலம் ஆசிரியரின் முழுப் பெயரை உருவாக்குதல்
+    df_allot['ஆசிரியர்_முழுப்பெயர்'] = df_allot['teacher_id'].map(emis_to_full).fillna(df_allot['teacher_name'])
     
-    # 2. இப்போது நமக்குத் தேவையான காலங்களை மட்டும் எடுத்தல்
-    df_show = df_allot[['ஆசிரியர்_பெயர்', 'class_name', 'subject_name', 'periods_per_week', 'double_period_count']].copy()
+    # 2. பிழையைத் தவிர்க்க, தேவையான நெடுவரிசைகள் இருப்பதை உறுதி செய்து எடுத்தல்
+    cols_to_show = ['ஆசிரியர்_முழுப்பெயர்', 'class_name', 'subject_name', 'periods_per_week']
+    if 'double_period_count' in df_allot.columns:
+        cols_to_show.append('double_period_count')
+    
+    df_show = df_allot[cols_to_show].copy()
     
     # 3. நெடுவரிசை பெயர்களைத் தமிழில் மாற்றுதல்
-    df_show.columns = ['ஆசிரியர்', 'வகுப்பு', 'பாடம்', 'மொத்த பீரியட்கள்', 'தொடர் பீரியட்கள்']
+    column_mapping = {
+        'ஆசிரியர்_முழுப்பெயர்': 'ஆசிரியர்',
+        'class_name': 'வகுப்பு',
+        'subject_name': 'பாடம்',
+        'periods_per_week': 'மொத்த பீரியட்கள்',
+        'double_period_count': 'தொடர் பாடவேளைகள்'
+    }
+    df_show.rename(columns=column_mapping, inplace=True)
     
     st.dataframe(
         df_show.style.map(lambda x: f'background-color: {get_color(str(x))}; color: black;', subset=['பாடம்']), 
@@ -152,7 +162,7 @@ if not df_allot.empty:
     )
     
     with st.expander("🗑️ ஒரு ஒதுக்கீட்டை நீக்க"):
-        del_dict = {f"{r['ஆசிரியர்']} - {r['வகுப்பு']}": r_id for r_id, r in zip(df_allot['id'], df_show.to_dict('records'))}
+        del_dict = {f"{r['ஆசிரியர்']} - {r['வகுப்பு']} ({r['பாடம்']})": r_id for r_id, r in zip(df_allot['id'], df_show.to_dict('records'))}
         to_del = st.selectbox("தேர்வு செய்க:", ["-- Select --"] + list(del_dict.keys()))
         if st.button("Delete") and to_del != "-- Select --":
             supabase.table("staff_allotment").delete().eq("id", del_dict[to_del]).execute()
