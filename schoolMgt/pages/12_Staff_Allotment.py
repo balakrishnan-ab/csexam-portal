@@ -56,7 +56,9 @@ comb_groups = fetch_combined_data()
 all_dropdown_classes = base_classes + list(comb_groups.keys())
 allotment_list = fetch_allotment_data()
 df_allot = pd.DataFrame(allotment_list) if allotment_list else pd.DataFrame()
-emis_to_full_display = {val[0]: key for key, val in teachers_dict.items()}
+
+# EMIS ID Map (பெயர் பிழையைத் தவிர்க்க)
+emis_to_full = {val[0]: key for key, val in teachers_dict.items()}
 
 st.title("👨‍🏫 ஆசிரியர் பாடவேளை ஒதுக்கீடு")
 
@@ -83,18 +85,13 @@ with col_form:
             s_name = st.selectbox("பாடம்:", subjects_list, index=default_sub_index)
         with f2:
             p_count = st.number_input("வாரத்தின் மொத்த பீரியட்கள்:", min_value=1, value=7)
-            # 🆕 வாரத்திற்கு எத்தனை முறை Double Period வர வேண்டும்?
-            double_freq = st.number_input("தொடர் பாடவேளைகளின் எண்ணிக்கை (No. of Double Periods):", 
-                                         min_value=0, max_value=5, value=0, 
-                                         help="வாரத்திற்கு எத்தனை முறை 2 பீரியட்கள் தொடர்ந்து வர வேண்டும்?")
+            double_freq = st.number_input("தொடர் பாடவேளைகள் எண்ணிக்கை:", min_value=0, max_value=5, value=0)
             
             submit = st.form_submit_button("💾 ஒதுக்கீட்டைச் சேமி", use_container_width=True)
         
         if submit:
             if not is_teacher_selected:
-                st.warning("தயவுசெய்து ஒரு ஆசிரியரைத் தேர்வு செய்யவும்!")
-            elif (double_freq * 2) > p_count:
-                st.error(f"பிழை: {double_freq} முறை தொடர் பீரியட்கள் ஒதுக்க மொத்த பீரியட்கள் போதாது!")
+                st.warning("ஆசிரியரைத் தேர்வு செய்யவும்!")
             else:
                 try:
                     supabase.table("staff_allotment").insert({
@@ -106,32 +103,60 @@ with col_form:
                         "double_period_count": double_freq
                     }).execute()
                     st.cache_data.clear()
-                    st.success("வெற்றிகரமாகச் சேமிக்கப்பட்டது!")
                     st.rerun()
                 except Exception as e:
-                    st.error(f"சேமிப்பதில் பிழை: {e}")
+                    st.error(f"Error: {e}")
 
-# (வகுப்பு மற்றும் ஆசிரியர் சில்லுகள் - காட்சிப்படுத்துதல்)
 with col_visual:
+    # --- 🏫 வகுப்பு சில்லுகள் ---
     st.markdown("##### 🏫 வகுப்பு வாரியாக சுமை")
-    # ... (முந்தைய குறியீட்டில் உள்ள அதே காட்சிப்படுத்தல் லாஜிக்) ...
-    st.info("இங்கு வகுப்பு மற்றும் ஆசிரியர் வாரியான பணிச்சுமை (Workload) தோன்றும்.")
+    class_totals = {c: 0 for c in base_classes}
+    if not df_allot.empty:
+        for _, entry in df_allot.iterrows():
+            target, p = entry['class_name'], entry['periods_per_week']
+            if target in comb_groups:
+                for sub_c in comb_groups[target]:
+                    if sub_c in class_totals: class_totals[sub_c] += p
+            elif target in class_totals:
+                class_totals[target] += p
 
-# --- 📊 அட்டவணை பகுதி ---
+    c_rows = [list(class_totals.items())[i:i+6] for i in range(0, len(class_totals), 6)]
+    for row in c_rows:
+        cols = st.columns(6)
+        for idx, (cls, tot) in enumerate(row):
+            bg = get_color(cls)
+            border = "2px solid red" if tot > 45 else "1px solid #ddd"
+            cols[idx].markdown(f"""<div style="background:{bg}; padding:2px; border-radius:4px; border:{border}; text-align:center; margin-bottom:4px; height:50px;">
+                <div style="font-size:10px; font-weight:bold; color:black;">{cls}</div>
+                <div style="font-size:16px; font-weight:bold; color:black;">{tot}</div>
+            </div>""", unsafe_allow_html=True)
+
+# --- 📊 அட்டவணை பகுதி (KeyError சரிசெய்யப்பட்ட பகுதி) ---
 st.divider()
 st.subheader("📊 அனைத்து ஆசிரியர் ஒதுக்கீடு விவரங்கள்")
 
 if not df_allot.empty:
-    # முழுப் பெயரைச் சரியாகக் காட்டுதல்
-    df_allot['ஆசிரியர்'] = df_allot['teacher_id'].map(emis_to_full_display).fillna(df_allot['teacher_name'])
+    # 1. முதலில் EMIS ID மூலம் பெயரை மேப் செய்து புதிய காலம் உருவாக்குதல்
+    df_allot['ஆசிரியர்_பெயர்'] = df_allot['teacher_id'].map(emis_to_full).fillna(df_allot['teacher_name'])
     
-    df_show = df_allot[['ஆசிரியர்', 'class_name', 'subject_name', 'periods_per_week', 'double_period_count']].copy()
-    df_show.columns = ['ஆசிரியர் பெயர்', 'வகுப்பு', 'பாடம்', 'மொத்த பீரியட்கள்', 'தொடர் பீரியட்கள் எண்ணிக்கை']
+    # 2. இப்போது நமக்குத் தேவையான காலங்களை மட்டும் எடுத்தல்
+    df_show = df_allot[['ஆசிரியர்_பெயர்', 'class_name', 'subject_name', 'periods_per_week', 'double_period_count']].copy()
+    
+    # 3. நெடுவரிசை பெயர்களைத் தமிழில் மாற்றுதல்
+    df_show.columns = ['ஆசிரியர்', 'வகுப்பு', 'பாடம்', 'மொத்த பீரியட்கள்', 'தொடர் பீரியட்கள்']
     
     st.dataframe(
         df_show.style.map(lambda x: f'background-color: {get_color(str(x))}; color: black;', subset=['பாடம்']), 
         use_container_width=True, 
         hide_index=True
     )
+    
+    with st.expander("🗑️ ஒரு ஒதுக்கீட்டை நீக்க"):
+        del_dict = {f"{r['ஆசிரியர்']} - {r['வகுப்பு']}": r_id for r_id, r in zip(df_allot['id'], df_show.to_dict('records'))}
+        to_del = st.selectbox("தேர்வு செய்க:", ["-- Select --"] + list(del_dict.keys()))
+        if st.button("Delete") and to_del != "-- Select --":
+            supabase.table("staff_allotment").delete().eq("id", del_dict[to_del]).execute()
+            st.cache_data.clear()
+            st.rerun()
 else:
     st.info("தகவல்கள் எதுவும் இல்லை.")
