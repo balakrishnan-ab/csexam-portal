@@ -16,6 +16,7 @@ st.set_page_config(page_title="Staff Allotment", layout="wide", page_icon="📝"
 
 # --- 🎨 COLOR GENERATOR ---
 def get_color(text):
+    """பெயரை அடிப்படையாகக் கொண்டு நிலையான வண்ணத்தை உருவாக்கும்"""
     hash_object = hashlib.md5(text.encode()).hexdigest()
     r = (int(hash_object[:2], 16) % 100) + 155
     g = (int(hash_object[2:4], 16) % 100) + 155
@@ -87,11 +88,11 @@ with col_form:
         
         if submit:
             if not is_teacher_selected:
-                st.error("தயவுசெய்து ஒரு ஆசிரியரைத் தேர்வு செய்யவும்!")
+                st.warning("தயவுசெய்து ஒரு ஆசிரியரைத் தேர்வு செய்யவும்!")
             else:
                 supabase.table("staff_allotment").insert({
                     "teacher_id": e_id, 
-                    "teacher_name": f"{t_full} ({t_short})", # இங்கு சேமிக்கப்படும் பெயர்
+                    "teacher_name": f"{t_full} ({t_short})", 
                     "class_name": c_name, 
                     "subject_name": s_name, 
                     "periods_per_week": p_count
@@ -100,8 +101,8 @@ with col_form:
                 st.rerun()
 
 with col_visual:
-    # --- 🏫 வகுப்பு சில்லுகள் ---
-    st.markdown("##### 🏫 வகுப்பு வாரியாக (மொத்த பீரியட்கள்)")
+    # --- 🏫 வகுப்பு சில்லுகள் (Row of 6) ---
+    st.markdown("##### 🏫 வகுப்பு வாரியாக")
     class_totals = {c: 0 for c in base_classes}
     if not df_allot.empty:
         for _, entry in df_allot.iterrows():
@@ -124,7 +125,7 @@ with col_visual:
 
     st.divider()
 
-    # --- 👨‍🏫 ஆசிரியர் சில்லுகள் ---
+    # --- 👨‍🏫 ஆசிரியர் சில்லுகள் (Row of 6) ---
     st.markdown("##### 👨‍🏫 ஆசிரியர் வாரியாக (மொத்த பீரியட்கள்)")
     if not df_allot.empty:
         t_workload = df_allot.groupby('teacher_name')['periods_per_week'].sum().reset_index()
@@ -139,10 +140,9 @@ with col_visual:
                     <div style="font-size:16px; font-weight:bold; color:black;">{r['periods_per_week']}</div>
                 </div>""", unsafe_allow_html=True)
 
-# --- 📊 அட்டவணை (மாற்றப்பட்ட பகுதி) ---
+# --- 📊 அட்டவணை பகுதி ---
 st.divider()
 if is_teacher_selected:
-    # Filter by EMIS ID for accuracy
     mask = df_allot['teacher_id'] == e_id if not df_allot.empty else False
     display_df = df_allot[mask].copy() if not df_allot.empty else pd.DataFrame()
     st.subheader(f"📊 {selected_teacher_label} - ஒதுக்கீடு விவரம்")
@@ -151,24 +151,19 @@ else:
     st.subheader("📊 அனைத்து ஆசிரியர் ஒதுக்கீடு விவரங்கள்")
 
 if not display_df.empty:
-    # அட்டவணை நெடுவரிசைகள் சீரமைப்பு
     df_show = display_df[['teacher_name', 'class_name', 'subject_name', 'periods_per_week']].copy()
     df_show.columns = ['ஆசிரியர் (முழுபெயர்)', 'வகுப்பு', 'பாடம்', 'பீரியட்கள்']
     
+    # பிழையைச் சரிசெய்ய map பயன்படுத்தப்பட்டுள்ளது (applymap-க்கு பதிலாக)
     st.dataframe(
-        df_show.style.applymap(lambda x: f'background-color: {get_color(str(x))}; color: black;', subset=['பாடம்']), 
+        df_show.style.map(lambda x: f'background-color: {get_color(str(x))}; color: black;', subset=['பாடம்']), 
         use_container_width=True, 
         hide_index=True
     )
     
     with st.expander("🗑️ ஒரு ஒதுக்கீட்டை நீக்க"):
-        # Unique keys for deletion using the original dataframe index
-        del_dict = {}
-        for idx, row in display_df.iterrows():
-            label = f"{row['teacher_name']} - {row['class_name']} ({row['subject_name']})"
-            del_dict[label] = row['id']
-            
-        to_del = st.selectbox("நீக்க வேண்டிய ஒதுக்கீட்டைத் தேர்வு செய்க:", ["-- Select --"] + list(del_dict.keys()))
+        del_dict = {f"{r['teacher_name']} - {r['class_name']} ({r['subject_name']})": r['id'] for _, r in display_df.iterrows()}
+        to_del = st.selectbox("தேர்வு செய்க:", ["-- Select --"] + list(del_dict.keys()))
         if st.button("Delete Now", type="primary") and to_del != "-- Select --":
             supabase.table("staff_allotment").delete().eq("id", del_dict[to_del]).execute()
             st.cache_data.clear()
