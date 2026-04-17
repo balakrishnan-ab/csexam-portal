@@ -84,26 +84,19 @@ with col_form:
         with f2:
             p_count = st.number_input("வாரத்தின் மொத்த பீரியட்கள்:", min_value=1, value=7)
             double_freq = st.number_input("தொடர் பாடவேளைகள்:", min_value=0, max_value=5, value=0)
-            
             submit = st.form_submit_button("💾 ஒதுக்கீட்டைச் சேமி", use_container_width=True)
         
         if submit:
             if not is_teacher_selected:
                 st.warning("ஆசிரியரைத் தேர்வு செய்யவும்!")
             else:
-                try:
-                    supabase.table("staff_allotment").insert({
-                        "teacher_id": e_id, 
-                        "teacher_name": f"{t_full} ({t_short})", 
-                        "class_name": c_name, 
-                        "subject_name": s_name, 
-                        "periods_per_week": p_count,
-                        "double_period_count": double_freq
-                    }).execute()
-                    st.cache_data.clear()
-                    st.rerun()
-                except Exception as e:
-                    st.error(f"பிழை: {e}")
+                supabase.table("staff_allotment").insert({
+                    "teacher_id": e_id, "teacher_name": f"{t_full} ({t_short})", 
+                    "class_name": c_name, "subject_name": s_name, 
+                    "periods_per_week": p_count, "double_period_count": double_freq
+                }).execute()
+                st.cache_data.clear()
+                st.rerun()
 
 with col_visual:
     # --- 🏫 வகுப்பு சில்லுகள் ---
@@ -115,8 +108,7 @@ with col_visual:
             if target in comb_groups:
                 for sub_c in comb_groups[target]:
                     if sub_c in class_totals: class_totals[sub_c] += p
-            elif target in class_totals:
-                class_totals[target] += p
+            elif target in class_totals: class_totals[target] += p
 
     c_rows = [list(class_totals.items())[i:i+6] for i in range(0, len(class_totals), 6)]
     for row in c_rows:
@@ -131,33 +123,27 @@ with col_visual:
 
     st.divider()
 
-    # --- 🆕 மீட்கப்பட்ட ஆசிரியர் சில்லுகள் (Teacher Chips) ---
+    # --- 👨‍🏫 ஆசிரியர் சில்லுகள் ---
     st.markdown("##### 👨‍🏫 ஆசிரியர் வாரியாக மொத்த சுமை")
     if not df_allot.empty:
-        # EMIS ID மூலம் ஒவ்வொரு ஆசிரியரின் மொத்த பீரியட்களையும் கணக்கிடுதல்
         teacher_workload = df_allot.groupby('teacher_id')['periods_per_week'].sum().reset_index()
-        
         t_rows = [teacher_workload.iloc[i:i+6] for i in range(0, len(teacher_workload), 6)]
         for row_df in t_rows:
             cols = st.columns(6)
             for idx, (_, r) in enumerate(row_df.iterrows()):
-                # EMIS ID-யை வைத்து சுருக்கப் பெயரை (Short Name) மட்டும் காட்டுகிறோம்
                 full_label = emis_to_full.get(r['teacher_id'], "Unknown")
-                short_name_display = full_label.split('(')[-1].replace(')', '') if '(' in full_label else full_label[:5]
-                
-                bg = get_color(short_name_display)
+                short_name = full_label.split('(')[-1].replace(')', '') if '(' in full_label else "Staff"
+                bg = get_color(short_name)
                 cols[idx].markdown(f"""<div style="background:{bg}; padding:2px; border-radius:4px; border:1px solid #ccc; text-align:center; margin-bottom:4px; height:50px;">
-                    <div style="font-size:10px; font-weight:bold; color:black;">{short_name_display}</div>
+                    <div style="font-size:10px; font-weight:bold; color:black;">{short_name}</div>
                     <div style="font-size:16px; font-weight:bold; color:black;">{r['periods_per_week']}</div>
                 </div>""", unsafe_allow_html=True)
-    else:
-        st.info("ஆசிரியர்களுக்கு இன்னும் பணிகள் ஒதுக்கப்படவில்லை.")
 
-# --- 📊 அட்டவணை பகுதி ---
+# --- 📊 அட்டவணை & நீக்குதல்/திருத்துதல் ---
 st.divider()
 if not df_allot.empty:
     df_allot['ஆசிரியர்_பெயர்'] = df_allot['teacher_id'].map(emis_to_full).fillna(df_allot['teacher_name'])
-
+    
     if is_teacher_selected:
         display_df = df_allot[df_allot['teacher_id'] == e_id].copy()
         st.subheader(f"📊 {selected_teacher_label} - ஒதுக்கீடு விவரங்கள்")
@@ -165,13 +151,32 @@ if not df_allot.empty:
         display_df = df_allot.copy()
         st.subheader("📊 அனைத்து ஆசிரியர் ஒதுக்கீடு விவரங்கள்")
 
-    if not display_df.empty:
-        cols_to_show = ['ஆசிரியர்_பெயர்', 'class_name', 'subject_name', 'periods_per_week', 'double_period_count']
-        df_show = display_df[cols_to_show].copy()
-        df_show.columns = ['ஆசிரியர்', 'வகுப்பு', 'பாடம்', 'மொத்த பீரியட்கள்', 'தொடர் பாடவேளைகள்']
-        
-        st.dataframe(
-            df_show.style.map(lambda x: f'background-color: {get_color(str(x))}; color: black;', subset=['பாடம்']), 
-            use_container_width=True, 
-            hide_index=True
-        )
+    df_show = display_df[['ஆசிரியர்_பெயர்', 'class_name', 'subject_name', 'periods_per_week', 'double_period_count']].copy()
+    df_show.columns = ['ஆசிரியர்', 'வகுப்பு', 'பாடம்', 'பீரியட்கள்', 'தொடர்']
+    
+    st.dataframe(df_show.style.map(lambda x: f'background-color: {get_color(str(x))}; color: black;', subset=['பாடம்']), use_container_width=True, hide_index=True)
+
+    # --- 🆕 நீக்குதல் மற்றும் திருத்துதல் பகுதி ---
+    with st.expander("🛠️ ஒதுக்கீட்டைத் திருத்த அல்லது நீக்க"):
+        if not display_df.empty:
+            edit_options = {f"{r['ஆசிரியர்_பெயர்']} - {r['class_name']} ({r['subject_name']})": r['id'] for _, r in display_df.iterrows()}
+            selected_edit = st.selectbox("மாற்ற வேண்டிய பதிவைத் தேர்வு செய்க:", ["-- Select --"] + list(edit_options.keys()))
+            
+            if selected_edit != "-- Select --":
+                record_id = edit_options[selected_edit]
+                row = display_df[display_df['id'] == record_id].iloc[0]
+                
+                c1, c2, c3 = st.columns(3)
+                new_periods = c1.number_input("புதிய பீரியட்கள்:", value=int(row['periods_per_week']), key="edit_p")
+                new_double = c2.number_input("புதிய தொடர்:", value=int(row['double_period_count']), key="edit_d")
+                
+                col_btn1, col_btn2 = st.columns(2)
+                if col_btn1.button("💾 மாற்றத்தைச் சேமி", use_container_width=True):
+                    supabase.table("staff_allotment").update({"periods_per_week": new_periods, "double_period_count": new_double}).eq("id", record_id).execute()
+                    st.cache_data.clear()
+                    st.rerun()
+                
+                if col_btn2.button("🗑️ ஒதுக்கீட்டை நீக்கு", use_container_width=True, type="primary"):
+                    supabase.table("staff_allotment").delete().eq("id", record_id).execute()
+                    st.cache_data.clear()
+                    st.rerun()
