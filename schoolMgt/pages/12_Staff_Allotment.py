@@ -83,7 +83,6 @@ with col_form:
             s_name = st.selectbox("பாடம்:", subjects_list, index=default_sub_index)
         with f2:
             p_count = st.number_input("வாரத்தின் மொத்த பீரியட்கள்:", min_value=1, value=7)
-            # நீங்கள் கேட்டபடி லேபிள் சுருக்கப்பட்டுள்ளது
             double_freq = st.number_input("தொடர் பாடவேளைகள்:", min_value=0, max_value=5, value=0)
             
             submit = st.form_submit_button("💾 ஒதுக்கீட்டைச் சேமி", use_container_width=True)
@@ -130,43 +129,52 @@ with col_visual:
                 <div style="font-size:16px; font-weight:bold; color:black;">{tot}</div>
             </div>""", unsafe_allow_html=True)
 
-# --- 📊 அட்டவணை பகுதி (KeyError பிழை நீக்கப்பட்டது) ---
+# --- 📊 அட்டவணை பகுதி (Dynamic Filter வசதியுடன்) ---
 st.divider()
-st.subheader("📊 அனைத்து ஆசிரியர் ஒதுக்கீடு விவரங்கள்")
 
+# 1. EMIS ID மூலம் ஆசிரியரின் முழுப் பெயரை உருவாக்குதல்
 if not df_allot.empty:
-    # 1. EMIS ID மூலம் ஆசிரியரின் முழுப் பெயரை உருவாக்குதல்
-    df_allot['ஆசிரியர்_முழுப்பெயர்'] = df_allot['teacher_id'].map(emis_to_full).fillna(df_allot['teacher_name'])
-    
-    # 2. பிழையைத் தவிர்க்க, தேவையான நெடுவரிசைகள் இருப்பதை உறுதி செய்து எடுத்தல்
-    cols_to_show = ['ஆசிரியர்_முழுப்பெயர்', 'class_name', 'subject_name', 'periods_per_week']
-    if 'double_period_count' in df_allot.columns:
-        cols_to_show.append('double_period_count')
-    
-    df_show = df_allot[cols_to_show].copy()
-    
-    # 3. நெடுவரிசை பெயர்களைத் தமிழில் மாற்றுதல்
-    column_mapping = {
-        'ஆசிரியர்_முழுப்பெயர்': 'ஆசிரியர்',
-        'class_name': 'வகுப்பு',
-        'subject_name': 'பாடம்',
-        'periods_per_week': 'மொத்த பீரியட்கள்',
-        'double_period_count': 'தொடர் பாடவேளைகள்'
-    }
-    df_show.rename(columns=column_mapping, inplace=True)
-    
-    st.dataframe(
-        df_show.style.map(lambda x: f'background-color: {get_color(str(x))}; color: black;', subset=['பாடம்']), 
-        use_container_width=True, 
-        hide_index=True
-    )
-    
-    with st.expander("🗑️ ஒரு ஒதுக்கீட்டை நீக்க"):
-        del_dict = {f"{r['ஆசிரியர்']} - {r['வகுப்பு']} ({r['பாடம்']})": r_id for r_id, r in zip(df_allot['id'], df_show.to_dict('records'))}
-        to_del = st.selectbox("தேர்வு செய்க:", ["-- Select --"] + list(del_dict.keys()))
-        if st.button("Delete") and to_del != "-- Select --":
-            supabase.table("staff_allotment").delete().eq("id", del_dict[to_del]).execute()
-            st.cache_data.clear()
-            st.rerun()
+    df_allot['ஆசிரியர்_பெயர்'] = df_allot['teacher_id'].map(emis_to_full).fillna(df_allot['teacher_name'])
+
+    # 🎯 புதிய வடிகட்டி (Filtering Logic)
+    if is_teacher_selected:
+        # ஆசிரியர் தேர்ந்தெடுக்கப்பட்டால் அவர் விவரம் மட்டும்
+        display_df = df_allot[df_allot['teacher_id'] == e_id].copy()
+        st.subheader(f"📊 {selected_teacher_label} - ஒதுக்கீடு விவரங்கள்")
+    else:
+        # ஆசிரியர் தேர்ந்தெடுக்கப்படாத போது அனைத்து விவரங்களும்
+        display_df = df_allot.copy()
+        st.subheader("📊 அனைத்து ஆசிரியர் ஒதுக்கீடு விவரங்கள்")
+
+    if not display_df.empty:
+        # தேவையான காலங்களை மட்டும் எடுத்தல்
+        cols_to_show = ['ஆசிரியர்_பெயர்', 'class_name', 'subject_name', 'periods_per_week', 'double_period_count']
+        df_show = display_df[cols_to_show].copy()
+        
+        # நெடுவரிசை பெயர்களைத் தமிழில் மாற்றுதல்
+        column_mapping = {
+            'ஆசிரியர்_பெயர்': 'ஆசிரியர்',
+            'class_name': 'வகுப்பு',
+            'subject_name': 'பாடம்',
+            'periods_per_week': 'மொத்த பீரியட்கள்',
+            'double_period_count': 'தொடர் பாடவேளைகள்'
+        }
+        df_show.rename(columns=column_mapping, inplace=True)
+        
+        st.dataframe(
+            df_show.style.map(lambda x: f'background-color: {get_color(str(x))}; color: black;', subset=['பாடம்']), 
+            use_container_width=True, 
+            hide_index=True
+        )
+        
+        with st.expander("🗑️ ஒரு ஒதுக்கீட்டை நீக்க"):
+            del_dict = {f"{r['ஆசிரியர்']} - {r['வகுப்பு']} ({r['பாடம்']})": r_id for r_id, r in zip(display_df['id'], df_show.to_dict('records'))}
+            to_del = st.selectbox("தேர்வு செய்க:", ["-- Select --"] + list(del_dict.keys()))
+            if st.button("Delete") and to_del != "-- Select --":
+                supabase.table("staff_allotment").delete().eq("id", del_dict[to_del]).execute()
+                st.cache_data.clear()
+                st.rerun()
+    else:
+        st.info("இந்த ஆசிரியருக்கு இன்னும் ஒதுக்கீடுகள் செய்யப்படவில்லை.")
 else:
     st.info("தகவல்கள் எதுவும் இல்லை.")
