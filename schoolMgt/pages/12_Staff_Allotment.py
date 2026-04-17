@@ -25,10 +25,7 @@ def get_color(text):
 # --- ⚡ FETCH DATA ---
 @st.cache_data(ttl=60)
 def fetch_teachers():
-    """ஆசிரியர்களின் பெயர், EMIS மற்றும் முதன்மைப் பாடத்தை எடுக்க"""
     res = supabase.table("teachers").select("emis_id, full_name, short_name, subject").order("full_name").execute()
-    # Display Format: LAVANYA A (LA)
-    # Value: (EMIS_ID, SHORT_NAME, FULL_NAME, MAIN_SUBJECT)
     return {f"{t['full_name']} ({t['short_name']})": (t['emis_id'], t['short_name'], t['full_name'], t.get('subject', '')) for t in res.data}
 
 @st.cache_data(ttl=60)
@@ -48,11 +45,10 @@ def fetch_combined_data():
 
 @st.cache_data(ttl=60)
 def fetch_allotment_data():
-    """ஒதுக்கீடு தரவுகளை மட்டும் எடுக்க"""
     res = supabase.table("staff_allotment").select("*").execute()
     return res.data
 
-# தரவுகள் தயார் செய்தல்
+# தரவுகள்
 teachers_dict = fetch_teachers()
 subjects_list = fetch_subjects()
 base_classes = fetch_classes_only()
@@ -68,15 +64,12 @@ col_form, col_visual = st.columns([1.3, 1.7])
 
 with col_form:
     st.subheader("📝 ஒதுக்கீடு படிவம்")
-    
-    # 1. ஆசிரியர் தேர்வு
     teacher_options = ["Select Teacher"] + list(teachers_dict.keys())
     selected_teacher_label = st.selectbox("ஆசிரியரைத் தேர்வு செய்க:", teacher_options)
     
     is_teacher_selected = selected_teacher_label != "Select Teacher"
-    
-    # ஆசிரியரின் முதன்மைப் பாடத்தை (Default Subject) கண்டறிதல்
     default_sub_index = 0
+    
     if is_teacher_selected:
         e_id, t_short, t_full, t_sub = teachers_dict[selected_teacher_label]
         if t_sub in subjects_list:
@@ -86,7 +79,6 @@ with col_form:
         f1, f2 = st.columns(2)
         with f1:
             c_name = st.selectbox("வகுப்பு / குழு:", all_dropdown_classes)
-            # ஆசிரியர் தேர்வுக்கு ஏற்ப பாடம் தானாக மாறும்
             s_name = st.selectbox("பாடம்:", subjects_list, index=default_sub_index)
         with f2:
             p_count = st.number_input("பாடவேளைகள்:", min_value=1, value=7)
@@ -97,19 +89,15 @@ with col_form:
             if not is_teacher_selected:
                 st.error("தயவுசெய்து ஒரு ஆசிரியரைத் தேர்வு செய்யவும்!")
             else:
-                try:
-                    supabase.table("staff_allotment").insert({
-                        "teacher_id": e_id, 
-                        "teacher_name": f"{t_full} ({t_short})",
-                        "class_name": c_name, 
-                        "subject_name": s_name, 
-                        "periods_per_week": p_count
-                    }).execute()
-                    st.cache_data.clear()
-                    st.success("வெற்றிகரமாகச் சேமிக்கப்பட்டது!")
-                    st.rerun()
-                except Exception as e:
-                    st.error(f"சேமிப்பதில் பிழை: {e}")
+                supabase.table("staff_allotment").insert({
+                    "teacher_id": e_id, 
+                    "teacher_name": f"{t_full} ({t_short})", # இங்கு சேமிக்கப்படும் பெயர்
+                    "class_name": c_name, 
+                    "subject_name": s_name, 
+                    "periods_per_week": p_count
+                }).execute()
+                st.cache_data.clear()
+                st.rerun()
 
 with col_visual:
     # --- 🏫 வகுப்பு சில்லுகள் ---
@@ -130,7 +118,7 @@ with col_visual:
             bg = get_color(cls)
             border = "2px solid red" if tot > 45 else "1px solid #ddd"
             cols[idx].markdown(f"""<div style="background:{bg}; padding:2px; border-radius:4px; border:{border}; text-align:center; margin-bottom:4px; height:50px;">
-                <div style="font-size:10px; font-weight:bold; color:black; line-height:1.2;">{cls}</div>
+                <div style="font-size:10px; font-weight:bold; color:black;">{cls}</div>
                 <div style="font-size:16px; font-weight:bold; color:black;">{tot}</div>
             </div>""", unsafe_allow_html=True)
 
@@ -151,10 +139,11 @@ with col_visual:
                     <div style="font-size:16px; font-weight:bold; color:black;">{r['periods_per_week']}</div>
                 </div>""", unsafe_allow_html=True)
 
-# --- 📊 அட்டவணை (Filter வசதியுடன்) ---
+# --- 📊 அட்டவணை (மாற்றப்பட்ட பகுதி) ---
 st.divider()
 if is_teacher_selected:
-    mask = df_allot['teacher_id'] == e_id
+    # Filter by EMIS ID for accuracy
+    mask = df_allot['teacher_id'] == e_id if not df_allot.empty else False
     display_df = df_allot[mask].copy() if not df_allot.empty else pd.DataFrame()
     st.subheader(f"📊 {selected_teacher_label} - ஒதுக்கீடு விவரம்")
 else:
@@ -162,21 +151,17 @@ else:
     st.subheader("📊 அனைத்து ஆசிரியர் ஒதுக்கீடு விவரங்கள்")
 
 if not display_df.empty:
-    df_show = display_df[['teacher_name', 'class_name', 'subject_name', 'periods_per_week']]
+    # அட்டவணை நெடுவரிசைகள் சீரமைப்பு
+    df_show = display_df[['teacher_name', 'class_name', 'subject_name', 'periods_per_week']].copy()
     df_show.columns = ['ஆசிரியர் (முழுபெயர்)', 'வகுப்பு', 'பாடம்', 'பீரியட்கள்']
     
     st.dataframe(
-        df_show.style.map(lambda x: f'background-color: {get_color(str(x))}; color: black;', subset=['பாடம்']), 
+        df_show.style.applymap(lambda x: f'background-color: {get_color(str(x))}; color: black;', subset=['பாடம்']), 
         use_container_width=True, 
         hide_index=True
     )
     
     with st.expander("🗑️ ஒரு ஒதுக்கீட்டை நீக்க"):
-        del_opt = {f"{r['ஆசிரியர் (முழுபெயர்)']} - {r['வகுப்பு']} ({r['பாடம்']})": display_df.iloc[idx]['id'] for idx, r in df_show.reset_index().iterrows()}
-        to_del = st.selectbox("தேர்வு செய்க:", ["-- Select --"] + list(del_opt.keys()))
-        if st.button("நீக்கு (Delete)", type="primary") and to_del != "-- Select --":
-            supabase.table("staff_allotment").delete().eq("id", del_opt[to_del]).execute()
-            st.cache_data.clear()
-            st.rerun()
-else:
-    st.info("தகவல்கள் எதுவும் இல்லை.")
+        # Unique keys for deletion using the original dataframe index
+        del_dict = {}
+        for idx, row in display_df.iterrows
