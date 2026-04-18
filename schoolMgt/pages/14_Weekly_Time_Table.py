@@ -76,11 +76,14 @@ if sel_t_label != "-- Select Teacher --":
             color = "red" if rem < 0 else ("blue" if rem > 0 else "gray")
             st.markdown(f"**{cls}** | மீதம்: <span style='color:{color};'>{rem}</span><br><small>FN:{fn} | AN:{an}</small>", unsafe_allow_html=True)
 
-    # --- 5. வகுப்பு வாரியான கால அட்டவணை (Horizontal Tables) ---
+ # --- 5. வகுப்பு வாரியான கால அட்டவணை (Horizontal Tables) ---
     st.divider()
     st.markdown("### 🏫 வகுப்பு வாரியான கால அட்டவணை")
     
-    # ஆசிரியருக்கு ஒதுக்கப்பட்ட அனைத்து வகுப்புகளையும் பெறுதல்
+    # தேவையான மாறிகளை மீண்டும் வரையறுத்தல் (எரர் வராமல் இருக்க)
+    days_short = ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat"]
+    periods = [str(i) for i in range(1, 9)]
+    
     unique_classes = sorted(list(set([a['class_name'] for a in t_allots])))
     
     # 3 வகுப்பு அட்டவணைகளை ஒரு வரிசையில் காட்ட
@@ -93,15 +96,12 @@ if sel_t_label != "-- Select Teacher --":
                 st.markdown(f"**வகுப்பு: {cls}**")
                 
                 # இந்த வகுப்பிற்குரிய தரவை மட்டும் எடுத்தல்
-                class_data = []
+                df_cls = pd.DataFrame(index=days_short, columns=periods).fillna("-")
                 for (d, p), c in st.session_state.draft_tt.items():
                     if c == cls:
-                        class_data.append({'Day': d[:3], 'Period': p})
+                        df_cls.at[d[:3], str(p)] = "X" # அல்லது பாடத்தின் பெயர்
                 
-                if class_data:
-                    # வகுப்பு வாரியாக டேட்டாபேஸில் இருந்து பாட விவரத்தை எடுக்க (சுருக்கமாக)
-                    df_class = pd.DataFrame(class_data).pivot(index='Day', columns='Period', values='Day')
-                    # இங்கே கால அட்டவணை வடிவத்தை டேபிள் போலக் காட்ட
-                    st.table(pd.DataFrame(index=days_short, columns=periods).fillna("-")) 
+                if df_cls.values.tolist():
+                    st.table(df_cls)
                 else:
                     st.info("இன்னும் பாடவேளைகள் ஒதுக்கப்படவில்லை.")
