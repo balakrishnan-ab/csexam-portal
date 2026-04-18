@@ -70,7 +70,6 @@ if sel_t_label != "-- Select Teacher --":
             if a['periods_per_week'] - flat_tt.count(a['class_name']) > 0:
                 available_list.append(a['class_name'])
         
-        # பிழை வராமல் இருக்க பட்டியல் தயாரிப்பு
         existing_classes = [str(x) for x in flat_tt if x and str(x).strip() != ""]
         final_options = sorted(list(set([""] + available_list + existing_classes)))
 
@@ -98,15 +97,33 @@ if sel_t_label != "-- Select Teacher --":
             color = "red" if rem < 0 else ("gray" if rem == 0 else "blue")
             st.markdown(f"**{a['class_name']}** | <span style='color:{color};'>மீதம்: {rem}</span> <br>FN:{fn} AN:{an}", unsafe_allow_html=True)
 
-    # --- 6. SAVE ---
+    # --- 6. SAVE (பிழையற்ற சுத்தமான சேமிப்பு) ---
     if st.button("🚀 அட்டவணையைச் சேமி (Submit to DB)", type="primary", use_container_width=True):
         if any(list(st.session_state.draft_tt.values()).count(a['class_name']) > a['periods_per_week'] for a in t_allots):
             st.error("பிழை: ஒதுக்கீடு மீறப்பட்டுள்ளது! -ve ஒதுக்கீடுகளை நீக்கவும்.")
         else:
             supabase.table("weekly_timetable").delete().eq("teacher_id", t_id).execute()
-            new_entries = [{"class_name": cls, "day_of_week": d, "period_number": p, "teacher_id": t_id, 
-                           "teacher_name": sel_t['full_name'], "subject_name": next((a['subject_name'] for a in t_allots if a['class_name'] == cls), "")}
-                          for (d, p), cls in st.session_state.draft_tt.items() if cls and cls != ""]
-            if new_entries: supabase.table("weekly_timetable").insert(new_entries).execute()
-            st.success("வெற்றிகரமாகச் சேமிக்கப்பட்டது!")
-            st.cache_data.clear()
+            
+            new_entries = []
+            for (d, p), cls in st.session_state.draft_tt.items():
+                if cls and str(cls).strip() != "" and not pd.isna(cls):
+                    staff = next((a for a in t_allots if a['class_name'] == cls), None)
+                    if staff:
+                        new_entries.append({
+                            "class_name": str(cls),
+                            "day_of_week": str(d),
+                            "period_number": int(p),
+                            "teacher_id": int(t_id),
+                            "teacher_name": str(sel_t['full_name']),
+                            "subject_name": str(staff['subject_name'])
+                        })
+            
+            if new_entries:
+                try:
+                    supabase.table("weekly_timetable").insert(new_entries).execute()
+                    st.success("வெற்றிகரமாகச் சேமிக்கப்பட்டது!")
+                    st.cache_data.clear()
+                except Exception as e:
+                    st.error(f"சேமிப்பில் பிழை: {e}")
+            else:
+                st.warning("சேமிக்க தரவுகள் இல்லை.")
