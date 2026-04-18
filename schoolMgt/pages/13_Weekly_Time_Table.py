@@ -13,10 +13,10 @@ except:
 
 st.set_page_config(page_title="Excel Style Timetable", layout="wide")
 
-# Excel போன்ற நேர்த்தியான பார்டர் மற்றும் கிரிட் ஸ்டைலிங்
+# Excel போன்ற கிரிட் மற்றும் சில்லுகளுக்கான CSS
 st.markdown("""
     <style>
-    /* Excel Table Grid */
+    /* Excel Table Grid Styling */
     .stButton > button {
         width: 100%; height: 35px; padding: 0px; font-size: 11px;
         border-radius: 0px; border: 1px solid #000 !important; /* தடிமனான கருப்பு கோடு */
@@ -28,13 +28,9 @@ st.markdown("""
         height: 35px; display: flex; align-items: center;
         justify-content: center; border: 1px solid #000;
     }
-    /* Teacher Allotment Cards */
-    .allot-card {
-        border-radius: 4px; margin-bottom: 5px; text-align: center;
-        transition: transform 0.2s;
-    }
-    .active-selection {
-        border: 4px solid #ff4b4b !important; /* தேர்வு செய்யப்பட்ட சில்லு சிவப்பு பார்டர் */
+    /* Selected Card Style */
+    .active-btn {
+        border: 4px solid #ff0000 !important; /* தேர்வு செய்த சில்லுக்கு சிவப்பு பார்டர் */
     }
     div[data-testid="stColumn"] { padding: 0px !important; margin: 0px !important; }
     </style>
@@ -50,7 +46,6 @@ def get_short_sub(sub_name):
 def get_color(text):
     if not text: return "#ffffff"
     hash_obj = hashlib.md5(text.encode()).hexdigest()
-    # தெளிவான வண்ணங்கள்
     r = (int(hash_obj[:2],16)%50)+200
     g = (int(hash_obj[2:4],16)%50)+200
     b = (int(hash_obj[4:6],16)%50)+200
@@ -75,39 +70,43 @@ main_col, side_col = st.columns([1.5, 0.5])
 with side_col:
     st.write("##### 👨‍🏫 ஆசிரியர் தேர்வு")
     t_opts = {f"{t['full_name']} ({t['short_name']})": t for t in teach_data}
-    sel_teacher = st.selectbox("Teacher Selection", list(t_opts.keys()), label_visibility="collapsed")
+    sel_teacher = st.selectbox("Select Teacher", list(t_opts.keys()), label_visibility="collapsed")
     
     if sel_teacher:
         t_id = t_opts[sel_teacher]['emis_id']
         t_allots = [a for a in allot_data if a['teacher_id'] == t_id]
         
-        for a in t_allots:
-            used = len(df_time[(df_time['teacher_id'] == a['teacher_id']) & (df_time['class_name'] == a['class_name']) & (df_time['subject_name'] == a['subject_name'])]) if not df_time.empty else 0
-            rem = a['periods_per_week'] - used
-            bg = get_color(a['subject_name'])
-            
-            # சில்லு வடிவமைப்பு - பிரிக்காமல் ஒரே பெட்டியாக
-            is_active = st.session_state.get('active_allot_id') == a['id']
-            border_css = "active-selection" if is_active else ""
-            
-            # முழு சில்லும் ஒரே பட்டனாக
-            if rem > 0:
-                if st.button(f"{a['class_name']} - {get_short_sub(a['subject_name'])}\n(மீதம்: {rem})", key=f"allot_{a['id']}", 
-                             help="இதை கிளிக் செய்து பின் அட்டவணையில் ஒட்டவும்"):
-                    st.session_state['active_allot'] = a
-                    st.session_state['active_allot_id'] = a['id']
-                    st.rerun()
-            else:
-                st.markdown(f"<div style='background:#eee; color:#aaa; border:1px solid #ccc; padding:5px; font-size:10px; text-align:center;'>{a['class_name']} (0)</div>", unsafe_allow_html=True)
+        # சில்லுகள் 4 Columns-களாக அடுக்குகிறோம்
+        for i in range(0, len(t_allots), 4):
+            cols = st.columns(4)
+            for j, a in enumerate(t_allots[i:i+4]):
+                used = len(df_time[(df_time['teacher_id'] == a['teacher_id']) & 
+                                   (df_time['class_name'] == a['class_name']) & 
+                                   (df_time['subject_name'] == a['subject_name'])]) if not df_time.empty else 0
+                rem = a['periods_per_week'] - used
+                
+                with cols[j]:
+                    if rem > 0:
+                        is_active = st.session_state.get('active_allot_id') == a['id']
+                        bg = get_color(a['subject_name'])
+                        
+                        # 3D வண்ணப் பின்னணி
+                        st.markdown(f'<div style="position:absolute; width:100%; height:35px; background:{bg}; z-index:-1; border:{"2px solid black" if is_active else "none"};"></div>', unsafe_allow_html=True)
+                        if st.button(f"{a['class_name']}\n{rem}", key=f"allot_{a['id']}"):
+                            st.session_state['active_allot'] = a
+                            st.session_state['active_allot_id'] = a['id']
+                            st.rerun()
+                    else:
+                        st.markdown("<div style='height:35px; background:#eee; border:1px solid #ccc; font-size:8px; text-align:center;'>0</div>", unsafe_allow_html=True)
 
 with main_col:
-    sel_class = st.selectbox("Select Class:", ["-- Select Class --"] + class_list, label_visibility="collapsed")
+    sel_class = st.selectbox("வகுப்பு:", ["-- Select Class --"] + class_list, label_visibility="collapsed")
     
     if sel_class != "-- Select Class --":
         days = ["Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday"]
         periods = [1, 2, 3, 4, 5, 6, 7, 8]
         
-        # Grid Header
+        # Header Row
         h_cols = st.columns([0.8] + [1]*8)
         h_cols[0].markdown("<div class='header-label'>Day</div>", unsafe_allow_html=True)
         for p in periods:
@@ -118,28 +117,31 @@ with main_col:
             r_cols[0].markdown(f"<div class='header-label' style='background:#f9f9f9;'>{day[:3]}</div>", unsafe_allow_html=True)
             
             for p in periods:
-                entry = df_time[(df_time['class_name'] == sel_class) & (df_time['day_of_week'] == day) & (df_time['period_number'] == p)] if not df_time.empty else pd.DataFrame()
+                entry = df_time[(df_time['class_name'] == sel_class) & 
+                                (df_time['day_of_week'] == day) & 
+                                (df_time['period_number'] == p)] if not df_time.empty else pd.DataFrame()
                 
                 with r_cols[p]:
                     if not entry.empty:
                         sub_code = get_short_sub(entry.iloc[0]['subject_name'])
                         t_code = emis_to_short.get(entry.iloc[0]['teacher_id'], "??")
                         bg_color = get_color(sub_code)
-                        # Excel போன்ற வண்ணக் கோடுகள்
                         st.markdown(f'<div style="position:absolute; width:100%; height:35px; background:{bg_color}; z-index:-1;"></div>', unsafe_allow_html=True)
                         if st.button(f"{sub_code}\n{t_code}", key=f"cell_{day}_{p}"):
                             supabase.table("weekly_timetable").delete().eq("id", entry.iloc[0]['id']).execute()
                             st.cache_data.clear()
                             st.rerun()
                     else:
-                        # காலியான Excel செல்
                         if st.button(" ", key=f"cell_{day}_{p}"):
                             if 'active_allot' in st.session_state:
                                 a = st.session_state['active_allot']
-                                supabase.table("weekly_timetable").insert({
-                                    "class_name": sel_class, "day_of_week": day, "period_number": p,
-                                    "teacher_id": a['teacher_id'], "teacher_name": a['teacher_name'],
-                                    "subject_name": a['subject_name']
-                                }).execute()
-                                st.cache_data.clear()
-                                st.rerun()
+                                # எண்ணிக்கை சரிபார்ப்பு
+                                current_used = len(df_time[(df_time['teacher_id'] == a['teacher_id']) & (df_time['class_name'] == a['class_name']) & (df_time['subject_name'] == a['subject_name'])]) if not df_time.empty else 0
+                                if current_used < a['periods_per_week']:
+                                    supabase.table("weekly_timetable").insert({
+                                        "class_name": sel_class, "day_of_week": day, "period_number": p,
+                                        "teacher_id": a['teacher_id'], "teacher_name": a['teacher_name'],
+                                        "subject_name": a['subject_name']
+                                    }).execute()
+                                    st.cache_data.clear()
+                                    st.rerun()
