@@ -11,27 +11,30 @@ except:
     st.error("Connection Error!")
     st.stop()
 
-st.set_page_config(page_title="Excel Style Timetable", layout="wide")
+st.set_page_config(page_title="Master Timetable Grid", layout="wide")
 
-# Excel போன்ற கிரிட் மற்றும் சில்லுகளுக்கான CSS
+# Excel போன்ற கிரிட் மற்றும் கார்டுகளுக்கான CSS
 st.markdown("""
     <style>
     /* Excel Table Grid Styling */
     .stButton > button {
-        width: 100%; height: 35px; padding: 0px; font-size: 11px;
-        border-radius: 0px; border: 1px solid #000 !important; /* தடிமனான கருப்பு கோடு */
-        line-height: 1.1; font-weight: 500;
+        width: 100%; height: 32px; padding: 0px; font-size: 11px;
+        border-radius: 0px; border: 1px solid #000 !important;
+        line-height: 1.1; font-weight: bold; background-color: white;
     }
-    /* Day & Header Labels */
-    .header-label {
-        font-size: 12px; font-weight: bold; background: #d3d3d3;
-        height: 35px; display: flex; align-items: center;
+    /* Grid Labels */
+    .grid-label {
+        font-size: 11px; font-weight: bold; background: #E0E0E0;
+        height: 32px; display: flex; align-items: center;
         justify-content: center; border: 1px solid #000;
     }
-    /* Selected Card Style */
-    .active-btn {
-        border: 4px solid #ff0000 !important; /* தேர்வு செய்த சில்லுக்கு சிவப்பு பார்டர் */
+    /* Selection Card Style */
+    .teacher-card {
+        border: 1px solid #999; border-radius: 8px; padding: 10px;
+        text-align: center; background: #fff; box-shadow: 2px 2px 5px rgba(0,0,0,0.1);
+        cursor: pointer; transition: 0.3s; margin-bottom: 10px;
     }
+    .active-card { border: 3px solid #FF4B4B !important; background: #FFF0F0; }
     div[data-testid="stColumn"] { padding: 0px !important; margin: 0px !important; }
     </style>
     """, unsafe_allow_html=True)
@@ -46,9 +49,9 @@ def get_short_sub(sub_name):
 def get_color(text):
     if not text: return "#ffffff"
     hash_obj = hashlib.md5(text.encode()).hexdigest()
-    r = (int(hash_obj[:2],16)%50)+200
-    g = (int(hash_obj[2:4],16)%50)+200
-    b = (int(hash_obj[4:6],16)%50)+200
+    r = (int(hash_obj[:2],16)%40)+210
+    g = (int(hash_obj[2:4],16)%40)+210
+    b = (int(hash_obj[4:6],16)%40)+210
     return f'#{r:02x}{g:02x}{b:02x}'
 
 # --- ⚡ FETCH DATA ---
@@ -57,91 +60,89 @@ def get_data():
     allot = supabase.table("staff_allotment").select("*").execute()
     time_t = supabase.table("weekly_timetable").select("*").execute()
     teachers = supabase.table("teachers").select("emis_id, short_name, full_name").execute()
-    classes = supabase.table("classes").select("class_name").order("class_name").execute()
-    return allot.data, time_t.data, teachers.data, [c['class_name'] for c in classes.data]
+    return allot.data, time_t.data, teachers.data
 
-allot_data, time_data, teach_data, class_list = get_data()
+allot_data, time_data, teach_data = get_data()
 df_time = pd.DataFrame(time_data) if time_data else pd.DataFrame()
 emis_to_short = {t['emis_id']: t['short_name'] for t in teach_data}
 
 # --- 🏗️ LAYOUT ---
-main_col, side_col = st.columns([1.5, 0.5])
+st.write("### 🏫 Master Timetable (Grid View)")
 
-with side_col:
-    st.write("##### 👨‍🏫 ஆசிரியர் தேர்வு")
-    t_opts = {f"{t['full_name']} ({t['short_name']})": t for t in teach_data}
-    sel_teacher = st.selectbox("Select Teacher", list(t_opts.keys()), label_visibility="collapsed")
+# ஆசிரியர் தேர்வு (மேலே)
+t_opts = {f"{t['full_name']} ({t['short_name']})": t for t in teach_data}
+sel_teacher_name = st.selectbox("ஆசிரியரைத் தேர்வு செய்க:", ["-- Select Teacher --"] + list(t_opts.keys()))
+
+if sel_teacher_name != "-- Select Teacher --":
+    t_info = t_opts[sel_teacher_name]
+    t_id = t_info['emis_id']
     
-    if sel_teacher:
-        t_id = t_opts[sel_teacher]['emis_id']
-        t_allots = [a for a in allot_data if a['teacher_id'] == t_id]
-        
-        # சில்லுகள் 4 Columns-களாக அடுக்குகிறோம்
-        for i in range(0, len(t_allots), 4):
-            cols = st.columns(4)
-            for j, a in enumerate(t_allots[i:i+4]):
-                used = len(df_time[(df_time['teacher_id'] == a['teacher_id']) & 
-                                   (df_time['class_name'] == a['class_name']) & 
-                                   (df_time['subject_name'] == a['subject_name'])]) if not df_time.empty else 0
-                rem = a['periods_per_week'] - used
+    # 🎯 1. ஒதுக்கப்பட்ட வகுப்புகள் மட்டும் கார்டுகளாக (நடுவில்)
+    st.markdown("##### 📌 ஒதுக்கப்பட்ட வகுப்புகள் (Cards)")
+    t_allots = [a for a in allot_data if a['teacher_id'] == t_id]
+    
+    if t_allots:
+        cols = st.columns(min(len(t_allots), 5)) # அதிகபட்சம் 5 கார்டுகள் ஒரு வரியில்
+        for idx, a in enumerate(t_allots):
+            used = len(df_time[(df_time['teacher_id'] == a['teacher_id']) & 
+                               (df_time['class_name'] == a['class_name']) & 
+                               (df_time['subject_name'] == a['subject_name'])]) if not df_time.empty else 0
+            rem = a['periods_per_week'] - used
+            
+            with cols[idx % 5]:
+                is_active = st.session_state.get('active_allot_id') == a['id']
+                bg = get_color(a['subject_name'])
                 
-                with cols[j]:
-                    if rem > 0:
-                        is_active = st.session_state.get('active_allot_id') == a['id']
-                        bg = get_color(a['subject_name'])
-                        
-                        # 3D வண்ணப் பின்னணி
-                        st.markdown(f'<div style="position:absolute; width:100%; height:35px; background:{bg}; z-index:-1; border:{"2px solid black" if is_active else "none"};"></div>', unsafe_allow_html=True)
-                        if st.button(f"{a['class_name']}\n{rem}", key=f"allot_{a['id']}"):
-                            st.session_state['active_allot'] = a
-                            st.session_state['active_allot_id'] = a['id']
-                            st.rerun()
-                    else:
-                        st.markdown("<div style='height:35px; background:#eee; border:1px solid #ccc; font-size:8px; text-align:center;'>0</div>", unsafe_allow_html=True)
+                # Card UI
+                st.markdown(f"""
+                    <div style="background:{bg if rem > 0 else '#eee'}; border:{'3px solid red' if is_active else '1px solid #ccc'}; 
+                                padding:10px; border-radius:8px; text-align:center; box-shadow: 2px 2px 5px rgba(0,0,0,0.1);">
+                        <b style="font-size:14px;">{a['class_name']}</b><br>
+                        <span style="font-size:12px;">{get_short_sub(a['subject_name'])}</span><br>
+                        <b style="color:{'red' if rem==0 else 'blue'};">மீதம்: {rem}</b>
+                    </div>
+                """, unsafe_allow_html=True)
+                
+                if rem > 0:
+                    if st.button(f"தேர்வு {idx+1}", key=f"sel_{a['id']}", help="இதை அட்டவணையில் ஒட்ட கிளிக் செய்க"):
+                        st.session_state['active_allot'] = a
+                        st.session_state['active_allot_id'] = a['id']
+                        st.session_state['selected_class_from_card'] = a['class_name']
+                        st.rerun()
 
-with main_col:
-    sel_class = st.selectbox("வகுப்பு:", ["-- Select Class --"] + class_list, label_visibility="collapsed")
+    # 🎯 2. தேர்வு செய்யப்பட்ட வகுப்புக்கான கால அட்டவணை (கீழே)
+    active_class = st.session_state.get('selected_class_from_card')
     
-    if sel_class != "-- Select Class --":
+    if active_class:
+        st.markdown(f"##### 📅 {active_class} - கால அட்டவணை")
         days = ["Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday"]
         periods = [1, 2, 3, 4, 5, 6, 7, 8]
         
-        # Header Row
+        # Grid Header
         h_cols = st.columns([0.8] + [1]*8)
-        h_cols[0].markdown("<div class='header-label'>Day</div>", unsafe_allow_html=True)
-        for p in periods:
-            h_cols[p].markdown(f"<div class='header-label'>P{p}</div>", unsafe_allow_html=True)
+        h_cols[0].markdown("<div class='grid-label'>Day</div>", unsafe_allow_html=True)
+        for p in periods: h_cols[p].markdown(f"<div class='grid-label'>P{p}</div>", unsafe_allow_html=True)
 
         for day in days:
             r_cols = st.columns([0.8] + [1]*8)
-            r_cols[0].markdown(f"<div class='header-label' style='background:#f9f9f9;'>{day[:3]}</div>", unsafe_allow_html=True)
+            r_cols[0].markdown(f"<div class='grid-label' style='background:#f9f9f9;'>{day[:3]}</div>", unsafe_allow_html=True)
             
             for p in periods:
-                entry = df_time[(df_time['class_name'] == sel_class) & 
+                entry = df_time[(df_time['class_name'] == active_class) & 
                                 (df_time['day_of_week'] == day) & 
                                 (df_time['period_number'] == p)] if not df_time.empty else pd.DataFrame()
                 
                 with r_cols[p]:
                     if not entry.empty:
                         sub_code = get_short_sub(entry.iloc[0]['subject_name'])
-                        t_code = emis_to_short.get(entry.iloc[0]['teacher_id'], "??")
+                        t_short = emis_to_short.get(entry.iloc[0]['teacher_id'], "??")
                         bg_color = get_color(sub_code)
-                        st.markdown(f'<div style="position:absolute; width:100%; height:35px; background:{bg_color}; z-index:-1;"></div>', unsafe_allow_html=True)
-                        if st.button(f"{sub_code}\n{t_code}", key=f"cell_{day}_{p}"):
+                        st.markdown(f'<div style="position:absolute; width:100%; height:32px; background:{bg_color}; z-index:-1;"></div>', unsafe_allow_html=True)
+                        if st.button(f"{sub_code}\n{t_short}", key=f"cell_{day}_{p}"):
                             supabase.table("weekly_timetable").delete().eq("id", entry.iloc[0]['id']).execute()
                             st.cache_data.clear()
                             st.rerun()
                     else:
                         if st.button(" ", key=f"cell_{day}_{p}"):
                             if 'active_allot' in st.session_state:
-                                a = st.session_state['active_allot']
-                                # எண்ணிக்கை சரிபார்ப்பு
-                                current_used = len(df_time[(df_time['teacher_id'] == a['teacher_id']) & (df_time['class_name'] == a['class_name']) & (df_time['subject_name'] == a['subject_name'])]) if not df_time.empty else 0
-                                if current_used < a['periods_per_week']:
-                                    supabase.table("weekly_timetable").insert({
-                                        "class_name": sel_class, "day_of_week": day, "period_number": p,
-                                        "teacher_id": a['teacher_id'], "teacher_name": a['teacher_name'],
-                                        "subject_name": a['subject_name']
-                                    }).execute()
-                                    st.cache_data.clear()
-                                    st.rerun()
+                                a = st.session_state['
