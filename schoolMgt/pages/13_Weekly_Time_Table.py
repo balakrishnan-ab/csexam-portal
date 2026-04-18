@@ -10,33 +10,13 @@ except:
     st.error("Connection Error!")
     st.stop()
 
-st.set_page_config(page_title="Professional Timetable", layout="wide")
+st.set_page_config(page_title="Teacher Timetable Editor", layout="wide")
 
-# CSS: எக்செல் போன்ற கட்டங்கள் மற்றும் சுத்தமான தோற்றம்
+# CSS: கச்சிதமான அட்டவணை
 st.markdown("""
     <style>
-    /* கீழிறங்கு பட்டியலின் குறிகளை மறைக்க */
-    div[data-baseweb="select"] > div {
-        border: none !important;
-        background-color: transparent !important;
-    }
-    /* தேவையற்ற சின்னங்களை மறைக்க */
-    div[data-testid="stSelectbox"] svg { display: none !important; }
-    
-    /* கட்டங்களின் வடிவம் மாறாமல் இருக்க */
-    .grid-cell {
-        border: 1px solid #000;
-        height: 45px;
-        display: flex;
-        align-items: center;
-        justify-content: center;
-        background-color: white;
-    }
-    .header-label {
-        font-size: 14px; font-weight: bold; background: #E0E0E0;
-        height: 45px; display: flex; align-items: center;
-        justify-content: center; border: 1px solid #000;
-    }
+    .grid-label { font-size: 13px; font-weight: bold; background: #eee; height: 45px; display: flex; align-items: center; justify-content: center; border: 1px solid #000; }
+    .stButton > button { width: 100%; height: 45px; border-radius: 0px; border: 1px solid #000; background: white; font-size: 11px; }
     div[data-testid="stColumn"] { padding: 0px !important; margin: 0px !important; }
     </style>
     """, unsafe_allow_html=True)
@@ -46,107 +26,97 @@ st.markdown("""
 def get_init_data():
     allot = supabase.table("staff_allotment").select("*").execute()
     time_db = supabase.table("weekly_timetable").select("*").execute()
-    classes = supabase.table("classes").select("class_name").order("class_name").execute()
-    return allot.data, time_db.data, [c['class_name'] for c in classes.data]
+    teachers = supabase.table("teachers").select("emis_id, full_name, short_name").order("full_name").execute()
+    return allot.data, time_db.data, teachers.data
 
-allot_data, db_list, class_list = get_init_data()
+allot_data, db_list, teach_list = get_init_data()
 
-if 'working_tt' not in st.session_state:
-    st.session_state.working_tt = {}
+# Session State for Local Edits
+if 'teacher_tt' not in st.session_state:
+    st.session_state.teacher_tt = {}
 
 # --- 🏗️ LAYOUT ---
-st.title("📅 வாராந்திர கால அட்டவணை")
+st.title("👨‍🏫 ஆசிரியர் வாரியாக அட்டவணை நிரப்புதல்")
 
-main_col, side_col = st.columns([1.5, 0.5])
+# 1. ஆசிரியர் தேர்வு
+t_opts = {f"{t['full_name']} ({t['short_name']})": t for t in teach_list}
+sel_teacher_label = st.selectbox("ஆசிரியரைத் தேர்வு செய்க:", ["-- Select Teacher --"] + list(t_opts.keys()))
 
-with main_col:
-    selected_class = st.selectbox("வகுப்பைத் தேர்வு செய்க:", ["-- Select Class --"] + class_list)
+if sel_teacher_label != "-- Select Teacher --":
+    sel_t = t_opts[sel_teacher_label]
+    t_id = sel_t['emis_id']
+    
+    # ஆசிரியருக்கு ஒதுக்கப்பட்ட வகுப்புகள்
+    t_allots = [a for a in allot_data if a['teacher_id'] == t_id]
+    all_classes = sorted(list(set([a['class_name'] for a in t_allots])))
 
-if selected_class != "-- Select Class --":
+    # தரவுகளை ஏற்றியவுடன் ஸ்டேட்டில் சேமிக்க (அந்த ஆசிரியருக்கு மட்டும்)
+    if st.session_state.get('last_t_id') != t_id:
+        st.session_state.teacher_tt = {}
+        st.session_state.last_t_id = t_id
+        for e in db_list:
+            if e['teacher_id'] == t_id:
+                key = (e['day_of_week'], e['period_number'])
+                if key not in st.session_state.teacher_tt:
+                    st.session_state.teacher_tt[key] = []
+                st.session_state.teacher_tt[key].append(e['class_name'])
+
+    # 2. அட்டவணை கிரிட்
     days = ["Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday"]
     periods = range(1, 9)
 
-    # தரவுகளை ஏற்றியவுடன் ஒருமுறை மட்டும் ஸ்டேட்டில் சேமிக்க
-    if not st.session_state.working_tt or st.session_state.get('last_class') != selected_class:
-        st.session_state.working_tt = {}
-        st.session_state.last_class = selected_class
-        for e in db_list:
-            if e['class_name'] == selected_class:
-                st.session_state.working_tt[(selected_class, e['day_of_week'], e['period_number'])] = e
+    st.info(f"குறிப்பு: {sel_t['short_name']} அவர்களுக்குரிய பாடவேளைகளைக் கிளிக் செய்து, வகுப்புகளைத் தேர்வு செய்யவும் (Combine வகுப்புகளுக்கு ஒன்றுக்கும் மேற்பட்ட வகுப்புகளைத் தேர்வு செய்யலாம்).")
 
-    # 1. ஆசிரியர் நிலை (வலதுபுறம்)
-    with side_col:
-        st.markdown("##### 🏷️ ஆசிரியர் நிலை")
-        class_staff = [a for a in allot_data if a['class_name'] == selected_class]
+    # Header
+    h_cols = st.columns([0.8] + [1]*8)
+    h_cols[0].markdown("<div class='grid-label'>Day</div>", unsafe_allow_html=True)
+    for p in periods: h_cols[p].markdown(f"<div class='grid-label'>{p}</div>", unsafe_allow_html=True)
+
+    for day in days:
+        r_cols = st.columns([0.8] + [1]*8)
+        r_cols[0].markdown(f"<div class='grid-label' style='background:#f9f9f9;'>{day[:3]}</div>", unsafe_allow_html=True)
         
-        available_teachers = []
-        for s in class_staff:
-            t_short = s['teacher_name'].split('(')[-1].replace(')', '')
-            label = f"{s['subject_name']} - {t_short}"
+        for p in periods:
+            key = (day, p)
+            current_classes = st.session_state.teacher_tt.get(key, [])
+            btn_text = ", ".join(current_classes) if current_classes else "---"
             
-            # பயன்பாட்டை எண்ணுதல்
-            used = sum(1 for k, v in st.session_state.working_tt.items() 
-                       if k[0] == selected_class and v['subject_name'] == s['subject_name'])
-            
-            rem = s['periods_per_week'] - used
-            if rem > 0:
-                available_teachers.append(s)
-                st.success(f"{label} | மீதம்: {rem}")
-            else:
-                st.error(f"{label} | முடிந்தது ✅")
-
-    # 2. அட்டவணை கிரிட் (இடதுபுறம்)
-    with main_col:
-        # தலைப்பு வரிசை
-        h_cols = st.columns([0.8] + [1]*8)
-        h_cols[0].markdown("<div class='header-label'>Day</div>", unsafe_allow_html=True)
-        for p in periods: h_cols[p].markdown(f"<div class='header-label'>{p}</div>", unsafe_allow_html=True)
-
-        for day in days:
-            r_cols = st.columns([0.8] + [1]*8)
-            r_cols[0].markdown(f"<div class='header-label' style='background:#f9f9f9;'>{day[:3]}</div>", unsafe_allow_html=True)
-            
-            for p in periods:
-                key = (selected_class, day, p)
-                entry = st.session_state.working_tt.get(key)
+            with r_cols[p]:
+                # பாப்-அப் போன்று செயல்பட செலக்ட் பாக்ஸ்
+                sel = st.multiselect(f"{day}_{p}", all_classes, default=current_classes, key=f"ms_{day}_{p}", label_visibility="collapsed")
                 
-                with r_cols[p]:
-                    # தற்போதுள்ள பாடம் அல்லது காலி இடத்தை கண்டறிதல்
-                    current_val = " " # ஆரம்ப மதிப்பு
-                    if entry:
-                        current_val = f"{entry['subject_name']} - {entry['teacher_name'].split('(')[-1].replace(')','')}"
-                    
-                    # கீழிறங்கு பட்டியல் (எந்த குறியும் இல்லாமல்)
-                    options = [" "] + [f"{s['subject_name']} - {s['teacher_name'].split('(')[-1].replace(')','')}" for s in available_teachers]
-                    
-                    # ஏற்கனவே இருக்கும் பாடம் பட்டியலில் இல்லையெனில் அதைச் சேர்க்கவும்
-                    if current_val != " " and current_val not in options:
-                        options.append(current_val)
+                # மாற்றம் நடந்தால் ஸ்டேட்டில் அப்டேட்
+                if set(sel) != set(current_classes):
+                    st.session_state.teacher_tt[key] = sel
+                    st.rerun()
 
-                    sel = st.selectbox("", options, index=options.index(current_val), key=f"sel_{day}_{p}", label_visibility="collapsed")
-                    
-                    # மாற்றம் நடந்தால் மட்டும் சேமிக்க
-                    if sel != current_val:
-                        if sel == " ":
-                            if key in st.session_state.working_tt:
-                                del st.session_state.working_tt[key]
-                        else:
-                            sub_n, t_s = sel.split(" - ")
-                            staff = next((s for s in class_staff if s['subject_name'] == sub_n), None)
-                            if staff:
-                                st.session_state.working_tt[key] = {
-                                    "class_name": selected_class, "day_of_week": day, "period_number": p,
-                                    "teacher_id": staff['teacher_id'], "teacher_name": staff['teacher_name'], "subject_name": staff['subject_name']
-                                }
-                        st.rerun()
-
-    # 3. இறுதி சேமிப்பு பட்டன்
-    st.markdown("<br>", unsafe_allow_html=True)
-    if st.button("🚀 சரிபார்த்துச் சேமி (Final Save)", type="primary", use_container_width=True):
+    # 3. 🚀 SAVE BUTTON
+    st.divider()
+    if st.button(f"🚀 {sel_t['short_name']} அட்டவணையைச் சேமி", type="primary", use_container_width=True):
         with st.spinner("சேமிக்கப்படுகிறது..."):
-            supabase.table("weekly_timetable").delete().eq("class_name", selected_class).execute()
-            data_to_save = [v for k, v in st.session_state.working_tt.items() if k[0] == selected_class]
-            if data_to_save:
-                supabase.table("weekly_timetable").insert(data_to_save).execute()
-            st.success("வெற்றிகரமாகத் தரவுதளத்தில் சேமிக்கப்பட்டது!")
+            # இந்த ஆசிரியரின் பழைய பதிவுகளை மட்டும் நீக்குதல்
+            supabase.table("weekly_timetable").delete().eq("teacher_id", t_id).execute()
+            
+            new_entries = []
+            for (day, p_num), classes in st.session_state.teacher_tt.items():
+                for cls in classes:
+                    # அந்த வகுப்பிற்கான பாடத்தைக் கண்டறிதல்
+                    staff_info = next((a for a in t_allots if a['class_name'] == cls), None)
+                    if staff_info:
+                        new_entries.append({
+                            "class_name": cls,
+                            "day_of_week": day,
+                            "period_number": p_num,
+                            "teacher_id": t_id,
+                            "teacher_name": sel_t['full_name'] + f" ({sel_t['short_name']})",
+                            "subject_name": staff_info['subject_name']
+                        })
+            
+            if new_entries:
+                supabase.table("weekly_timetable").insert(new_entries).execute()
+            
+            st.success("வெற்றிகரமாகச் சேமிக்கப்பட்டது!")
             st.cache_data.clear()
+
+else:
+    st.warning("தொடங்குவதற்கு ஆசிரியரைத் தேர்வு செய்யவும்.")
