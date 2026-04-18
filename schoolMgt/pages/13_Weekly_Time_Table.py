@@ -10,31 +10,39 @@ except:
     st.error("Connection Error!")
     st.stop()
 
-st.set_page_config(page_title="Fast Timetable", layout="wide")
+st.set_page_config(page_title="Professional Timetable", layout="wide")
 
-# CSS: Excel போன்ற கிரிட் மற்றும் வேகம்
+# CSS: எக்செல் போன்ற கட்டங்கள் மற்றும் சுத்தமான தோற்றம்
 st.markdown("""
     <style>
-    .stButton > button {
-        width: 100%; height: 40px; padding: 0px; font-size: 11px;
-        border: 1px solid #000; border-radius: 0px; background-color: white;
+    /* கீழிறங்கு பட்டியலின் குறிகளை மறைக்க */
+    div[data-baseweb="select"] > div {
+        border: none !important;
+        background-color: transparent !important;
     }
-    .grid-label {
-        font-size: 12px; font-weight: bold; background: #E0E0E0;
-        height: 40px; display: flex; align-items: center;
+    /* தேவையற்ற சின்னங்களை மறைக்க */
+    div[data-testid="stSelectbox"] svg { display: none !important; }
+    
+    /* கட்டங்களின் வடிவம் மாறாமல் இருக்க */
+    .grid-cell {
+        border: 1px solid #000;
+        height: 45px;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        background-color: white;
+    }
+    .header-label {
+        font-size: 14px; font-weight: bold; background: #E0E0E0;
+        height: 45px; display: flex; align-items: center;
         justify-content: center; border: 1px solid #000;
-    }
-    .staff-chip {
-        display: inline-block; padding: 4px 10px; margin: 4px;
-        border-radius: 15px; font-size: 11px; font-weight: bold;
-        border: 1px solid #999;
     }
     div[data-testid="stColumn"] { padding: 0px !important; margin: 0px !important; }
     </style>
     """, unsafe_allow_html=True)
 
 # --- ⚡ FETCH DATA ---
-@st.cache_data(ttl=60)
+@st.cache_data(ttl=2)
 def get_init_data():
     allot = supabase.table("staff_allotment").select("*").execute()
     time_db = supabase.table("weekly_timetable").select("*").execute()
@@ -43,12 +51,11 @@ def get_init_data():
 
 allot_data, db_list, class_list = get_init_data()
 
-# Session State for Speed
 if 'working_tt' not in st.session_state:
-    st.session_state.working_tt = {} # Key: (class, day, period)
+    st.session_state.working_tt = {}
 
 # --- 🏗️ LAYOUT ---
-st.title("📅 அதிவேக கால அட்டவணை மேலாண்மை")
+st.title("📅 வாராந்திர கால அட்டவணை")
 
 main_col, side_col = st.columns([1.5, 0.5])
 
@@ -59,76 +66,87 @@ if selected_class != "-- Select Class --":
     days = ["Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday"]
     periods = range(1, 9)
 
-    # 1. Load Data into State (if empty)
-    if not st.session_state.working_tt:
+    # தரவுகளை ஏற்றியவுடன் ஒருமுறை மட்டும் ஸ்டேட்டில் சேமிக்க
+    if not st.session_state.working_tt or st.session_state.get('last_class') != selected_class:
+        st.session_state.working_tt = {}
+        st.session_state.last_class = selected_class
         for e in db_list:
-            st.session_state.working_tt[(e['class_name'], e['day_of_week'], e['period_number'])] = e
+            if e['class_name'] == selected_class:
+                st.session_state.working_tt[(selected_class, e['day_of_week'], e['period_number'])] = e
 
-    # 2. Smart Teacher Filter (வலதுபுறம்)
+    # 1. ஆசிரியர் நிலை (வலதுபுறம்)
     with side_col:
         st.markdown("##### 🏷️ ஆசிரியர் நிலை")
         class_staff = [a for a in allot_data if a['class_name'] == selected_class]
         
-        # தற்போதைய எண்ணிக்கையைக் கணக்கிடுதல்
         available_teachers = []
         for s in class_staff:
             t_short = s['teacher_name'].split('(')[-1].replace(')', '')
             label = f"{s['subject_name']} - {t_short}"
             
+            # பயன்பாட்டை எண்ணுதல்
             used = sum(1 for k, v in st.session_state.working_tt.items() 
                        if k[0] == selected_class and v['subject_name'] == s['subject_name'])
             
             rem = s['periods_per_week'] - used
             if rem > 0:
                 available_teachers.append(s)
-                st.markdown(f'<div class="staff-chip" style="background:#e3f2fd; border-left:5px solid blue;">{label} | மீதம்: {rem}</div>', unsafe_allow_html=True)
+                st.success(f"{label} | மீதம்: {rem}")
             else:
-                st.markdown(f'<div class="staff-chip" style="background:#eee; color:#aaa;">{label} | முடிந்தது ✅</div>', unsafe_allow_html=True)
+                st.error(f"{label} | முடிந்தது ✅")
 
-    # 3. Fast Grid Editor (மின்னல் வேகம்)
+    # 2. அட்டவணை கிரிட் (இடதுபுறம்)
     with main_col:
+        # தலைப்பு வரிசை
         h_cols = st.columns([0.8] + [1]*8)
-        h_cols[0].markdown("<div class='grid-label'>Day</div>", unsafe_allow_html=True)
-        for p in periods: h_cols[p].markdown(f"<div class='grid-label'>{p}</div>", unsafe_allow_html=True)
+        h_cols[0].markdown("<div class='header-label'>Day</div>", unsafe_allow_html=True)
+        for p in periods: h_cols[p].markdown(f"<div class='header-label'>{p}</div>", unsafe_allow_html=True)
 
         for day in days:
             r_cols = st.columns([0.8] + [1]*8)
-            r_cols[0].markdown(f"<div class='grid-label' style='background:#f9f9f9;'>{day[:3]}</div>", unsafe_allow_html=True)
+            r_cols[0].markdown(f"<div class='header-label' style='background:#f9f9f9;'>{day[:3]}</div>", unsafe_allow_html=True)
             
             for p in periods:
                 key = (selected_class, day, p)
                 entry = st.session_state.working_tt.get(key)
                 
                 with r_cols[p]:
+                    # தற்போதுள்ள பாடம் அல்லது காலி இடத்தை கண்டறிதல்
+                    current_val = " " # ஆரம்ப மதிப்பு
                     if entry:
-                        # ஏற்கனவே உள்ள பாடம் - கிளிக் செய்தால் நீக்கப்படும்
-                        btn_label = f"{entry['subject_name'][:3]}\n{entry['teacher_name'].split('(')[-1].replace(')','')}"
-                        if st.button(btn_label, key=f"btn_{day}_{p}"):
-                            del st.session_state.working_tt[key]
-                            st.rerun()
-                    else:
-                        # காலியான இடம் - Dropdown மூலம் சேர்த்தல்
-                        opts = ["+"] + [f"{s['subject_name']} - {s['teacher_name'].split('(')[-1].replace(')','')}" for s in available_teachers]
-                        sel = st.selectbox("", opts, key=f"sel_{day}_{p}", label_visibility="collapsed")
-                        
-                        if sel != "+":
-                            sub_n, t_s = sel.split(" - ")
-                            staff = next(s for s in available_teachers if s['subject_name'] == sub_n)
-                            st.session_state.working_tt[key] = {
-                                "class_name": selected_class, "day_of_week": day, "period_number": p,
-                                "teacher_id": staff['teacher_id'], "teacher_name": staff['teacher_name'], "subject_name": staff['subject_name']
-                            }
-                            st.rerun()
+                        current_val = f"{entry['subject_name']} - {entry['teacher_name'].split('(')[-1].replace(')','')}"
+                    
+                    # கீழிறங்கு பட்டியல் (எந்த குறியும் இல்லாமல்)
+                    options = [" "] + [f"{s['subject_name']} - {s['teacher_name'].split('(')[-1].replace(')','')}" for s in available_teachers]
+                    
+                    # ஏற்கனவே இருக்கும் பாடம் பட்டியலில் இல்லையெனில் அதைச் சேர்க்கவும்
+                    if current_val != " " and current_val not in options:
+                        options.append(current_val)
 
-    # 4. Final Save
+                    sel = st.selectbox("", options, index=options.index(current_val), key=f"sel_{day}_{p}", label_visibility="collapsed")
+                    
+                    # மாற்றம் நடந்தால் மட்டும் சேமிக்க
+                    if sel != current_val:
+                        if sel == " ":
+                            if key in st.session_state.working_tt:
+                                del st.session_state.working_tt[key]
+                        else:
+                            sub_n, t_s = sel.split(" - ")
+                            staff = next((s for s in class_staff if s['subject_name'] == sub_n), None)
+                            if staff:
+                                st.session_state.working_tt[key] = {
+                                    "class_name": selected_class, "day_of_week": day, "period_number": p,
+                                    "teacher_id": staff['teacher_id'], "teacher_name": staff['teacher_name'], "subject_name": staff['subject_name']
+                                }
+                        st.rerun()
+
+    # 3. இறுதி சேமிப்பு பட்டன்
+    st.markdown("<br>", unsafe_allow_html=True)
     if st.button("🚀 சரிபார்த்துச் சேமி (Final Save)", type="primary", use_container_width=True):
         with st.spinner("சேமிக்கப்படுகிறது..."):
             supabase.table("weekly_timetable").delete().eq("class_name", selected_class).execute()
             data_to_save = [v for k, v in st.session_state.working_tt.items() if k[0] == selected_class]
             if data_to_save:
                 supabase.table("weekly_timetable").insert(data_to_save).execute()
-            st.success("வெற்றிகரமாகச் சேமிக்கப்பட்டது!")
+            st.success("வெற்றிகரமாகத் தரவுதளத்தில் சேமிக்கப்பட்டது!")
             st.cache_data.clear()
-
-else:
-    st.session_state.working_tt = {} # Reset when class changes
