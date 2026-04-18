@@ -12,17 +12,16 @@ except:
 
 st.set_page_config(page_title="Teacher Timetable Editor", layout="wide")
 
-# Excel போன்ற நேர்த்தியான CSS
+# CSS: நேர்த்தியான எக்செல் கிரிட் மற்றும் வரி விவரம்
 st.markdown("""
     <style>
-    /* Table Headers */
+    /* Table Header */
     .stDataEditor div[data-testid="stHeader"] {
         font-size: 14px !important; font-weight: bold !important;
         background-color: #f8f9fa !important; color: #333 !important;
     }
-    .grid-label { font-size: 13px; font-weight: bold; background: #E0E0E0; height: 40px; display: flex; align-items: center; justify-content: center; border: 1px solid #000; }
-    /* வலதுபுற வரி விவரம் */
-    .info-line { font-size: 13px; padding: 5px 0px; border-bottom: 1px solid #eee; }
+    /* Info Line */
+    .info-line { font-size: 12px; padding: 4px 0px; border-bottom: 1px solid #f0f0f0; line-height: 1.4; }
     div[data-testid="stColumn"] { padding: 0px !important; margin: 0px !important; }
     </style>
     """, unsafe_allow_html=True)
@@ -40,7 +39,7 @@ allot_data, db_list, teach_data = get_data()
 # --- 🏗️ LAYOUT ---
 st.title("👨‍🏫 ஆசிரியர் கால அட்டவணை மேலாண்மை")
 
-main_col, side_col = st.columns([1.5, 0.5])
+main_col, side_col = st.columns([1.6, 0.4])
 
 with main_col:
     t_opts = {f"{t['full_name']} ({t['short_name']})": t for t in teach_data}
@@ -51,7 +50,7 @@ if sel_t_label != "-- Select Teacher --":
     t_id = sel_t['emis_id']
     t_allots = [a for a in allot_data if a['teacher_id'] == t_id]
 
-    # Session State-ல் தரவுகளை ஏற்றுதல்
+    # Session State Setup
     state_key = f"tt_state_{t_id}"
     days_short = ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat"]
     days_full = ["Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday"]
@@ -67,35 +66,36 @@ if sel_t_label != "-- Select Teacher --":
                     df_init.at[d_short, str(e['period_number'])] = e['class_name']
         st.session_state[state_key] = df_init
 
-    # 1. 🏷️ வலதுபுறம் வரி விவரங்கள் (கார்டுகள் இன்றி)
+    # 1. 🏷️ வலதுபுறம் வரி விவரங்கள் (கச்சிதமான உரை வடிவில்)
     with side_col:
         st.markdown("##### 📚 வகுப்பு விவரங்கள்")
         current_df = st.session_state[state_key]
-        flat_selections = list(current_df.values.flatten())
+        # None மற்றும் காலியான மதிப்புகளைத் தவிர்த்து பட்டியலிடுதல்
+        flat_selections = [str(x) for x in current_df.values.flatten() if x and str(x).strip() != ""]
         
         available_class_options = [""]
         for a in t_allots:
             used = flat_selections.count(a['class_name'])
             rem = a['periods_per_week'] - used
             
-            # ஒதுக்கீடு முடிந்தாலும் அட்டவணையில் பெயர் இருக்கும், ஆனால் கீழிறங்குப் பட்டியலில் மட்டும் வராது
+            # ஒதுக்கீடு மீதமிருந்தால் மட்டுமே பட்டியலில் வரும்
             if rem > 0:
                 available_class_options.append(a['class_name'])
-                status_color = "blue"
+                color = "blue"
             else:
-                status_color = "gray"
+                color = "gray"
             
-            st.markdown(f"""<div class="info-line"><b>{a['class_name']}</b> | {a['subject_name']} | <span style="color:{status_color};">மீதம்: {rem}</span></div>""", unsafe_allow_html=True)
+            st.markdown(f'<div class="info-line"><b>{a["class_name"]}</b> | {a["subject_name"]} | <span style="color:{color};">மீதம்: {rem}</span></div>', unsafe_allow_html=True)
 
     # 2. 📝 DATA EDITOR (மையத்தில்)
     with main_col:
-        # கீழிறங்குப் பட்டியலில் தற்போது தேர்ந்தெடுக்கப்பட்டுள்ள வகுப்புகள் எப்போதும் இருக்க வேண்டும் (மறையாமல் இருக்க)
-        current_existing_options = sorted(list(set([x for x in flat_selections if x != ""])))
-        final_dropdown_opts = sorted(list(set(available_class_options + current_existing_options)))
+        # தற்போது அட்டவணையில் உள்ள வகுப்புகள் + மீதமுள்ள வகுப்புகள் (பிழை வராமல் இருக்க)
+        existing_in_table = list(set(flat_selections))
+        final_options = sorted(list(set(available_class_options + existing_in_table)))
 
         edited_df = st.data_editor(
             st.session_state[state_key],
-            column_config={p: st.column_config.SelectboxColumn(p, options=final_dropdown_opts, width="small") for p in periods},
+            column_config={p: st.column_config.SelectboxColumn(p, options=final_options, width="small") for p in periods},
             use_container_width=True,
             num_rows="fixed",
             key=f"editor_{t_id}"
@@ -111,7 +111,7 @@ if sel_t_label != "-- Select Teacher --":
                 for d_short, row in edited_df.iterrows():
                     for p_num in periods:
                         cls_name = row[p_num]
-                        if cls_name:
+                        if cls_name and str(cls_name).strip() != "":
                             staff_info = next((a for a in t_allots if a['class_name'] == cls_name), None)
                             if staff_info:
                                 new_entries.append({
@@ -121,8 +121,8 @@ if sel_t_label != "-- Select Teacher --":
                                 })
                 if new_entries:
                     supabase.table("weekly_timetable").insert(new_entries).execute()
-                st.success(f"சேமிக்கப்பட்டது!")
+                st.success("வெற்றிகரமாகச் சேமிக்கப்பட்டது!")
                 st.cache_data.clear()
 else:
     with main_col:
-        st.info("ஆசிரியரைத் தேர்வு செய்யவும்.")
+        st.info("தொடங்குவதற்கு ஆசிரியரைத் தேர்வு செய்யவும்.")
