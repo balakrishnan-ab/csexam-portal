@@ -12,16 +12,16 @@ except:
 
 st.set_page_config(page_title="Teacher Timetable Editor", layout="wide")
 
-# CSS: அட்டவணை மற்றும் கார்டுகளுக்கான வடிவம்
+# CSS: நேர்த்தியான எக்செல் கட்டம்
 st.markdown("""
     <style>
-    .grid-label { font-size: 13px; font-weight: bold; background: #eee; height: 45px; display: flex; align-items: center; justify-content: center; border: 1px solid #000; }
-    /* வகுப்பு கார்டுகள் */
-    .class-card {
-        padding: 8px; margin-bottom: 5px; border: 1px solid #ccc; border-radius: 4px;
-        background: #fdfdfd; text-align: center; border-left: 5px solid #2196F3;
-    }
-    div[data-testid="stColumn"] { padding: 1px !important; margin: 0px !important; }
+    .grid-label { font-size: 13px; font-weight: bold; background: #E0E0E0; height: 40px; display: flex; align-items: center; justify-content: center; border: 1px solid #000; }
+    /* Selectbox-ஐ எக்செல் கட்டம் போல மாற்ற */
+    div[data-testid="stSelectbox"] > div { border: none !important; border-radius: 0px !important; }
+    div[data-testid="stSelectbox"] { border: 1px solid #000; margin: 0px !important; }
+    /* வலதுபுற விவரம் */
+    .info-box { border-left: 5px solid #007bff; background: #f9f9f9; padding: 10px; margin-bottom: 5px; border-top: 1px solid #ddd; border-right: 1px solid #ddd; border-bottom: 1px solid #ddd; }
+    div[data-testid="stColumn"] { padding: 0px !important; margin: 0px !important; }
     </style>
     """, unsafe_allow_html=True)
 
@@ -35,12 +35,11 @@ def get_init_data():
 
 allot_data, db_list, teach_list = get_init_data()
 
-# Session State
 if 'teacher_tt' not in st.session_state:
     st.session_state.teacher_tt = {}
 
 # --- 🏗️ LAYOUT ---
-st.title("👨‍🏫 ஆசிரியர் வாரியாக அட்டவணை நிரப்புதல்")
+st.title("👨‍🏫 ஆசிரியர் கால அட்டவணை மேலாண்மை")
 
 main_col, side_col = st.columns([1.5, 0.5])
 
@@ -51,22 +50,20 @@ with main_col:
 if sel_teacher_label != "-- Select Teacher --":
     sel_t = t_opts[sel_teacher_label]
     t_id = sel_t['emis_id']
-    
-    # ஆசிரியருக்கு ஒதுக்கப்பட்ட வகுப்பு விவரங்கள்
     t_allots = [a for a in allot_data if a['teacher_id'] == t_id]
-    all_classes = sorted(list(set([a['class_name'] for a in t_allots])))
-
-    # 1. வலதுபுறம் வகுப்பு மற்றும் பாட விவரங்கள் (Shapes)
+    
+    # கார்டுகளில் விவரம் (வலதுபுறம்)
     with side_col:
-        st.markdown("##### 📚 வகுப்பு & பாடங்கள்")
+        st.markdown("##### 📝 ஒதுக்கீடு விவரம்")
         for a in t_allots:
-            st.markdown(f"""
-                <div class="class-card">
-                    <b style="font-size:14px;">{a['class_name']}</b><br>
-                    <span style="font-size:12px; color:#555;">{a['subject_name']}</span><br>
-                    <span style="font-size:11px; color:blue;">வாரத்திற்கு: {a['periods_per_week']}</span>
-                </div>
-            """, unsafe_allow_html=True)
+            st.markdown(f"""<div class='info-box'><b>{a['class_name']}</b><br><small>{a['subject_name']}</small><br><span style='color:blue;'>வாராந்திர பீரியட்கள்: {a['periods_per_week']}</span></div>""", unsafe_allow_html=True)
+
+    # 1. கம்பைன் வகுப்புகளுக்கான ஆப்ஷன்களை உருவாக்குதல்
+    cls_list = sorted([a['class_name'] for a in t_allots])
+    # தனி வகுப்புகள் + கம்பைன் ஆப்ஷன் (உதாரணம்: "11-A & 11-B")
+    dropdown_options = [" "] + cls_list
+    if len(cls_list) > 1:
+        dropdown_options.append(" & ".join(cls_list)) # கம்பைன் வகுப்பு ஆப்ஷன்
 
     # 2. தரவுகளை ஏற்றுதல்
     if st.session_state.get('last_t_id') != t_id:
@@ -74,19 +71,14 @@ if sel_teacher_label != "-- Select Teacher --":
         st.session_state.last_t_id = t_id
         for e in db_list:
             if e['teacher_id'] == t_id:
-                key = (e['day_of_week'], e['period_number'])
-                if key not in st.session_state.teacher_tt:
-                    st.session_state.teacher_tt[key] = []
-                # தரவுதளத்தில் உள்ள வகுப்பு பட்டியலில் இருந்தால் மட்டுமே சேர்த்தல் (Error தவிர்ப்பதற்கு)
-                if e['class_name'] in all_classes:
-                    st.session_state.teacher_tt[key].append(e['class_name'])
+                st.session_state.teacher_tt[(e['day_of_week'], e['period_number'])] = e['class_name']
 
-    # 3. அட்டவணை கிரிட் (Main Column)
+    # 3. கால அட்டவணை கிரிட்
     with main_col:
         days = ["Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday"]
         periods = range(1, 9)
 
-        # Header
+        # Headers
         h_cols = st.columns([0.8] + [1]*8)
         h_cols[0].markdown("<div class='grid-label'>Day</div>", unsafe_allow_html=True)
         for p in periods: h_cols[p].markdown(f"<div class='grid-label'>{p}</div>", unsafe_allow_html=True)
@@ -97,13 +89,15 @@ if sel_teacher_label != "-- Select Teacher --":
             
             for p in periods:
                 key = (day, p)
-                current_defaults = st.session_state.teacher_tt.get(key, [])
+                current_val = st.session_state.teacher_tt.get(key, " ")
                 
+                # கம்பைன் வகுப்புகள் டேட்டாபேஸில் தனித்தனியாக இருக்கும், ஆனால் திரையில் "A & B" எனத் தெரிய வேண்டும்
                 with r_cols[p]:
-                    # multiselect மூலம் ஒன்றுக்கும் மேற்பட்ட வகுப்புகளைத் தேர்வு செய்யலாம்
-                    sel = st.multiselect(f"{day}_{p}", all_classes, default=current_defaults, key=f"ms_{day}_{p}", label_visibility="collapsed")
+                    sel = st.selectbox(f"sel_{day}_{p}", dropdown_options, 
+                                       index=dropdown_options.index(current_val) if current_val in dropdown_options else 0,
+                                       key=f"sb_{day}_{p}", label_visibility="collapsed")
                     
-                    if set(sel) != set(current_defaults):
+                    if sel != current_val:
                         st.session_state.teacher_tt[key] = sel
                         st.rerun()
 
@@ -112,20 +106,19 @@ if sel_teacher_label != "-- Select Teacher --":
             with st.spinner("சேமிக்கப்படுகிறது..."):
                 supabase.table("weekly_timetable").delete().eq("teacher_id", t_id).execute()
                 new_entries = []
-                for (d, pn), classes in st.session_state.teacher_tt.items():
-                    for cls in classes:
-                        staff_info = next((a for a in t_allots if a['class_name'] == cls), None)
-                        if staff_info:
-                            new_entries.append({
-                                "class_name": cls, "day_of_week": d, "period_number": pn,
-                                "teacher_id": t_id, "teacher_name": f"{sel_t['full_name']} ({sel_t['short_name']})",
-                                "subject_name": staff_info['subject_name']
-                            })
+                for (d, pn), cls_val in st.session_state.teacher_tt.items():
+                    if cls_val != " ":
+                        # "11-A & 11-B" என்பதைத் தனித்தனியாகப் பிரித்தல்
+                        selected_classes = cls_val.split(" & ")
+                        for cls in selected_classes:
+                            staff_info = next((a for a in t_allots if a['class_name'] == cls), None)
+                            if staff_info:
+                                new_entries.append({
+                                    "class_name": cls, "day_of_week": d, "period_number": pn,
+                                    "teacher_id": t_id, "teacher_name": f"{sel_t['full_name']} ({sel_t['short_name']})",
+                                    "subject_name": staff_info['subject_name']
+                                })
                 if new_entries:
                     supabase.table("weekly_timetable").insert(new_entries).execute()
                 st.success("வெற்றிகரமாகச் சேமிக்கப்பட்டது!")
                 st.cache_data.clear()
-
-else:
-    with main_col:
-        st.info("தொடங்குவதற்கு மேல் உள்ள பட்டியலில் ஆசிரியரைத் தேர்வு செய்யவும்.")
