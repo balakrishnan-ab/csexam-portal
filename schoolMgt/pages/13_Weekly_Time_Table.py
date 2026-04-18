@@ -8,23 +8,27 @@ try:
     url: str = st.secrets["SUPABASE_URL"]
     key: str = st.secrets["SUPABASE_KEY"]
     supabase: Client = create_client(url, key)
-except Exception as e:
+except:
     st.error("Connection Error!")
     st.stop()
 
-st.set_page_config(page_title="Master Timetable", layout="wide")
+st.set_page_config(page_title="Smart Timetable", layout="wide")
 
-# --- 🎨 COLOR GENERATOR ---
+# CSS for compact grid and small cards
+st.markdown("""
+    <style>
+    .stButton > button { width: 100%; height: 45px; padding: 0px; font-size: 10px; border-radius: 2px; }
+    .allot-card { padding: 5px; border-radius: 4px; border: 1px solid #ccc; margin-bottom: 5px; text-align: center; cursor: pointer; }
+    </style>
+    """, unsafe_allow_html=True)
+
 def get_color(text):
-    if not text or text == "-": return "#f0f2f6"
-    hash_object = hashlib.md5(text.encode()).hexdigest()
-    r = (int(hash_object[:2], 16) % 100) + 180
-    g = (int(hash_object[2:4], 16) % 100) + 180
-    b = (int(hash_object[4:6], 16) % 100) + 180
-    return f'#{r:02x}{g:02x}{b:02x}'
+    if not text: return "#ffffff"
+    hash_obj = hashlib.md5(text.encode()).hexdigest()
+    return f'#{(int(hash_obj[:2],16)%50)+200:02x}{(int(hash_obj[2:4],16)%50)+200:02x}{(int(hash_obj[4:6],16)%50)+200:02x}'
 
 # --- ⚡ FETCH DATA ---
-@st.cache_data(ttl=5)
+@st.cache_data(ttl=2)
 def get_data():
     allot = supabase.table("staff_allotment").select("*").execute()
     time_t = supabase.table("weekly_timetable").select("*").execute()
@@ -35,101 +39,93 @@ def get_data():
 allot_data, time_data, teach_data, class_list = get_data()
 df_time = pd.DataFrame(time_data) if time_data else pd.DataFrame()
 
-# --- 🛠️ SIDEBAR: ஆசிரியர் தேர்வு & சில்லுகள் ---
-st.sidebar.title("👨‍🏫 ஆசிரியர் தேர்வகம்")
-t_options = {f"{t['full_name']} ({t['short_name']})": t for t in teach_data}
-sel_teacher_label = st.sidebar.selectbox("ஆசிரியரைத் தேர்வு செய்க:", ["-- Select --"] + list(t_options.keys()))
+# --- 🏗️ LAYOUT (3 பிரிவுகள்) ---
+# 1. வகுப்புத் தேர்வு | 2. அட்டவணை Grid | 3. ஆசிரியர் & ஒதுக்கீட்டுச் சில்லுகள்
+main_col, side_col = st.columns([1.2, 0.8])
 
-selected_allotment = None
-
-if sel_teacher_label != "-- Select --":
-    t_info = t_options[sel_teacher_label]
-    st.sidebar.markdown(f"### 🎯 {t_info['short_name']}-ன் பாடங்கள்")
+with side_col:
+    st.subheader("👨‍🏫 ஆசிரியர் & ஒதுக்கீடு")
+    t_opts = {f"{t['full_name']} ({t['short_name']})": t for t in teach_data}
+    sel_teacher = st.selectbox("ஆசிரியர்:", ["-- Select --"] + list(t_opts.keys()))
     
-    # இந்த ஆசிரியருக்கு ஒதுக்கப்பட்ட பாடங்களைச் சில்லுகளாகக் காட்டுதல்
-    t_allots = [a for a in allot_data if a['teacher_id'] == t_info['emis_id']]
-    
-    for a in t_allots:
-        # சில்லு (Card) வடிவமைப்பு
-        card_bg = get_color(a['class_name'])
-        with st.sidebar.container():
+    if sel_teacher != "-- Select --":
+        t_info = t_opts[sel_teacher]
+        t_allots = [a for a in allot_data if a['teacher_id'] == t_info['emis_id']]
+        
+        for a in t_allots:
+            # 🔍 ஏற்கனவே எத்தனை முறை பயன்படுத்தப்பட்டுள்ளது என எண்ணுதல்
+            used_count = len(df_time[(df_time['teacher_id'] == a['teacher_id']) & 
+                                     (df_time['class_name'] == a['class_name']) & 
+                                     (df_time['subject_name'] == a['subject_name'])]) if not df_time.empty else 0
+            
+            remaining = a['periods_per_week'] - used_count
+            bg = get_color(a['subject_name'])
+            
+            # சிறிய சில்லு (Card)
             st.markdown(f"""
-                <div style="background:{card_bg}; padding:10px; border-radius:10px; border:2px solid #555; margin-bottom:10px; cursor:pointer;">
-                    <div style="font-weight:bold; color:black;">{a['class_name']}</div>
-                    <div style="font-size:12px; color:#333;">{a['subject_name']}</div>
-                    <div style="font-size:11px; color:blue;">மொத்த பீரியட்கள்: {a['periods_per_week']}</div>
+                <div style="background:{bg}; border:1px solid #999; padding:5px; border-radius:5px; text-align:center;">
+                    <div style="font-size:11px; font-weight:bold;">{a['class_name']}</div>
+                    <div style="font-size:9px;">{a['subject_name']}</div>
+                    <div style="font-size:10px; color:{'red' if remaining <= 0 else 'blue'};">மீதம்: {remaining}</div>
                 </div>
             """, unsafe_allow_html=True)
-            if st.sidebar.button(f"தேர்வு செய்க: {a['class_name']}-{a['subject_name']}", key=f"btn_{a['id']}"):
-                st.session_state['active_allot'] = a
-                st.sidebar.success(f"{a['class_name']} தேர்வு செய்யப்பட்டது!")
-
-# --- 📅 MAIN VIEW: கால அட்டவணை ---
-view_mode = st.radio("பார்வை முறை:", ["வகுப்பு வாரியாக", "ஆசிரியர் வாரியாக"], horizontal=True)
-
-days = ["Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday"]
-periods = [1, 2, 3, 4, 5, 6, 7, 8]
-
-if view_mode == "வகுப்பு வாரியாக":
-    sel_class = st.selectbox("வகுப்பைத் தேர்வு செய்க:", class_list)
-    st.subheader(f"🏫 {sel_class} - கால அட்டவணை")
-    
-    # Table Header
-    cols = st.columns([1] + [1]*8)
-    cols[0].write("**Day**")
-    for p in periods: cols[p].write(f"**P{p}**")
-
-    for day in days:
-        row_cols = st.columns([1] + [1]*8)
-        row_cols[0].write(f"**{day}**")
-        
-        for p in periods:
-            # ஏற்கனவே உள்ள பதிவு
-            entry = df_time[(df_time['class_name'] == sel_class) & 
-                            (df_time['day_of_week'] == day) & 
-                            (df_time['period_number'] == p)] if not df_time.empty else pd.DataFrame()
             
-            with row_cols[p]:
-                if not entry.empty:
-                    label = entry.iloc[0]['teacher_name'].split('(')[-1].replace(')', '')
-                    bg = get_color(entry.iloc[0]['subject_name'])
-                    if st.button(label, key=f"p_{day}_{p}", help=entry.iloc[0]['subject_name']):
-                        # நீக்கும் வசதி
-                        supabase.table("weekly_timetable").delete().eq("id", entry.iloc[0]['id']).execute()
-                        st.cache_data.clear()
-                        st.rerun()
-                else:
-                    if st.button("➕", key=f"p_{day}_{p}"):
-                        if 'active_allot' in st.session_state:
-                            a = st.session_state['active_allot']
-                            # 🚦 Conflict Check
-                            conflict = df_time[(df_time['teacher_id'] == a['teacher_id']) & 
-                                               (df_time['day_of_week'] == day) & 
-                                               (df_time['period_number'] == p)] if not df_time.empty else pd.DataFrame()
-                            
-                            if not conflict.empty:
-                                st.error(f"முரண்பாடு! இவர் ஏற்கனவே {conflict.iloc[0]['class_name']} வகுப்பில் உள்ளார்.")
-                            else:
-                                supabase.table("weekly_timetable").insert({
-                                    "class_name": sel_class, "day_of_week": day, "period_number": p,
-                                    "teacher_id": a['teacher_id'], "teacher_name": a['teacher_name'],
-                                    "subject_name": a['subject_name']
-                                }).execute()
-                                st.cache_data.clear()
-                                st.rerun()
-                        else:
-                            st.warning("முதலில் இடதுபுறம் ஒரு பாடத்தைத் தேர்வு செய்யவும்!")
+            if remaining > 0:
+                if st.button(f"பயன்படுத்து: {a['class_name']}", key=f"src_{a['id']}"):
+                    st.session_state['active_allot'] = a
+            else:
+                st.write("🚫 முடிந்தது")
 
-elif view_mode == "ஆசிரியர் வாரியாக":
-    # படம் 2 போன்ற முழுமையான ஆசிரியர் அட்டவணை (Read Only View)
-    if sel_teacher_label != "-- Select --":
-        t_id = t_options[sel_teacher_label]['emis_id']
-        st.subheader(f"👨‍🏫 {sel_teacher_label} - தனிப்பட்ட கால அட்டவணை")
+with main_col:
+    st.subheader("📅 கால அட்டவணை")
+    sel_class = st.selectbox("வகுப்பு தேர்வு:", ["-- Select --"] + class_list, label_visibility="collapsed")
+    
+    if sel_class != "-- Select --":
+        days = ["Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday"]
+        periods = [1, 2, 3, 4, 5, 6, 7, 8]
         
-        t_matrix = pd.DataFrame("-", index=days, columns=periods)
-        if not df_time.empty:
-            t_entries = df_time[df_time['teacher_id'] == str(t_id)]
-            for _, r in t_entries.iterrows():
-                t_matrix.at[r['day_of_week'], r['period_number']] = r['class_name']
-        
-        st.table(t_matrix)
+        # Grid Header
+        h_cols = st.columns([1] + [1]*8)
+        for i, h in enumerate(["Day"] + [f"P{p}" for p in periods]): h_cols[i].markdown(f"**{h}**")
+
+        for day in days:
+            r_cols = st.columns([1] + [1]*8)
+            r_cols[0].markdown(f"**{day}**")
+            
+            for p in periods:
+                entry = df_time[(df_time['class_name'] == sel_class) & 
+                                (df_time['day_of_week'] == day) & 
+                                (df_time['period_number'] == p)] if not df_time.empty else pd.DataFrame()
+                
+                with r_cols[p]:
+                    if not entry.empty:
+                        # ஏற்கனவே பாடம் உள்ளது - நீக்கலாம்
+                        sub = entry.iloc[0]['subject_name']
+                        t_short = entry.iloc[0]['teacher_name'].split('(')[-1].replace(')', '')
+                        if st.button(f"{sub}\n{t_short}", key=f"p_{day}_{p}", help="நீக்க கிளிக் செய்க"):
+                            supabase.table("weekly_timetable").delete().eq("id", entry.iloc[0]['id']).execute()
+                            st.cache_data.clear()
+                            st.rerun()
+                    else:
+                        # காலியாக உள்ளது - சேர்க்கலாம்
+                        if st.button("➕", key=f"p_{day}_{p}"):
+                            if 'active_allot' in st.session_state:
+                                a = st.session_state['active_allot']
+                                
+                                # 🚦 Conflict Check (ஆசிரியர் வேறு வகுப்பில் இருக்கிறாரா?)
+                                conflict = df_time[(df_time['teacher_id'] == a['teacher_id']) & 
+                                                   (df_time['day_of_week'] == day) & 
+                                                   (df_time['period_number'] == p)] if not df_time.empty else pd.DataFrame()
+                                
+                                if not conflict.empty:
+                                    st.error(f"முரண்பாடு: {conflict.iloc[0]['class_name']}")
+                                else:
+                                    supabase.table("weekly_timetable").insert({
+                                        "class_name": sel_class, "day_of_week": day, "period_number": p,
+                                        "teacher_id": a['teacher_id'], "teacher_name": a['teacher_name'],
+                                        "subject_name": a['subject_name']
+                                    }).execute()
+                                    st.cache_data.clear()
+                                    st.rerun()
+                            else:
+                                st.warning("முதலில் வலதுபுறம் பாடம் தேர்வு செய்க!")
