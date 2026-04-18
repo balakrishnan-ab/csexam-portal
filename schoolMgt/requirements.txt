@@ -4,4 +4,3 @@ pandas
 openpyxl
 supabase
 plotly
-hashlib
