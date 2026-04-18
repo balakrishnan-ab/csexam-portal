@@ -74,7 +74,7 @@ if sel_t_label != "-- Select Teacher --":
             rem = a['periods_per_week'] - flat_vals.count(cls)
             fn = sum(1 for (d, p), c in st.session_state.draft_tt.items() if c == cls and int(p) <= 4)
             an = sum(1 for (d, p), c in st.session_state.draft_tt.items() if c == cls and int(p) > 4)
-            st.markdown(f"**{cls}** | மீதம்: {rem}|FN:{fn} | AN:{an}", unsafe_allow_html=True)
+            st.markdown(f"**{cls}** | மீதம்: {rem} ==> FN:{fn} | AN:{an}", unsafe_allow_html=True)
 
     # வகுப்பு வாரியான அட்டவணை (கீழே)
     st.divider()
