@@ -76,16 +76,32 @@ if sel_t_label != "-- Select Teacher --":
             color = "red" if rem < 0 else ("blue" if rem > 0 else "gray")
             st.markdown(f"**{cls}** | மீதம்: <span style='color:{color};'>{rem}</span><br><small>FN:{fn} | AN:{an}</small>", unsafe_allow_html=True)
 
-    # --- 5. வகுப்பு வாரியான அட்டவணை (3 per Row) ---
+    # --- 5. வகுப்பு வாரியான கால அட்டவணை (Horizontal Tables) ---
     st.divider()
-    st.markdown("### 🏫 வகுப்பு வாரியான அட்டவணை")
-    unique_classes = sorted(list(set([a['class_name'] for a in t_allots])))
-    rows = [unique_classes[i:i+3] for i in range(0, len(unique_classes), 3)]
+    st.markdown("### 🏫 வகுப்பு வாரியான கால அட்டவணை")
     
-    for row in rows:
+    # ஆசிரியருக்கு ஒதுக்கப்பட்ட அனைத்து வகுப்புகளையும் பெறுதல்
+    unique_classes = sorted(list(set([a['class_name'] for a in t_allots])))
+    
+    # 3 வகுப்பு அட்டவணைகளை ஒரு வரிசையில் காட்ட
+    for i in range(0, len(unique_classes), 3):
+        row_classes = unique_classes[i:i+3]
         cols = st.columns(3)
-        for i, cls in enumerate(row):
-            with cols[i]:
-                st.info(f"வகுப்பு: {cls}")
-                count = list(st.session_state.draft_tt.values()).count(cls)
-                st.write(f"மொத்த பாடவேளைகள்: {count}")
+        
+        for j, cls in enumerate(row_classes):
+            with cols[j]:
+                st.markdown(f"**வகுப்பு: {cls}**")
+                
+                # இந்த வகுப்பிற்குரிய தரவை மட்டும் எடுத்தல்
+                class_data = []
+                for (d, p), c in st.session_state.draft_tt.items():
+                    if c == cls:
+                        class_data.append({'Day': d[:3], 'Period': p})
+                
+                if class_data:
+                    # வகுப்பு வாரியாக டேட்டாபேஸில் இருந்து பாட விவரத்தை எடுக்க (சுருக்கமாக)
+                    df_class = pd.DataFrame(class_data).pivot(index='Day', columns='Period', values='Day')
+                    # இங்கே கால அட்டவணை வடிவத்தை டேபிள் போலக் காட்ட
+                    st.table(pd.DataFrame(index=days_short, columns=periods).fillna("-")) 
+                else:
+                    st.info("இன்னும் பாடவேளைகள் ஒதுக்கப்படவில்லை.")
