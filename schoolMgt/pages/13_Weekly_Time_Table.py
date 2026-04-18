@@ -11,39 +11,26 @@ except:
     st.error("Connection Error!")
     st.stop()
 
-st.set_page_config(page_title="Timetable Editor", layout="wide")
+st.set_page_config(page_title="Smart Timetable Editor", layout="wide")
 
-# CSS: அட்டவணை மற்றும் சில்லுகளுக்கான வடிவம்
+# CSS: கச்சிதமான சில்லுகள்
 st.markdown("""
     <style>
-    /* Data Editor Styling */
-    .stDataEditor div[data-testid="stHeader"] {
-        font-size: 16px !important; font-weight: bold !important; background-color: #f0f2f6 !important;
-    }
-    /* Small Colored Chips */
     .staff-chip {
-        display: inline-block; padding: 2px 8px; margin: 3px;
-        border-radius: 12px; font-size: 11px; font-weight: bold;
-        border: 1px solid #ccc; color: #333;
+        display: inline-block; padding: 4px 10px; margin: 4px;
+        border-radius: 15px; font-size: 12px; font-weight: bold;
+        border: 1px solid #999; color: #333; box-shadow: 1px 1px 3px rgba(0,0,0,0.1);
     }
     </style>
     """, unsafe_allow_html=True)
 
-def get_short_sub(sub_name):
-    sub_map = {"Computer Science": "CS", "Computer Applications": "CA", "Commerce": "COM", "Accountancy": "ACC", "Economics": "ECO", "Mathematics": "MAT", "Tamil": "TAM", "English": "ENG"}
-    return sub_map.get(sub_name, sub_name[:3].upper())
-
 def get_color(text):
     if not text: return "#ffffff"
     hash_obj = hashlib.md5(text.encode()).hexdigest()
-    # லேசான வண்ணங்கள் (Light Colors)
-    r = (int(hash_obj[:2],16)%40)+210
-    g = (int(hash_obj[2:4],16)%40)+210
-    b = (int(hash_obj[4:6],16)%40)+210
-    return f'#{r:02x}{g:02x}{b:02x}'
+    return f'#{(int(hash_obj[:2],16)%40)+210:02x}{(int(hash_obj[2:4],16)%40)+210:02x}{(int(hash_obj[4:6],16)%40)+210:02x}'
 
 # --- ⚡ FETCH DATA ---
-@st.cache_data(ttl=5)
+@st.cache_data(ttl=2)
 def get_data():
     allot = supabase.table("staff_allotment").select("*").execute()
     time_db = supabase.table("weekly_timetable").select("*").execute()
@@ -58,56 +45,74 @@ main_col, side_col = st.columns([1.5, 0.5])
 with main_col:
     selected_class = st.selectbox("வகுப்பைத் தேர்வு செய்க:", ["-- Select Class --"] + class_list)
 
-with side_col:
-    if selected_class != "-- Select Class --":
-        st.markdown("##### 🏷️ ஆசிரியர் ஒதுக்கீடு")
-        # அந்த வகுப்புக்கு ஒதுக்கப்பட்ட ஆசிரியர்களை மட்டும் எடுத்தல்
+# --- 📝 PREPARE INITIAL DATA ---
+if selected_class != "-- Select Class --":
+    days_short = ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat"]
+    days_full = ["Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday"]
+    periods = [str(i) for i in range(1, 9)]
+    day_map = dict(zip(days_short, days_full))
+
+    # காலி DataFrame
+    df_init = pd.DataFrame(index=days_short, columns=periods).fillna("")
+    
+    # தரவுதளத்தில் இருந்து ஏற்கனவே உள்ளதை எடுத்தல்
+    for e in db_list:
+        if e['class_name'] == selected_class:
+            d_short = e['day_of_week'][:3]
+            if d_short in days_short and str(e['period_number']) in periods:
+                label = f"{e['subject_name']} - {e['teacher_name'].split('(')[-1].replace(')', '')}"
+                df_init.at[d_short, str(e['period_number'])] = label
+
+    # --- 📝 DATA EDITOR ---
+    my_staff_opts = sorted(list(set([f"{a['subject_name']} - {a['teacher_name'].split('(')[-1].replace(')', '')}" 
+                                    for a in allot_data if a['class_name'] == selected_class])))
+    my_staff_opts = [""] + my_staff_opts
+
+    with main_col:
+        edited_df = st.data_editor(
+            df_init,
+            column_config={p: st.column_config.SelectboxColumn(p, options=my_staff_opts, width="small") for p in periods},
+            use_container_width=True,
+            num_rows="fixed",
+            key="tt_editor"
+        )
+
+    # --- 🏷️ DYNAMIC SIDE CHIPS (நேரடி கணக்கீடு) ---
+    with side_col:
+        st.markdown("##### 🏷️ ஆசிரியர் நிலை (Status)")
         class_staff = [a for a in allot_data if a['class_name'] == selected_class]
+        
+        # திரையில் (Edited DF) எத்தனை முறை ஒவ்வொரு ஆசிரியரும் இருக்கிறார் என எண்ணுதல்
+        flat_list = edited_df.values.flatten()
         
         if class_staff:
             for s in class_staff:
-                bg = get_color(s['subject_name'])
                 t_short = s['teacher_name'].split('(')[-1].replace(')', '')
-                st.markdown(f"""
-                    <div class="staff-chip" style="background-color: {bg};">
-                        {s['subject_name']} - {t_short} ({s['periods_per_week']})
-                    </div>
-                """, unsafe_allow_html=True)
+                label_to_find = f"{s['subject_name']} - {t_short}"
+                
+                # திரையில் உள்ள எண்ணிக்கை
+                current_on_screen = list(flat_list).count(label_to_find)
+                rem = s['periods_per_week'] - current_on_screen
+                
+                bg = get_color(s['subject_name'])
+                
+                # எண்ணிக்கை 0 ஆனால் சிவப்பு அல்லது மங்கிய நிறத்தில் காட்டலாம்
+                if rem > 0:
+                    st.markdown(f"""<div class="staff-chip" style="background-color: {bg}; border-left: 5px solid green;">
+                        {s['subject_name']} - {t_short} | மீதம்: {rem}</div>""", unsafe_allow_html=True)
+                elif rem == 0:
+                    st.markdown(f"""<div class="staff-chip" style="background-color: #e0e0e0; color: #999; border-left: 5px solid gray;">
+                        {s['subject_name']} - {t_short} | முடிந்தது ✅</div>""", unsafe_allow_html=True)
+                else:
+                    st.markdown(f"""<div class="staff-chip" style="background-color: #ffcccc; color: red; border-left: 5px solid red;">
+                        {s['subject_name']} - {t_short} | கூடுதல்: {abs(rem)} ⚠️</div>""", unsafe_allow_html=True)
         else:
             st.caption("ஒதுக்கீடு இல்லை")
 
-# --- 📝 EDITING SECTION ---
-if selected_class != "-- Select Class --":
+    # --- 🚀 SAVE BUTTON ---
     with main_col:
-        days_short = ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat"]
-        days_full = ["Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday"]
-        periods = [str(i) for i in range(1, 9)]
-        day_map = dict(zip(days_short, days_full))
-
-        # 1. ஆரம்பகால தரவுகளை DataFrame-ல் நிரப்புதல்
-        df = pd.DataFrame(index=days_short, columns=periods).fillna("")
-        for e in db_list:
-            if e['class_name'] == selected_class:
-                d_short = e['day_of_week'][:3]
-                if d_short in days_short and str(e['period_number']) in periods:
-                    label = f"{e['subject_name']} ({e['teacher_name'].split('(')[-1].replace(')', '')})"
-                    df.at[d_short, str(e['period_number'])] = label
-
-        # 2. Dropdown மெனுவிற்கான பட்டியல்
-        my_staff_opts = sorted(list(set([f"{a['subject_name']} ({a['teacher_name'].split('(')[-1].replace(')', '')})" 
-                                        for a in allot_data if a['class_name'] == selected_class])))
-        my_staff_opts = [""] + my_staff_opts
-
-        # 3. Data Editor
-        edited_df = st.data_editor(
-            df,
-            column_config={p: st.column_config.SelectboxColumn(p, options=my_staff_opts, width="small") for p in periods},
-            use_container_width=True,
-            num_rows="fixed"
-        )
-
-        # 4. Save Button
         if st.button("🚀 சரிபார்த்துச் சேமி (Save)", type="primary", use_container_width=True):
+            # (சேமிக்கும் அதே பழைய லாஜிக்...)
             with st.spinner("சேமிக்கப்படுகிறது..."):
                 supabase.table("weekly_timetable").delete().eq("class_name", selected_class).execute()
                 new_data = []
@@ -115,8 +120,8 @@ if selected_class != "-- Select Class --":
                     for p_num in periods:
                         val = row[p_num]
                         if val:
-                            sub_n = val.split(" (")[0]
-                            t_s = val.split(" (")[-1].replace(")", "")
+                            sub_n = val.split(" - ")[0]
+                            t_s = val.split(" - ")[-1]
                             staff = next((a for a in allot_data if a['class_name'] == selected_class and a['subject_name'] == sub_n and t_s in a['teacher_name']), None)
                             if staff:
                                 new_data.append({
@@ -125,5 +130,5 @@ if selected_class != "-- Select Class --":
                                 })
                 if new_data:
                     supabase.table("weekly_timetable").insert(new_data).execute()
-                st.success("சேமிக்கப்பட்டது!")
+                st.success("வெற்றிகரமாகச் சேமிக்கப்பட்டது!")
                 st.cache_data.clear()
