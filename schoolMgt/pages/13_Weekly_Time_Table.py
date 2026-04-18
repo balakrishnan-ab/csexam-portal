@@ -145,4 +145,18 @@ if sel_teacher_name != "-- Select Teacher --":
                     else:
                         if st.button(" ", key=f"cell_{day}_{p}"):
                             if 'active_allot' in st.session_state:
-                                a = st.session_state['
+                                a = st.session_state['active_allot']
+                                # Conflict Check (ஆசிரியர் வேறு வகுப்பில் இருக்கிறாரா?)
+                                conflict = df_time[(df_time['teacher_id'] == a['teacher_id']) & (df_time['day_of_week'] == day) & (df_time['period_number'] == p)] if not df_time.empty else pd.DataFrame()
+                                if not conflict.empty:
+                                    st.error(f"முரண்பாடு: {conflict.iloc[0]['class_name']}")
+                                else:
+                                    supabase.table("weekly_timetable").insert({
+                                        "class_name": active_class, "day_of_week": day, "period_number": p,
+                                        "teacher_id": a['teacher_id'], "teacher_name": a['teacher_name'],
+                                        "subject_name": a['subject_name']
+                                    }).execute()
+                                    st.cache_data.clear()
+                                    st.rerun()
+else:
+    st.info("கால அட்டவணையைத் தொடங்க ஆசிரியரைத் தேர்வு செய்யவும்.")
