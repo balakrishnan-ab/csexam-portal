@@ -13,22 +13,29 @@ except:
 
 st.set_page_config(page_title="Excel Style Timetable", layout="wide")
 
-# கச்சிதமான மற்றும் வண்ணமயமான தோற்றத்திற்கான CSS
+# Excel போன்ற நேர்த்தியான பார்டர் மற்றும் கிரிட் ஸ்டைலிங்
 st.markdown("""
     <style>
-    /* கிரிட் கட்டங்கள் */
+    /* Excel Table Grid */
     .stButton > button {
-        width: 100%; height: 32px; padding: 0px; font-size: 10px;
-        border-radius: 0px; border: 0.5px solid #ccc; line-height: 1.1;
+        width: 100%; height: 35px; padding: 0px; font-size: 11px;
+        border-radius: 0px; border: 1px solid #000 !important; /* தடிமனான கருப்பு கோடு */
+        line-height: 1.1; font-weight: 500;
     }
-    /* Day Column */
-    .day-label {
-        font-size: 11px; font-weight: bold; background: #eee;
-        height: 32px; display: flex; align-items: center;
-        justify-content: center; border: 0.5px solid #ccc;
+    /* Day & Header Labels */
+    .header-label {
+        font-size: 12px; font-weight: bold; background: #d3d3d3;
+        height: 35px; display: flex; align-items: center;
+        justify-content: center; border: 1px solid #000;
     }
-    /* Active Card Highlight */
-    .active-card { border: 3px solid #000 !important; box-shadow: 0px 0px 10px rgba(0,0,0,0.5); }
+    /* Teacher Allotment Cards */
+    .allot-card {
+        border-radius: 4px; margin-bottom: 5px; text-align: center;
+        transition: transform 0.2s;
+    }
+    .active-selection {
+        border: 4px solid #ff4b4b !important; /* தேர்வு செய்யப்பட்ட சில்லு சிவப்பு பார்டர் */
+    }
     div[data-testid="stColumn"] { padding: 0px !important; margin: 0px !important; }
     </style>
     """, unsafe_allow_html=True)
@@ -43,10 +50,10 @@ def get_short_sub(sub_name):
 def get_color(text):
     if not text: return "#ffffff"
     hash_obj = hashlib.md5(text.encode()).hexdigest()
-    # தெளிவான வண்ணங்கள் (Vibrant colors)
-    r = (int(hash_obj[:2],16)%60)+190
-    g = (int(hash_obj[2:4],16)%60)+190
-    b = (int(hash_obj[4:6],16)%60)+190
+    # தெளிவான வண்ணங்கள்
+    r = (int(hash_obj[:2],16)%50)+200
+    g = (int(hash_obj[2:4],16)%50)+200
+    b = (int(hash_obj[4:6],16)%50)+200
     return f'#{r:02x}{g:02x}{b:02x}'
 
 # --- ⚡ FETCH DATA ---
@@ -63,14 +70,14 @@ df_time = pd.DataFrame(time_data) if time_data else pd.DataFrame()
 emis_to_short = {t['emis_id']: t['short_name'] for t in teach_data}
 
 # --- 🏗️ LAYOUT ---
-main_col, side_col = st.columns([1.6, 0.4])
+main_col, side_col = st.columns([1.5, 0.5])
 
 with side_col:
-    st.write("##### 👨‍🏫 தேர்வு செய்க")
+    st.write("##### 👨‍🏫 ஆசிரியர் தேர்வு")
     t_opts = {f"{t['full_name']} ({t['short_name']})": t for t in teach_data}
-    sel_teacher = st.selectbox("ஆசிரியர்:", ["-- Select --"] + list(t_opts.keys()), label_visibility="collapsed")
+    sel_teacher = st.selectbox("Teacher Selection", list(t_opts.keys()), label_visibility="collapsed")
     
-    if sel_teacher != "-- Select --":
+    if sel_teacher:
         t_id = t_opts[sel_teacher]['emis_id']
         t_allots = [a for a in allot_data if a['teacher_id'] == t_id]
         
@@ -79,55 +86,60 @@ with side_col:
             rem = a['periods_per_week'] - used
             bg = get_color(a['subject_name'])
             
-            # தற்போது தேர்வு செய்யப்பட்டுள்ள சில்லு என்றால் பார்டர் தடிமனாக இருக்கும்
+            # சில்லு வடிவமைப்பு - பிரிக்காமல் ஒரே பெட்டியாக
             is_active = st.session_state.get('active_allot_id') == a['id']
-            border_style = "3px solid black" if is_active else "1px solid #999"
+            border_css = "active-selection" if is_active else ""
             
-            st.markdown(f"""<div style="background:{bg}; border:{border_style}; padding:4px; border-radius:4px; text-align:center; margin-bottom:2px;">
-                <span style="font-size:11px; font-weight:bold;">{a['class_name']} ({rem})</span>
-                </div>""", unsafe_allow_html=True)
-            
+            # முழு சில்லும் ஒரே பட்டனாக
             if rem > 0:
-                if st.button(f"பிடி {a['class_name']}", key=f"allot_{a['id']}"):
+                if st.button(f"{a['class_name']} - {get_short_sub(a['subject_name'])}\n(மீதம்: {rem})", key=f"allot_{a['id']}", 
+                             help="இதை கிளிக் செய்து பின் அட்டவணையில் ஒட்டவும்"):
                     st.session_state['active_allot'] = a
                     st.session_state['active_allot_id'] = a['id']
                     st.rerun()
+            else:
+                st.markdown(f"<div style='background:#eee; color:#aaa; border:1px solid #ccc; padding:5px; font-size:10px; text-align:center;'>{a['class_name']} (0)</div>", unsafe_allow_html=True)
 
 with main_col:
-    sel_class = st.selectbox("வகுப்பு:", ["-- Select --"] + class_list)
-    if sel_class != "-- Select --":
+    sel_class = st.selectbox("Select Class:", ["-- Select Class --"] + class_list, label_visibility="collapsed")
+    
+    if sel_class != "-- Select Class --":
         days = ["Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday"]
         periods = [1, 2, 3, 4, 5, 6, 7, 8]
         
-        # Header Row
+        # Grid Header
         h_cols = st.columns([0.8] + [1]*8)
-        h_cols[0].write("Day")
-        for i, p in enumerate(periods): h_cols[i+1].write(f"P{p}")
+        h_cols[0].markdown("<div class='header-label'>Day</div>", unsafe_allow_html=True)
+        for p in periods:
+            h_cols[p].markdown(f"<div class='header-label'>P{p}</div>", unsafe_allow_html=True)
 
         for day in days:
             r_cols = st.columns([0.8] + [1]*8)
-            r_cols[0].markdown(f"<div class='day-label'>{day[:3]}</div>", unsafe_allow_html=True)
+            r_cols[0].markdown(f"<div class='header-label' style='background:#f9f9f9;'>{day[:3]}</div>", unsafe_allow_html=True)
             
             for p in periods:
                 entry = df_time[(df_time['class_name'] == sel_class) & (df_time['day_of_week'] == day) & (df_time['period_number'] == p)] if not df_time.empty else pd.DataFrame()
                 
                 with r_cols[p]:
                     if not entry.empty:
-                        sub_code, t_code = get_short_sub(entry.iloc[0]['subject_name']), emis_to_short.get(entry.iloc[0]['teacher_id'], "??")
+                        sub_code = get_short_sub(entry.iloc[0]['subject_name'])
+                        t_code = emis_to_short.get(entry.iloc[0]['teacher_id'], "??")
                         bg_color = get_color(sub_code)
-                        st.markdown(f'<div style="position:absolute; width:100%; height:32px; background:{bg_color}; border:0.5px solid #aaa; z-index:-1;"></div>', unsafe_allow_html=True)
+                        # Excel போன்ற வண்ணக் கோடுகள்
+                        st.markdown(f'<div style="position:absolute; width:100%; height:35px; background:{bg_color}; z-index:-1;"></div>', unsafe_allow_html=True)
                         if st.button(f"{sub_code}\n{t_code}", key=f"cell_{day}_{p}"):
                             supabase.table("weekly_timetable").delete().eq("id", entry.iloc[0]['id']).execute()
                             st.cache_data.clear()
                             st.rerun()
                     else:
-                        # காலியான கட்டம் (பிளஸ் குறி இல்லை)
+                        # காலியான Excel செல்
                         if st.button(" ", key=f"cell_{day}_{p}"):
                             if 'active_allot' in st.session_state:
                                 a = st.session_state['active_allot']
-                                used_now = len(df_time[(df_time['teacher_id'] == a['teacher_id']) & (df_time['class_name'] == a['class_name']) & (df_time['subject_name'] == a['subject_name'])]) if not df_time.empty else 0
-                                if used_now < a['periods_per_week']:
-                                    supabase.table("weekly_timetable").insert({"class_name": sel_class, "day_of_week": day, "period_number": p, "teacher_id": a['teacher_id'], "teacher_name": a['teacher_name'], "subject_name": a['subject_name']}).execute()
-                                    st.cache_data.clear()
-                                    st.rerun()
-                                else: st.error("Limit reached!")
+                                supabase.table("weekly_timetable").insert({
+                                    "class_name": sel_class, "day_of_week": day, "period_number": p,
+                                    "teacher_id": a['teacher_id'], "teacher_name": a['teacher_name'],
+                                    "subject_name": a['subject_name']
+                                }).execute()
+                                st.cache_data.clear()
+                                st.rerun()
