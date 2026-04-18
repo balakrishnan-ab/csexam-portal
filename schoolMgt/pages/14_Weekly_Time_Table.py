@@ -12,8 +12,7 @@ except:
 
 st.set_page_config(page_title="Teacher Timetable Editor", layout="wide")
 
-# --- 2. FETCH DATA ---
-@st.cache_data(ttl=60)
+@st.cache_data(ttl=10) # தரவு உடனுக்குடன் மாற ttl குறைக்கப்பட்டுள்ளது
 def get_data():
     allot = supabase.table("staff_allotment").select("*").execute()
     time_db = supabase.table("weekly_timetable").select("*").execute()
@@ -25,7 +24,6 @@ allot_data, db_list, teach_data = get_data()
 st.title("👨‍🏫 ஆசிரியர் கால அட்டவணை மேலாண்மை")
 if 'draft_tt' not in st.session_state: st.session_state.draft_tt = {}
 
-# --- 3. TEACHER SELECTION ---
 t_opts = {f"{t['full_name']} ({t['short_name']})": t for t in teach_data}
 sel_t_label = st.selectbox("ஆசிரியரைத் தேர்வு செய்க:", ["-- Select Teacher --"] + list(t_opts.keys()))
 
@@ -41,76 +39,46 @@ if sel_t_label != "-- Select Teacher --":
             if e['teacher_id'] == t_id:
                 st.session_state.draft_tt[(e['day_of_week'], e['period_number'])] = e['class_name']
 
-    main_col, side_col = st.columns([0.7, 0.3])
+    days = ["Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday"]
+    periods = [str(i) for i in range(1, 9)]
 
-    with main_col:
-        days = ["Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday"]
-        periods = [str(i) for i in range(1, 9)]
-        df_grid = pd.DataFrame(index=[d[:3] for d in days], columns=periods).fillna("")
-        for (d, p), cls in st.session_state.draft_tt.items():
-            df_grid.at[d[:3], str(p)] = cls
+    # --- EDITOR ---
+    df_grid = pd.DataFrame(index=[d[:3] for d in days], columns=periods).fillna("")
+    for (d, p), cls in st.session_state.draft_tt.items():
+        df_grid.at[d[:3], str(p)] = cls
 
-        flat_tt = list(st.session_state.draft_tt.values())
-        available_list = [a['class_name'] for a in t_allots if a['periods_per_week'] - flat_tt.count(a['class_name']) > 0]
-        final_options = sorted(list(set([""] + available_list + [str(x) for x in flat_tt if x and x != ""])))
+    edited_df = st.data_editor(df_grid, column_config={p: st.column_config.SelectboxColumn(p, options=sorted(list(set([""] + [a['class_name'] for a in t_allots] + [str(x) for x in st.session_state.draft_tt.values() if x]))), width="small") for p in periods}, use_container_width=True, num_rows="fixed")
+    
+    for d_short, row in edited_df.iterrows():
+        day = next(d for d in days if d.startswith(d_short))
+        for p in periods: st.session_state.draft_tt[(day, int(p))] = row[p]
 
-        edited_df = st.data_editor(df_grid, column_config={p: st.column_config.SelectboxColumn(p, options=final_options, width="small") for p in periods}, use_container_width=True, num_rows="fixed")
-        
-        for d_short, row in edited_df.iterrows():
-            day = next(d for d in days if d.startswith(d_short))
-            for p in periods: st.session_state.draft_tt[(day, int(p))] = row[p]
+    if st.button("🚀 அட்டவணையைச் சேமி"):
+        supabase.table("weekly_timetable").delete().eq("teacher_id", t_id).execute()
+        new_entries = [{"class_name": cls, "day_of_week": d, "period_number": p, "teacher_id": t_id, 
+                       "teacher_name": sel_t['full_name'], "subject_name": next((a['subject_name'] for a in t_allots if a['class_name'] == cls), "")}
+                      for (d, p), cls in st.session_state.draft_tt.items() if cls and cls != ""]
+        if new_entries: supabase.table("weekly_timetable").insert(new_entries).execute()
+        st.success("சேமிக்கப்பட்டது!")
+        st.rerun()
 
-        if st.button("🚀 அட்டவணையைச் சேமி", type="primary", use_container_width=True):
-            supabase.table("weekly_timetable").delete().eq("teacher_id", t_id).execute()
-            # [Save Logic - முந்தையது போலவே]
-            st.success("சேமிக்கப்பட்டது!")
-
-    # --- 4. ஒதுக்கீடு விவரம் (FN/AN) ---
-    with side_col:
-        st.markdown("##### 🏷️ ஒதுக்கீடு விவரம் (FN/AN)")
-        for a in t_allots:
-            cls = a['class_name']
-            rem = a['periods_per_week'] - flat_tt.count(cls)
-            fn = sum(1 for (d, p), c in st.session_state.draft_tt.items() if c == cls and int(p) <= 4)
-            an = sum(1 for (d, p), c in st.session_state.draft_tt.items() if c == cls and int(p) > 4)
-            color = "red" if rem < 0 else ("blue" if rem > 0 else "gray")
-            st.markdown(f"**{cls}** | மீதம்: <span style='color:{color};'>{rem}</span><br><small>FN:{fn} | AN:{an}</small>", unsafe_allow_html=True)
-
-# --- 5. வகுப்பு வாரியான கால அட்டவணை (Split Combine Classes) ---
+    # --- வகுப்பு வாரியான அட்டவணை (திருத்தப்பட்ட லாஜிக்) ---
     st.divider()
     st.markdown("### 🏫 வகுப்பு வாரியான கால அட்டவணை")
+    unique_classes = sorted(list(set([a['class_name'] for a in allot_data])))
     
-    days_short = ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat"]
-    periods = [str(i) for i in range(1, 9)]
-    
-    unique_classes = sorted(list(set([a['class_name'] for a in t_allots])))
-    
+    # மீண்டும் புதிய தரவுகளைப் பெற
+    _, db_list_new, _ = get_data() 
+
     for i in range(0, len(unique_classes), 3):
-        row_classes = unique_classes[i:i+3]
         cols = st.columns(3)
-        
-        for j, cls in enumerate(row_classes):
+        for j, cls in enumerate(unique_classes[i:i+3]):
             with cols[j]:
                 st.markdown(f"**வகுப்பு: {cls}**")
-                df_cls = pd.DataFrame(index=days_short, columns=periods).fillna("-")
-                
-                for entry in db_list:
-                    # வகுப்புப் பெயரில் உள்ள 'Combine' வகுப்புகளைப் பிரித்தல்
-                    classes_in_entry = [c.strip() for c in str(entry['class_name']).split("&")]
-                    
-                    if cls in classes_in_entry:
-                        d = entry['day_of_week'][:3]
-                        p = str(entry['period_number'])
-                        
-                        t_name = entry.get('teacher_name', '??')
-                        short_name = t_name.split('(')[-1].replace(')', '') if '(' in t_name else t_name[:3]
-                        subj = entry.get('subject_name', '??')[:3]
-                        
-                        # ஏற்கனவே ஏதேனும் பாடம் இருந்தால் கமா போட்டு சேர்ப்பது
-                        current_val = df_cls.at[d, p]
-                        if current_val == "-":
-                            df_cls.at[d, p] = f"{subj}-{short_name}"
-                        else:
-                            df_cls.at[d, p] = f"{current_val}, {subj}-{short_name}"
-                
+                df_cls = pd.DataFrame(index=[d[:3] for d in days], columns=periods).fillna("-")
+                for entry in db_list_new:
+                    # வகுப்புப் பெயர் சரியாகப் பொருந்துகிறதா எனச் சரிபார்த்தல் (Split & Match)
+                    classes = [c.strip() for c in str(entry['class_name']).split("&")]
+                    if cls in classes:
+                        df_cls.at[entry['day_of_week'][:3], str(entry['period_number'])] = f"{entry['subject_name'][:3]}-{entry['teacher_name'].split('(')[-1].replace(')', '')[:2]}"
                 st.table(df_cls)
