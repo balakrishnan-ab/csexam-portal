@@ -76,11 +76,23 @@ if sel_t_label != "-- Select Teacher --":
             an = sum(1 for (d, p), c in st.session_state.draft_tt.items() if c == cls and int(p) > 4)
             st.markdown(f"**{cls}** | மீதம்: {rem} ==> FN:{fn} | AN:{an}", unsafe_allow_html=True)
 
-    # வகுப்பு வாரியான அட்டவணை (கீழே)
+  # --- 5. வகுப்பு வாரியான கால அட்டவணை (With Coloring) ---
     st.divider()
     st.markdown("### 🏫 வகுப்பு வாரியான கால அட்டவணை")
+    
     unique_classes = sorted(list(set([a['class_name'] for a in allot_data])))
     db_list_new = supabase.table("weekly_timetable").select("*").execute().data
+
+    # அட்டவணைக்கு வண்ணம் கொடுக்கும் பங்க்ஷன்
+    def style_timetable(df):
+        return df.style.set_table_styles([
+            # முதல் நெடுவரிசை (Index/Days) வண்ணம்
+            {'selector': 'th.row_heading', 'props': [('background-color', '#f0f2f6'), ('color', '#1f77b4'), ('font-weight', 'bold')]},
+            # முதல் வரிசை (Header/Periods) வண்ணம்
+            {'selector': 'th.col_heading', 'props': [('background-color', '#1f77b4'), ('color', 'white'), ('font-weight', 'bold')]},
+            # கட்டங்களின் பார்டர்
+            {'selector': 'td', 'props': [('border', '1px solid #dee2e6')]}
+        ])
 
     for i in range(0, len(unique_classes), 3):
         cols = st.columns(3)
@@ -88,8 +100,12 @@ if sel_t_label != "-- Select Teacher --":
             with cols[j]:
                 st.markdown(f"**வகுப்பு: {cls}**")
                 df_cls = pd.DataFrame(index=[d[:3] for d in days], columns=periods).fillna("-")
+                
                 for entry in db_list_new:
                     classes = [c.strip() for c in str(entry['class_name']).split("&")]
                     if cls in classes:
-                        df_cls.at[entry['day_of_week'][:3], str(entry['period_number'])] = f"{entry['subject_name'][:3]}-{entry['teacher_name'].split('(')[-1].replace(')', '')[:2]}"
-                st.table(df_cls)
+                        short_t = entry['teacher_name'].split('(')[-1].replace(')', '')[:2]
+                        df_cls.at[entry['day_of_week'][:3], str(entry['period_number'])] = f"{entry['subject_name'][:3]}-{short_t}"
+                
+                # st.table-க்கு பதிலாக st.write(styled_df) பயன்படுத்த வேண்டும்
+                st.write(style_timetable(df_cls).to_html(), unsafe_allow_html=True)
