@@ -76,17 +76,15 @@ if sel_t_label != "-- Select Teacher --":
             color = "red" if rem < 0 else ("blue" if rem > 0 else "gray")
             st.markdown(f"**{cls}** | மீதம்: <span style='color:{color};'>{rem}</span><br><small>FN:{fn} | AN:{an}</small>", unsafe_allow_html=True)
 
-# --- 5. வகுப்பு வாரியான கால அட்டவணை (Horizontal Tables) ---
+# --- 5. வகுப்பு வாரியான கால அட்டவணை (Split Combine Classes) ---
     st.divider()
     st.markdown("### 🏫 வகுப்பு வாரியான கால அட்டவணை")
     
-    # 1. மாறிகளை முன்னரே வரையறுத்தல்
     days_short = ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat"]
     periods = [str(i) for i in range(1, 9)]
     
     unique_classes = sorted(list(set([a['class_name'] for a in t_allots])))
     
-    # 2. 3 வகுப்பு அட்டவணைகளை ஒரு வரிசையில் காட்ட
     for i in range(0, len(unique_classes), 3):
         row_classes = unique_classes[i:i+3]
         cols = st.columns(3)
@@ -94,21 +92,25 @@ if sel_t_label != "-- Select Teacher --":
         for j, cls in enumerate(row_classes):
             with cols[j]:
                 st.markdown(f"**வகுப்பு: {cls}**")
-                
-                # 3. அட்டவணையை உருவாக்குதல்
                 df_cls = pd.DataFrame(index=days_short, columns=periods).fillna("-")
                 
-                # தரவுத்தளத்தில் இருந்து அந்த வகுப்பிற்கான விவரங்களை எடுத்தல்
                 for entry in db_list:
-                    if entry['class_name'] == cls:
+                    # வகுப்புப் பெயரில் உள்ள 'Combine' வகுப்புகளைப் பிரித்தல்
+                    classes_in_entry = [c.strip() for c in str(entry['class_name']).split("&")]
+                    
+                    if cls in classes_in_entry:
                         d = entry['day_of_week'][:3]
                         p = str(entry['period_number'])
                         
-                        # பாடம்-ஆசிரியர் விவரம் (பிழை வராமல் இருக்க செக் செய்தல்)
                         t_name = entry.get('teacher_name', '??')
                         short_name = t_name.split('(')[-1].replace(')', '') if '(' in t_name else t_name[:3]
                         subj = entry.get('subject_name', '??')[:3]
                         
-                        df_cls.at[d, p] = f"{subj}-{short_name}"
+                        # ஏற்கனவே ஏதேனும் பாடம் இருந்தால் கமா போட்டு சேர்ப்பது
+                        current_val = df_cls.at[d, p]
+                        if current_val == "-":
+                            df_cls.at[d, p] = f"{subj}-{short_name}"
+                        else:
+                            df_cls.at[d, p] = f"{current_val}, {subj}-{short_name}"
                 
                 st.table(df_cls)
