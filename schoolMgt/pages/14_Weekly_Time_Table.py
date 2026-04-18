@@ -76,17 +76,17 @@ if sel_t_label != "-- Select Teacher --":
             color = "red" if rem < 0 else ("blue" if rem > 0 else "gray")
             st.markdown(f"**{cls}** | மீதம்: <span style='color:{color};'>{rem}</span><br><small>FN:{fn} | AN:{an}</small>", unsafe_allow_html=True)
 
-# --- 5. வகுப்பு வாரியான கால அட்டவணை (Subject-Teacher Mapping) ---
+# --- 5. வகுப்பு வாரியான கால அட்டவணை (Horizontal Tables) ---
     st.divider()
     st.markdown("### 🏫 வகுப்பு வாரியான கால அட்டவணை")
     
-    # 1. ஆசிரியரின் EMIS ஐடியைப் பயன்படுத்தி அனைத்து ஆசிரியர்களின் சுருக்கப் பெயர்களை ஒரு டிக்ஷ்னரியாக எடுக்க
-    # இதை fetch_data செய்யும் போதே அல்லது இங்கு ஒருமுறை எடுத்து வைத்துக்கொள்ளலாம்
-    # (முன்னர் எடுத்திருந்த teach_data-வைப் பயன்படுத்தவும்)
+    # 1. மாறிகளை முன்னரே வரையறுத்தல்
+    days_short = ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat"]
+    periods = [str(i) for i in range(1, 9)]
     
     unique_classes = sorted(list(set([a['class_name'] for a in t_allots])))
     
-    # 3 வகுப்பு அட்டவணைகளை ஒரு வரிசையில் காட்ட
+    # 2. 3 வகுப்பு அட்டவணைகளை ஒரு வரிசையில் காட்ட
     for i in range(0, len(unique_classes), 3):
         row_classes = unique_classes[i:i+3]
         cols = st.columns(3)
@@ -95,20 +95,19 @@ if sel_t_label != "-- Select Teacher --":
             with cols[j]:
                 st.markdown(f"**வகுப்பு: {cls}**")
                 
-                # அட்டவணையைத் தயார் செய்தல்
+                # 3. அட்டவணையை உருவாக்குதல்
                 df_cls = pd.DataFrame(index=days_short, columns=periods).fillna("-")
                 
-                # தரவுத்தளத்தில் இருந்து அந்த வகுப்பிற்கான முழு விவரத்தையும் எடுத்தல்
+                # தரவுத்தளத்தில் இருந்து அந்த வகுப்பிற்கான விவரங்களை எடுத்தல்
                 for entry in db_list:
                     if entry['class_name'] == cls:
                         d = entry['day_of_week'][:3]
                         p = str(entry['period_number'])
-                        # பாடம்-ஆசிரியர் (உதாரணம்: Tam-MR, Eng-MA, CS-AB)
-                        # teacher_name-ல் இருந்து short_name எடுக்கும் லாஜிக் (அடைப்புக்குறிக்குள் இருப்பது)
-                        t_name = entry['teacher_name']
-                        short_name = t_name.split('(')[-1].replace(')', '') if '(' in t_name else t_name[:3]
                         
-                        subj = entry['subject_name'][:3] # பாடத்தின் முதல் 3 எழுத்துக்கள்
+                        # பாடம்-ஆசிரியர் விவரம் (பிழை வராமல் இருக்க செக் செய்தல்)
+                        t_name = entry.get('teacher_name', '??')
+                        short_name = t_name.split('(')[-1].replace(')', '') if '(' in t_name else t_name[:3]
+                        subj = entry.get('subject_name', '??')[:3]
                         
                         df_cls.at[d, p] = f"{subj}-{short_name}"
                 
