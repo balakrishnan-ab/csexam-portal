@@ -11,16 +11,17 @@ except:
     st.error("Connection Error!")
     st.stop()
 
-st.set_page_config(page_title="Smart Timetable Editor", layout="wide")
+st.set_page_config(page_title="Strict Timetable Editor", layout="wide")
 
-# CSS: கச்சிதமான சில்லுகள்
+# CSS: கச்சிதமான சில்லுகள் மற்றும் எச்சரிக்கை வண்ணம்
 st.markdown("""
     <style>
     .staff-chip {
         display: inline-block; padding: 4px 10px; margin: 4px;
         border-radius: 15px; font-size: 12px; font-weight: bold;
-        border: 1px solid #999; color: #333; box-shadow: 1px 1px 3px rgba(0,0,0,0.1);
+        border: 1px solid #999; color: #333;
     }
+    .stDataEditor [data-testid="stHeader"] { font-size: 14px !important; font-weight: bold; }
     </style>
     """, unsafe_allow_html=True)
 
@@ -45,7 +46,6 @@ main_col, side_col = st.columns([1.5, 0.5])
 with main_col:
     selected_class = st.selectbox("வகுப்பைத் தேர்வு செய்க:", ["-- Select Class --"] + class_list)
 
-# --- 📝 PREPARE INITIAL DATA ---
 if selected_class != "-- Select Class --":
     days_short = ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat"]
     days_full = ["Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday"]
@@ -64,71 +64,73 @@ if selected_class != "-- Select Class --":
                 df_init.at[d_short, str(e['period_number'])] = label
 
     # --- 📝 DATA EDITOR ---
-    my_staff_opts = sorted(list(set([f"{a['subject_name']} - {a['teacher_name'].split('(')[-1].replace(')', '')}" 
-                                    for a in allot_data if a['class_name'] == selected_class])))
-    my_staff_opts = [""] + my_staff_opts
-
+    # திரையில் உள்ள எண்ணிக்கையைப் பொறுத்து ஆப்ஷன்களைக் குறைத்தல்
+    class_staff = [a for a in allot_data if a['class_name'] == selected_class]
+    
     with main_col:
+        # தற்காலிகமாக எடிட்டரைக் காட்டுதல்
         edited_df = st.data_editor(
             df_init,
-            column_config={p: st.column_config.SelectboxColumn(p, options=my_staff_opts, width="small") for p in periods},
+            column_config={p: st.column_config.SelectboxColumn(p, width="small") for p in periods},
             use_container_width=True,
             num_rows="fixed",
             key="tt_editor"
         )
 
-    # --- 🏷️ DYNAMIC SIDE CHIPS (நேரடி கணக்கீடு) ---
+    # --- 🏷️ DYNAMIC SIDE CHIPS & VALIDATION ---
     with side_col:
         st.markdown("##### 🏷️ ஆசிரியர் நிலை (Status)")
-        class_staff = [a for a in allot_data if a['class_name'] == selected_class]
+        flat_list = list(edited_df.values.flatten())
         
-        # திரையில் (Edited DF) எத்தனை முறை ஒவ்வொரு ஆசிரியரும் இருக்கிறார் என எண்ணுதல்
-        flat_list = edited_df.values.flatten()
+        valid_submission = True
         
-        if class_staff:
-            for s in class_staff:
-                t_short = s['teacher_name'].split('(')[-1].replace(')', '')
-                label_to_find = f"{s['subject_name']} - {t_short}"
-                
-                # திரையில் உள்ள எண்ணிக்கை
-                current_on_screen = list(flat_list).count(label_to_find)
-                rem = s['periods_per_week'] - current_on_screen
-                
-                bg = get_color(s['subject_name'])
-                
-                # எண்ணிக்கை 0 ஆனால் சிவப்பு அல்லது மங்கிய நிறத்தில் காட்டலாம்
-                if rem > 0:
-                    st.markdown(f"""<div class="staff-chip" style="background-color: {bg}; border-left: 5px solid green;">
-                        {s['subject_name']} - {t_short} | மீதம்: {rem}</div>""", unsafe_allow_html=True)
-                elif rem == 0:
-                    st.markdown(f"""<div class="staff-chip" style="background-color: #e0e0e0; color: #999; border-left: 5px solid gray;">
-                        {s['subject_name']} - {t_short} | முடிந்தது ✅</div>""", unsafe_allow_html=True)
-                else:
-                    st.markdown(f"""<div class="staff-chip" style="background-color: #ffcccc; color: red; border-left: 5px solid red;">
-                        {s['subject_name']} - {t_short} | கூடுதல்: {abs(rem)} ⚠️</div>""", unsafe_allow_html=True)
-        else:
-            st.caption("ஒதுக்கீடு இல்லை")
+        for s in class_staff:
+            t_short = s['teacher_name'].split('(')[-1].replace(')', '')
+            label = f"{s['subject_name']} - {t_short}"
+            
+            current_count = flat_list.count(label)
+            rem = s['periods_per_week'] - current_count
+            bg = get_color(s['subject_name'])
+            
+            if rem > 0:
+                st.markdown(f'<div class="staff-chip" style="background:{bg}; border-left:5px solid blue;">{label} | மீதம்: {rem}</div>', unsafe_allow_html=True)
+            elif rem == 0:
+                st.markdown(f'<div class="staff-chip" style="background:#e0e0e0; color:#888; border-left:5px solid gray;">{label} | முடிந்தது ✅</div>', unsafe_allow_html=True)
+            else:
+                st.markdown(f'<div class="staff-chip" style="background:#ffcccc; color:red; border-left:5px solid red;">{label} | கூடுதல்: {abs(rem)} ⚠️</div>', unsafe_allow_html=True)
+                valid_submission = False # கூடுதல் இருந்தால் சேமிக்க முடியாது
+
+        # --- 🧪 PRACTICAL CHECK (Double Periods) ---
+        st.markdown("##### 🧪 செய்முறை வகுப்பு ஆய்வு")
+        for day in days_short:
+            day_row = edited_df.loc[day].values
+            for i in range(len(day_row)-1):
+                # அடுத்தடுத்த கட்டங்களில் ஒரே பாடம் இருந்தால் அது Double Period
+                if day_row[i] != "" and day_row[i] == day_row[i+1]:
+                    st.caption(f"✅ {day}: {i+1}-{i+2} தொடர் பாடவேளை")
 
     # --- 🚀 SAVE BUTTON ---
     with main_col:
         if st.button("🚀 சரிபார்த்துச் சேமி (Save)", type="primary", use_container_width=True):
-            # (சேமிக்கும் அதே பழைய லாஜிக்...)
-            with st.spinner("சேமிக்கப்படுகிறது..."):
-                supabase.table("weekly_timetable").delete().eq("class_name", selected_class).execute()
-                new_data = []
-                for d_short, row in edited_df.iterrows():
-                    for p_num in periods:
-                        val = row[p_num]
-                        if val:
-                            sub_n = val.split(" - ")[0]
-                            t_s = val.split(" - ")[-1]
-                            staff = next((a for a in allot_data if a['class_name'] == selected_class and a['subject_name'] == sub_n and t_s in a['teacher_name']), None)
-                            if staff:
-                                new_data.append({
-                                    "class_name": selected_class, "day_of_week": day_map[d_short], "period_number": int(p_num),
-                                    "teacher_id": staff['teacher_id'], "teacher_name": staff['teacher_name'], "subject_name": staff['subject_name']
-                                })
-                if new_data:
-                    supabase.table("weekly_timetable").insert(new_data).execute()
-                st.success("வெற்றிகரமாகச் சேமிக்கப்பட்டது!")
-                st.cache_data.clear()
+            if not valid_submission:
+                st.error("பிழை: சில ஆசிரியர்களுக்கு அனுமதிக்கப்பட்ட எண்ணிக்கையை விட அதிகமாக பாடவேளைகள் உள்ளன. அவற்றைச் சரிசெய்து பின் சேமிக்கவும்.")
+            else:
+                with st.spinner("சேமிக்கப்படுகிறது..."):
+                    # Delete and Bulk Insert
+                    supabase.table("weekly_timetable").delete().eq("class_name", selected_class).execute()
+                    new_data = []
+                    for d_short, row in edited_df.iterrows():
+                        for p_idx, p_num in enumerate(periods):
+                            val = row[p_num]
+                            if val:
+                                sub_n, t_s = val.split(" - ")
+                                staff = next((a for a in allot_data if a['class_name'] == selected_class and a['subject_name'] == sub_n and t_s in a['teacher_name']), None)
+                                if staff:
+                                    new_data.append({
+                                        "class_name": selected_class, "day_of_week": day_map[d_short], "period_number": int(p_num),
+                                        "teacher_id": staff['teacher_id'], "teacher_name": staff['teacher_name'], "subject_name": staff['subject_name']
+                                    })
+                    if new_data:
+                        supabase.table("weekly_timetable").insert(new_data).execute()
+                    st.success("வெற்றிகரமாகச் சேமிக்கப்பட்டது!")
+                    st.cache_data.clear()
