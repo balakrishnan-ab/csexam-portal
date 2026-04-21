@@ -33,33 +33,51 @@ with tab1:
             total_row = pd.DataFrame([['-', 'Total', total_t]], columns=['வகுப்பு', 'பாடம்', 'மணி'])
             st.table(pd.concat([table_df, total_row]))
 
-# 2. வகுப்பு வாரியான ஒதுக்கீடு (பிரித்துக் காட்டுதல்)
-with tab2:
+# --- வகுப்பு வாரியான ஒதுக்கீடு (திருத்தப்பட்ட விரிவான லாஜிக்) ---
     st.header("வகுப்பு வாரியான ஒதுக்கீடு (விரிவானது)")
     expanded_data = []
-    # வகுப்பு மற்றும் குழுத் தரவை பிரிக்கும் லாஜிக்
+    
     for _, row in df_allot.iterrows():
-        allot_class = str(row['class_name'])
+        allot_class = str(row['class_name']).strip()
         
-        # இது ஒரு குழுவா எனச் சரிபார்க்கவும்
+        # 'combined_groups' அட்டவணையில் அந்த வகுப்புப் பெயர் உள்ளதா எனச் சரிபார்க்கவும்
         group = df_groups[df_groups['group_name'] == allot_class]
+        
         if not group.empty:
-            class_list = group.iloc[0]['class_list']
+            # குழுவாக இருந்தால், அந்த குழுவில் உள்ள துல்லியமான வகுப்புப் பெயர்களை எடுக்கவும்
+            # இங்குதான் A1, B1 எனப் பிரிந்து வரும்
+            class_list = group.iloc[0]['class_list'] 
             for cls in class_list:
-                expanded_data.append({'class_name': cls, 'teacher_name': row['teacher_name'], 'subject_name': row['subject_name'], 'periods': row['periods_per_week']})
+                expanded_data.append({
+                    'class_name': str(cls).strip(), # துல்லியமான பெயர்
+                    'teacher_name': row['teacher_name'], 
+                    'subject_name': row['subject_name'], 
+                    'periods': row['periods_per_week']
+                })
         else:
-            expanded_data.append({'class_name': allot_class, 'teacher_name': row['teacher_name'], 'subject_name': row['subject_name'], 'periods': row['periods_per_week']})
+            # நேரடியாக அடிப்படை வகுப்பு (A1, B1 போன்றவை இங்கு வரும்)
+            expanded_data.append({
+                'class_name': allot_class, 
+                'teacher_name': row['teacher_name'], 
+                'subject_name': row['subject_name'], 
+                'periods': row['periods_per_week']
+            })
 
     df_split = pd.DataFrame(expanded_data)
-    classes = sorted(df_split['class_name'].unique())
-    cols = st.columns(3)
     
+    # வகுப்புகளை அகரவரிசைப்படி வரிசைப்படுத்துதல்
+    classes = sorted(df_split['class_name'].unique())
+    
+    cols = st.columns(3)
     for i, cls in enumerate(classes):
         with cols[i % 3]:
-            c_df = df_split[df_split['class_name'] == cls][['teacher_name', 'subject_name', 'periods']]
+            # அந்த வகுப்புக்கு உரிய தரவை மட்டும் எடுத்தல்
+            c_df = df_split[df_split['class_name'] == cls]
             total_c = c_df['periods'].sum()
             
             st.write(f"**வகுப்பு: {cls}**")
-            table_df = c_df.rename(columns={'teacher_name': 'ஆசிரியர்', 'subject_name': 'பாடம்', 'periods': 'மணி'})
+            table_df = c_df[['teacher_name', 'subject_name', 'periods']].rename(columns={'teacher_name': 'ஆசிரியர்', 'subject_name': 'பாடம்', 'periods': 'மணி'})
+            
+            # Total வரிசை
             total_row = pd.DataFrame([['-', 'Total', total_c]], columns=['ஆசிரியர்', 'பாடம்', 'மணி'])
             st.table(pd.concat([table_df, total_row]))
