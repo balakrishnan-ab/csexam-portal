@@ -1,53 +1,51 @@
 import streamlit as st
 import pandas as pd
-from supabase import create_client, Client
+from supabase import create_client
 
-# --- SUPABASE CONNECTION ---
-try:
-    url, key = st.secrets["SUPABASE_URL"], st.secrets["SUPABASE_KEY"]
-    supabase: Client = create_client(url, key)
-except:
-    st.error("Connection Error!")
-    st.stop()
+# Supabase இணைப்பு
+url, key = st.secrets["SUPABASE_URL"], st.secrets["SUPABASE_KEY"]
+supabase = create_client(url, key)
 
 st.set_page_config(page_title="Timetable Reports", layout="wide")
 allot = supabase.table("staff_allotment").select("*").execute().data
 df = pd.DataFrame(allot)
 
-# --- 1. ஆசிரியர் வாரியான சிறு அட்டவணைகள் ---
-st.header("👨‍🏫 ஆசிரியர் வாரியான ஒதுக்கீடு")
-teachers = sorted(df['teacher_name'].unique())
-cols1 = st.columns(3)
+st.header("🏫 வகுப்பு வாரியான ஒதுக்கீடு (தனித்தனி வகுப்புகள்)")
 
-for i, teacher in enumerate(teachers):
-    with cols1[i % 3]:
-        t_df = df[df['teacher_name'] == teacher][['class_name', 'subject_name', 'periods_per_week']]
-        # Total வரிசையைச் சேர்த்தல்
-        total_periods = t_df['periods_per_week'].sum()
-        st.write(f"**{teacher}**")
-        st.table(pd.concat([t_df.rename(columns={'class_name': 'வகுப்பு', 'subject_name': 'பாடம்', 'periods_per_week': 'மணி'}), 
-                           pd.DataFrame([['-', 'Total', total_periods]], columns=['வகுப்பு', 'பாடம்', 'மணி'])]))
+# கம்பைன் வகுப்புகளைப் பிரித்து, தனித்தனி வகுப்புகளாக மாற்றும் லாஜிக்
+def split_class_names(row):
+    # வகுப்புகளைப் பிரித்தல் (உதாரணம்: '11-C & 11-D' -> ['11-C', '11-D'])
+    # '&' அல்லது கமா இருந்தால் பிரிக்கவும்
+    names = str(row['class_name']).replace('&', ',').split(',')
+    return [name.strip() for name in names]
 
-st.divider()
+# புதிய விரிவான அட்டவணை தயாரிப்பு
+expanded_data = []
+for _, row in df.iterrows():
+    splitted_classes = split_class_names(row)
+    for cls in splitted_classes:
+        # கம்பைன் வகுப்புப் பெயர்களைத் தவிர்த்து, உண்மையான வகுப்புப் பெயர்களை மட்டும் எடுத்தல்
+        if len(cls) > 0 and 'ARTS' not in cls and 'SCI' not in cls: # உங்களுக்குத் தேவையில்லாத பெயர்களை இங்கே தவிர்க்கலாம்
+            expanded_data.append({
+                'class_name': cls,
+                'teacher_name': row['teacher_name'],
+                'subject_name': row['subject_name'],
+                'periods': row['periods_per_week']
+            })
 
-# --- 2. வகுப்பு வாரியான சிறு அட்டவணைகள் ---
-st.header("🏫 வகுப்பு வாரியான ஒதுக்கீடு")
-# கம்பைன் வகுப்புகளைப் பிரிக்கும் லாஜிக் (Split '&')
-all_classes = []
-for row in df.itertuples():
-    # வகுப்புப் பெயர்களைப் பிரித்தல்
-    classes = [c.strip() for c in str(row.class_name).split("&")]
-    for c in classes:
-        all_classes.append({'class_name': c, 'teacher_name': row.teacher_name, 'subject_name': row.subject_name, 'periods': row.periods_per_week})
-
-df_split = pd.DataFrame(all_classes)
+df_split = pd.DataFrame(expanded_data)
 classes = sorted(df_split['class_name'].unique())
-cols2 = st.columns(3)
 
+# அட்டவணைகளை அடுக்குதல்
+cols = st.columns(3)
 for i, cls in enumerate(classes):
-    with cols2[i % 3]:
+    with cols[i % 3]:
         c_df = df_split[df_split['class_name'] == cls][['teacher_name', 'subject_name', 'periods']]
         total_c = c_df['periods'].sum()
+        
         st.write(f"**வகுப்பு: {cls}**")
-        st.table(pd.concat([c_df.rename(columns={'teacher_name': 'ஆசிரியர்', 'subject_name': 'பாடம்', 'periods': 'மணி'}), 
-                           pd.DataFrame([['-', 'Total', total_c]], columns=['ஆசிரியர்', 'பாடம்', 'மணி'])]))
+        # அட்டவணை
+        table_df = c_df.rename(columns={'teacher_name': 'ஆசிரியர்', 'subject_name': 'பாடம்', 'periods': 'மணி'})
+        # Total வரிசை இணைத்தல்
+        total_row = pd.DataFrame([['-', 'Total', total_c]], columns=['ஆசிரியர்', 'பாடம்', 'மணி'])
+        st.table(pd.concat([table_df, total_row]))
