@@ -12,7 +12,7 @@ except:
 
 st.set_page_config(page_title="Teacher Timetable Editor", layout="wide")
 
-@st.cache_data(ttl=10)
+@st.cache_data(ttl=5)
 def get_data():
     allot = supabase.table("staff_allotment").select("*").execute()
     time_db = supabase.table("weekly_timetable").select("*").execute()
@@ -42,44 +42,62 @@ if sel_t_label != "-- Select Teacher --":
     days = ["Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday"]
     periods = [str(i) for i in range(1, 9)]
 
-    # --- 4. DATA EDITOR (Strict Limit Enforcement) ---
     main_col, side_col = st.columns([0.7, 0.3])
+    
     with main_col:
         df_grid = pd.DataFrame(index=[d[:3] for d in days], columns=periods).fillna("")
         for (d, p), cls in st.session_state.draft_tt.items():
             df_grid.at[d[:3], str(p)] = cls
 
+        # ஒதுக்கீடு கட்டுப்பாட்டுடன் கூடிய பட்டியல் (Filtered Options)
         flat_tt = list(st.session_state.draft_tt.values())
-        
-        # மீதம் உள்ள வகுப்புகளை மட்டும் பட்டியலில் காட்டுதல்
         allowed_options = []
         for a in t_allots:
             rem = a['periods_per_week'] - flat_tt.count(a['class_name'])
+            # மீதம் இருந்தால் அல்லது ஏற்கனவே அட்டவணையில் இருந்தால் மட்டும் காட்டவும்
             if rem > 0 or flat_tt.count(a['class_name']) > 0:
                 allowed_options.append(a['class_name'])
-
+        
         final_options = sorted(list(set([""] + allowed_options)))
 
+        # டேட்டா எடிட்டர்
         edited_df = st.data_editor(
             df_grid, 
             column_config={p: st.column_config.SelectboxColumn(p, options=final_options, width="small") for p in periods}, 
             use_container_width=True, num_rows="fixed"
         )
         
+        # மாற்றங்களைச் சரிபார்த்தல் (Validation)
+        new_tt = {}
+        error_found = False
         for d_short, row in edited_df.iterrows():
             day = next(d for d in days if d.startswith(d_short))
-            for p in periods: st.session_state.draft_tt[(day, int(p))] = row[p]
+            for p in periods: 
+                cls = row[p]
+                new_tt[(day, int(p))] = cls
+        
+        # எச்சரிக்கை சரிபார்ப்பு
+        for a in t_allots:
+            if list(new_tt.values()).count(a['class_name']) > a['periods_per_week']:
+                st.error(f"⚠️ எச்சரிக்கை: {a['class_name']} வகுப்பு வரம்பை மீறியுள்ளது!")
+                error_found = True
+        
+        if not error_found:
+            st.session_state.draft_tt = new_tt
 
         if st.button("🚀 அட்டவணையைச் சேமி"):
-            supabase.table("weekly_timetable").delete().eq("teacher_id", t_id).execute()
-            new_entries = [{"class_name": cls, "day_of_week": d, "period_number": p, "teacher_id": t_id, 
-                           "teacher_name": sel_t['full_name'], "subject_name": next((a['subject_name'] for a in t_allots if a['class_name'] == cls), "")}
-                          for (d, p), cls in st.session_state.draft_tt.items() if cls and cls != "" and not pd.isna(cls)]
-            if new_entries: supabase.table("weekly_timetable").insert(new_entries).execute()
-            st.success("சேமிக்கப்பட்டது!")
-            st.rerun()
+            if error_found:
+                st.error("பிழைகளைச் சரிசெய்த பின் சேமிக்கவும்!")
+            else:
+                supabase.table("weekly_timetable").delete().eq("teacher_id", t_id).execute()
+                new_entries = [{"class_name": cls, "day_of_week": d, "period_number": p, "teacher_id": t_id, 
+                               "teacher_name": sel_t['full_name'], "subject_name": next((a['subject_name'] for a in t_allots if a['class_name'] == cls), "")}
+                              for (d, p), cls in st.session_state.draft_tt.items() if cls and cls != "" and not pd.isna(cls)]
+                if new_entries: supabase.table("weekly_timetable").insert(new_entries).execute()
+                st.success("சேமிக்கப்பட்டது!")
+                st.rerun()
 
-    # --- 5. ஒதுக்கீடு விவரம் ---
+    # --- ஒதுக்கீடு விவரம் ---
     with side_col:
         st.markdown("##### 🏷️ ஒதுக்கீடு விவரம் (FN/AN)")
         for a in t_allots:
@@ -88,9 +106,10 @@ if sel_t_label != "-- Select Teacher --":
             rem = a['periods_per_week'] - flat_vals.count(cls)
             fn = sum(1 for (d, p), c in st.session_state.draft_tt.items() if c == cls and int(p) <= 4)
             an = sum(1 for (d, p), c in st.session_state.draft_tt.items() if c == cls and int(p) > 4)
-            st.markdown(f"**{cls}** | மீதம்: {rem} ==> FN:{fn} | AN:{an}", unsafe_allow_html=True)
+            color = "red" if rem < 0 else "blue"
+            st.markdown(f"**{cls}** | மீதம்: <span style='color:{color};'>{rem}</span><br><small>FN:{fn} | AN:{an}</small>", unsafe_allow_html=True)
 
-    # --- 6. வகுப்பு வாரியான கால அட்டவணை ---
+    # --- வகுப்பு வாரியான அட்டவணை ---
     st.divider()
     st.markdown("### 🏫 வகுப்பு வாரியான கால அட்டவணை")
     unique_classes = sorted(list(set([a['class_name'] for a in allot_data])))
