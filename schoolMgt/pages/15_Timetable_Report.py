@@ -6,46 +6,60 @@ from supabase import create_client
 url, key = st.secrets["SUPABASE_URL"], st.secrets["SUPABASE_KEY"]
 supabase = create_client(url, key)
 
-st.header("👨‍🏫 ஆசிரியர் வாரியான விரிவான ஒதுக்கீடு")
+st.set_page_config(layout="wide")
+st.title("📊 ஆசிரியர் மற்றும் வகுப்பு ஒதுக்கீடு அறிக்கைகள்")
 
-# தரவுகளைப் பெறுதல்
 allot_data = supabase.table("staff_allotment").select("*").execute().data
 group_data = supabase.table("combined_groups").select("*").execute().data
-class_data = supabase.table("classes").select("class_name").execute().data
-
 df_allot = pd.DataFrame(allot_data)
 df_groups = pd.DataFrame(group_data)
-all_base_classes = [c['class_name'] for c in class_data]
 
-# தரவை ஆசிரியர்களுக்கு ஏற்ப விரிவுபடுத்துதல் (Expand Logic)
-teacher_expanded = []
-for _, row in df_allot.iterrows():
-    allot_class = str(row['class_name'])
-    
-    # அடிப்படை வகுப்பா அல்லது குழுவா எனப் பிரித்தல்
-    if allot_class in all_base_classes:
-        teacher_expanded.append(row.to_dict())
-    else:
-        # குழுவாக இருந்தால், அந்த குழுவில் உள்ள ஒவ்வொரு வகுப்பையும் பிரித்தல்
+# Tabs உருவாக்குதல்
+tab1, tab2 = st.tabs(["👨‍🏫 ஆசிரியர் ஒதுக்கீடு", "🏫 வகுப்பு வாரியான ஒதுக்கீடு"])
+
+# 1. ஆசிரியர் வாரியான ஒதுக்கீடு (அப்படியே காட்டுதல்)
+with tab1:
+    st.header("ஆசிரியர் வாரியான பணிச்சுமை")
+    teachers = sorted(df_allot['teacher_name'].unique())
+    cols = st.columns(3)
+    for i, teacher in enumerate(teachers):
+        with cols[i % 3]:
+            # ஆசிரியர் வாரியாக அப்படியே காட்டுதல் (பிரிப்பு தேவையில்லை)
+            t_df = df_allot[df_allot['teacher_name'] == teacher][['class_name', 'subject_name', 'periods_per_week']]
+            total_t = t_df['periods_per_week'].sum()
+            
+            st.write(f"**{teacher}**")
+            table_df = t_df.rename(columns={'class_name': 'வகுப்பு', 'subject_name': 'பாடம்', 'periods_per_week': 'மணி'})
+            total_row = pd.DataFrame([['-', 'Total', total_t]], columns=['வகுப்பு', 'பாடம்', 'மணி'])
+            st.table(pd.concat([table_df, total_row]))
+
+# 2. வகுப்பு வாரியான ஒதுக்கீடு (பிரித்துக் காட்டுதல்)
+with tab2:
+    st.header("வகுப்பு வாரியான ஒதுக்கீடு (விரிவானது)")
+    expanded_data = []
+    # வகுப்பு மற்றும் குழுத் தரவை பிரிக்கும் லாஜிக்
+    for _, row in df_allot.iterrows():
+        allot_class = str(row['class_name'])
+        
+        # இது ஒரு குழுவா எனச் சரிபார்க்கவும்
         group = df_groups[df_groups['group_name'] == allot_class]
         if not group.empty:
             class_list = group.iloc[0]['class_list']
             for cls in class_list:
-                row_dict = row.to_dict()
-                row_dict['class_name'] = cls
-                teacher_expanded.append(row_dict)
+                expanded_data.append({'class_name': cls, 'teacher_name': row['teacher_name'], 'subject_name': row['subject_name'], 'periods': row['periods_per_week']})
+        else:
+            expanded_data.append({'class_name': allot_class, 'teacher_name': row['teacher_name'], 'subject_name': row['subject_name'], 'periods': row['periods_per_week']})
 
-df_teacher_split = pd.DataFrame(teacher_expanded)
-teachers = sorted(df_teacher_split['teacher_name'].unique())
-
-# அட்டவணைகளை அடுக்குதல்
-cols = st.columns(3)
-for i, teacher in enumerate(teachers):
-    with cols[i % 3]:
-        t_df = df_teacher_split[df_teacher_split['teacher_name'] == teacher][['class_name', 'subject_name', 'periods_per_week']]
-        total_t = t_df['periods_per_week'].sum()
-        
-        st.write(f"**{teacher}**")
-        table_df = t_df.rename(columns={'class_name': 'வகுப்பு', 'subject_name': 'பாடம்', 'periods_per_week': 'மணி'})
-        total_row = pd.DataFrame([['-', 'Total', total_t]], columns=['வகுப்பு', 'பாடம்', 'மணி'])
-        st.table(pd.concat([table_df, total_row]))
+    df_split = pd.DataFrame(expanded_data)
+    classes = sorted(df_split['class_name'].unique())
+    cols = st.columns(3)
+    
+    for i, cls in enumerate(classes):
+        with cols[i % 3]:
+            c_df = df_split[df_split['class_name'] == cls][['teacher_name', 'subject_name', 'periods']]
+            total_c = c_df['periods'].sum()
+            
+            st.write(f"**வகுப்பு: {cls}**")
+            table_df = c_df.rename(columns={'teacher_name': 'ஆசிரியர்', 'subject_name': 'பாடம்', 'periods': 'மணி'})
+            total_row = pd.DataFrame([['-', 'Total', total_c]], columns=['ஆசிரியர்', 'பாடம்', 'மணி'])
+            st.table(pd.concat([table_df, total_row]))
