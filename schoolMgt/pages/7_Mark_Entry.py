@@ -1,6 +1,7 @@
 import streamlit as st
 import pandas as pd
 from supabase import create_client
+from io import BytesIO
 
 # --- Supabase இணைப்பு ---
 def get_supabase_client():
@@ -11,124 +12,81 @@ def get_supabase_client():
 supabase = get_supabase_client()
 
 st.set_page_config(page_title="Mark Entry", layout="wide")
-
-st.markdown("<style>.stDataFrame { font-size: 19px !important; font-weight: bold !important; }</style>", unsafe_allow_html=True)
 st.title("📊 மதிப்பெண் பதிவேற்றம் & திருத்தம்")
 
-# --- 1. தரவுகள் ---
+# தரவுகள் பெறுதல்
 exams = supabase.table("exams").select("*").eq("exam_status", "Active").execute().data
 all_classes = supabase.table("classes").select("*").execute().data
-all_groups = supabase.table("groups").select("*").execute().data
 all_subjects = supabase.table("subjects").select("*").execute().data
 
-# --- 2. தேர்வுப் பெட்டிகள் ---
-c1, c2, c3 = st.columns(3)
-sel_exam_name = c1.selectbox("1. தேர்வு:", ["-- தேர்வு செய்க --"] + [e['exam_name'] for e in exams])
+# 1. தேர்வு மற்றும் வகுப்புத் தேர்வு
+c1, c2 = st.columns(2)
+sel_exam_name = c1.selectbox("தேர்வு:", ["-- தேர்வு செய்க --"] + [e['exam_name'] for e in exams])
 
 if sel_exam_name != "-- தேர்வு செய்க --":
     exam_id = next(e['id'] for e in exams if e['exam_name'] == sel_exam_name)
-    class_names = [c.get('class_n') or c.get('class_name') for c in all_classes if (c.get('class_n') or c.get('class_name'))]
-    sel_class = c2.selectbox("2. வகுப்பு:", ["-- தேர்வு செய்க --"] + sorted(class_names))
+    class_names = [c.get('class_n') or c.get('class_name') for c in all_classes]
+    sel_class = c2.selectbox("வகுப்பு:", ["-- தேர்வு செய்க --"] + sorted(class_names))
 
     if sel_class != "-- தேர்வு செய்க --":
-        class_info = next((c for c in all_classes if (c.get('class_n') == sel_class or c.get('class_name') == sel_class)), None)
-        subject_options = {} 
-        if class_info:
-            group_info = next((g for g in all_groups if g['group_name'] == class_info.get('group_name')), None)
-            if group_info and group_info.get('subjects'):
-                group_subs = [s.strip() for s in group_info['subjects'].split(',')]
-                for sub_name in group_subs:
-                    match = next((s for s in all_subjects if s['subject_name'] == sub_name), None)
-                    if match:
-                        display_name = f"{sub_name} ({match['subject_code']})"
-                        subject_options[display_name] = match
-        
-        sel_display_name = c3.selectbox("3. பாடம்:", ["-- தேர்வு செய்க --"] + list(subject_options.keys()))
+        st.divider()
+        st.subheader("📥 வகுப்பு ஆசிரியர் பகுதி: ஒட்டுமொத்த பதிவேற்றம்")
 
-        if sel_display_name != "-- தேர்வு செய்க --":
-            sub_info = subject_options[sel_display_name]
-            sub_code = sub_info['subject_code']
-            eval_type = sub_info.get('eval_type', '90+10')
-            parts = eval_type.split('+')
-            max_t, max_p, max_i = int(parts[0]), (int(parts[1]) if len(parts) > 2 else 0), int(parts[-1])
+        # அந்த வகுப்பிற்குரிய மாணவர் மற்றும் தேர்வு எண் பட்டியல்
+        mapping_data = supabase.table("exam_mapping").select("exam_no, emis_no, student_name").eq("exam_id", exam_id).eq("class_name", sel_class).execute().data
+        df_students = pd.DataFrame(mapping_data)
 
-            state_key = f"df_{exam_id}_{sel_class}_{sub_code}"
+        if not df_students.empty:
+            # கோப்பிற்கான Template தயாரித்தல்
+            df_template = df_students.copy()
+            # பாடங்களை இணைத்தல் (ஒவ்வொரு பாடத்திற்கும் Theory, Internal)
+            for sub in all_subjects:
+                s_name = sub['subject_name']
+                df_template[f"Theory_{s_name}"] = ""
+                df_template[f"Internal_{s_name}"] = ""
             
-            if state_key not in st.session_state:
-                students = supabase.table("exam_mapping").select("exam_no, student_name, emis_no").eq("exam_id", exam_id).eq("class_name", sel_class).order("exam_no").execute().data
-                existing_marks = supabase.table("marks").select("*").eq("exam_id", exam_id).eq("subject_id", sub_code).execute().data
-                marks_dict = {m['emis_no']: m for m in existing_marks}
-                
-                rows = []
-                for s in students:
-                    m = marks_dict.get(s['emis_no'], {})
-                    rows.append({
-                        "Exam No": s['exam_no'], "Student Name": s['student_name'], "EMIS": s['emis_no'],
-                        "Abs": m.get('is_absent', False), 
-                        "Theory": m.get('theory_mark', 0),
-                        "Internal": m.get('internal_mark', 0), 
-                        "Practical": m.get('practical_mark', 0) if max_p > 0 else 0, 
-                        "Total": m.get('total_mark', 0)
-                    })
-                st.session_state[state_key] = pd.DataFrame(rows)
+            # எக்செல் டவுன்லோட் பட்டன்
+            output = BytesIO()
+            with pd.ExcelWriter(output, engine='xlsxwriter') as writer:
+                df_template.to_excel(writer, index=False, sheet_name='Marks_Entry')
+            
+            st.download_button(
+                label="📥 மாணவர் பட்டியல் மற்றும் தேர்வு எண்ணுடன் கோப்பைத் தரவிறக்கு",
+                data=output.getvalue(),
+                file_name=f"Marks_Entry_{sel_class}_{sel_exam_name}.xlsx",
+                mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+            )
 
-            # ⚡ 3. விரைவு உள்ளீடு (Checkboxes)
             st.divider()
-            f1, f2 = st.columns(2)
-            if f1.checkbox(f"அனைவருக்கும் அகமதிப்பீடு {max_i} வழங்குக", key=f"ci_{state_key}"):
-                st.session_state[state_key]['Internal'] = max_i
-            if max_p > 0 and f2.checkbox(f"அனைவருக்கும் செய்முறை {max_p} வழங்குக", key=f"cp_{state_key}"):
-                st.session_state[state_key]['Practical'] = max_p
+            st.info("பூர்த்தி செய்த கோப்பைப் பதிவேற்றவும்:")
+            uploaded_file = st.file_uploader("Excel கோப்பு", type=["xlsx"])
 
-            with st.form("mark_entry_form"):
-                df = st.session_state[state_key]
-                cols = ["Exam No", "Student Name", "Abs", "Theory"]
-                if max_p > 0: cols.append("Practical")
-                cols.extend(["Internal", "Total"])
-
-                edited_df = st.data_editor(
-                    df[cols],
-                    column_config={
-                        "Exam No": st.column_config.TextColumn("தேர்வு எண்", disabled=True, pinned=True),
-                        "Student Name": st.column_config.TextColumn("பெயர்", disabled=True, pinned=True),
-                        "Theory": st.column_config.NumberColumn(f"Theo({max_t})", min_value=0, max_value=max_t),
-                        "Practical": st.column_config.NumberColumn(f"Prac({max_p})", min_value=0, max_value=max_p) if max_p > 0 else None,
-                        "Internal": st.column_config.NumberColumn(f"Int({max_i})", min_value=0, max_value=max_i),
-                        "Total": st.column_config.NumberColumn("மொத்தம்", disabled=True),
-                    },
-                    hide_index=True, use_container_width=True, key=f"editor_{state_key}"
-                )
-
-                submit = st.form_submit_button("🚀 சரிபார்த்துச் சேமி", use_container_width=True)
-                
-                if submit:
-                    # ⚡ கணக்கீடு
-                    t_m = pd.to_numeric(edited_df['Theory'], errors='coerce').fillna(0)
-                    i_m = pd.to_numeric(edited_df['Internal'], errors='coerce').fillna(0)
-                    p_m = pd.to_numeric(edited_df['Practical'], errors='coerce').fillna(0) if max_p > 0 else 0
+            if uploaded_file:
+                df_upload = pd.read_excel(uploaded_file)
+                if st.button("🚀 அனைத்து மதிப்பெண்களையும் தரவுத்தளத்தில் சேமி"):
+                    bulk_list = []
+                    for _, row in df_upload.iterrows():
+                        emis = str(row['emis_no'])
+                        for col in df_upload.columns:
+                            if "_" in col:
+                                parts = col.split("_")
+                                m_type = parts[0] # Theory / Internal
+                                s_name = parts[1]
+                                s_info = next((s for s in all_subjects if s['subject_name'] == s_name), None)
+                                
+                                if s_info:
+                                    val = int(row[col]) if pd.notnull(row[col]) else 0
+                                    # List-ல் ஏற்கனவே உள்ளதா எனப் பார்த்து அப்டேட் செய்தல்
+                                    item = next((i for i in bulk_list if i['emis_no'] == emis and i['subject_id'] == s_info['subject_code']), None)
+                                    if not item:
+                                        item = {"exam_id": exam_id, "emis_no": emis, "subject_id": s_info['subject_code'], "theory_mark": 0, "internal_mark": 0, "total_mark": 0}
+                                        bulk_list.append(item)
+                                    
+                                    if m_type == "Theory": item["theory_mark"] = val
+                                    elif m_type == "Internal": item["internal_mark"] = val
+                                    item["total_mark"] = item["theory_mark"] + item["internal_mark"]
                     
-                    # ⚡ அப்சென்ட் டிக் செய்திருந்தால் மதிப்பெண்களை 0 ஆக்குதல்
-                    # இதுதான் நீங்கள் கேட்ட பாதுகாப்பு முறை
-                    edited_df.loc[edited_df['Abs'] == True, ['Theory', 'Practical', 'Internal']] = 0
-                    
-                    edited_df['Total'] = t_m + i_m + p_m
-                    # மொத்தத்தையும் 0 ஆக்குதல்
-                    edited_df.loc[edited_df['Abs'] == True, 'Total'] = 0
-
-                    final_list = []
-                    for idx, r in edited_df.iterrows():
-                        final_list.append({
-                            "exam_id": exam_id, 
-                            "emis_no": df.iloc[idx]['EMIS'], 
-                            "subject_id": sub_code,
-                            "theory_mark": int(float(pd.Series(r['Theory']).fillna(0).iloc[0])), 
-                            "practical_mark": int(float(pd.Series(r.get('Practical', 0)).fillna(0).iloc[0])),
-                            "internal_mark": int(float(pd.Series(r['Internal']).fillna(0).iloc[0])), 
-                            "total_mark": int(float(pd.Series(r['Total']).fillna(0).iloc[0])), 
-                            "is_absent": bool(r['Abs'])
-                        })
-                    
-                    supabase.table("marks").upsert(final_list, on_conflict="exam_id, emis_no, subject_id").execute()
-                    st.session_state[state_key].update(edited_df)
-                    st.success("✅ வெற்றிகரமாகச் சேமிக்கப்பட்டது (அப்சென்ட் ஆனவர்களுக்கு 0 மதிப்பெண் உறுதி செய்யப்பட்டது)!")
-                    st.rerun()
+                    supabase.table("marks").upsert(bulk_list, on_conflict="exam_id, emis_no, subject_id").execute()
+                    st.success("✅ மதிப்பெண்கள் வெற்றிகரமாகச் சேமிக்கப்பட்டன!")
+        else:
+            st.warning("இந்த வகுப்பிற்கு இன்னும் தேர்வு எண்கள் ஒதுக்கப்படவில்லை.")
