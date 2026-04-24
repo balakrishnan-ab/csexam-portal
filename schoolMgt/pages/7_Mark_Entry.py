@@ -86,10 +86,22 @@ if sel_exam_name != "-- தேர்வு செய்க --":
             st.download_button("📥 வகுப்பு கோப்பைத் தரவிறக்கு", data=output.getvalue(), file_name=f"Marks_{sel_class}.xlsx")
             
         with tab3:
+            st.subheader("🏢 வகுப்பின் அனைத்துப் பிரிவுகள்")
             grade_val = st.text_input("வகுப்பு எண் (எ.கா: 12):")
             if grade_val:
                 relevant = [c['class_name'] for c in all_classes if c['class_name'].startswith(grade_val)]
-                df_a = get_bulk_template(relevant)
+                
                 output = BytesIO()
-                with pd.ExcelWriter(output, engine='xlsxwriter') as writer: df_a.to_excel(writer, index=False)
-                st.download_button("📥 அனைத்து பிரிவு கோப்பைப் பெற", data=output.getvalue(), file_name=f"Marks_{grade_val}_All.xlsx")
+                # ExcelWriter-ஐப் பயன்படுத்தி ஒவ்வொரு வகுப்பிற்கும் ஒரு Sheet உருவாக்குதல்
+                with pd.ExcelWriter(output, engine='xlsxwriter') as writer:
+                    for c_name in relevant:
+                        # அந்த வகுப்பிற்குரிய தரவை மட்டும் எடுத்தல்
+                        df_c = get_bulk_template([c_name]) 
+                        # வகுப்பு பெயரை Sheet பெயராக வைத்தல்
+                        df_c.to_excel(writer, sheet_name=c_name, index=False)
+                
+                st.download_button(
+                    "📥 அனைத்து வகுப்புகளும் கொண்ட கோப்பைப் பெற (Separate Sheets)", 
+                    data=output.getvalue(), 
+                    file_name=f"Marks_{grade_val}_All_Sections.xlsx"
+                )
