@@ -31,7 +31,7 @@ if sel_exam_name != "-- தேர்வு செய்க --":
 
     # --- TAB 1: பாட ஆசிரியர் ---
     with tab1:
-        sel_class = st.selectbox("வகுப்பைத் தேர்ந்தெடுக்கவும்:", ["-- தேர்வு செய்க --"] + sorted([c['class_n'] for c in all_classes]))
+        sel_class = st.selectbox("வகுப்பைத் தேர்ந்தெடுக்கவும்:", ["-- தேர்வு செய்க --"] + sorted([c['class_name'] for c in all_classes]))
         if sel_class != "-- தேர்வு செய்க --":
             # (இங்கே உங்கள் பாட ஆசிரியர் தர்க்கம்...)
             st.info("குறிப்பிட்ட பாடத்தை மட்டும் பதிவு செய்யவும்.")
