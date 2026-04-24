@@ -30,36 +30,53 @@ if sel_exam_name != "-- தேர்வு செய்க --":
 
     if sel_class != "-- தேர்வு செய்க --":
         tab1, tab2, tab3 = st.tabs(["👨‍🏫 பாட ஆசிரியர்", "📂 வகுப்பு ஆசிரியர் (Bulk)", "🏢 வகுப்பின் அனைத்துப் பிரிவுகள்"])
-
-        # --- TAB 1: பாட ஆசிரியர் தர்க்கம் ---
+    # --- TAB 1: பாட ஆசிரியர் ---
         with tab1:
-            class_info = next((c for c in all_classes if c['class_name'] == sel_class), None)
-            g_info = next((g for g in all_groups if g['group_name'] == class_info.get('group_name')), None)
-            sub_names = [s.strip() for s in g_info['subjects'].split(',')] if g_info else []
-            sel_sub = st.selectbox("பாடம்:", ["-- தேர்வு செய்க --"] + sub_names)
-            
+            # பாடம் தேர்வு செய்த பிறகு..
             if sel_sub != "-- தேர்வு செய்க --":
                 sub_data = next((s for s in all_subjects if s['subject_name'] == sel_sub), None)
                 sub_code = sub_data['subject_code']
                 
+                # eval_type-ஐப் பிரித்தல்
+                eval_parts = str(sub_data.get('eval_type', '100')).split('+')
+                max_t = int(eval_parts[0])
+                has_internal = len(eval_parts) >= 2
+                has_practical = len(eval_parts) == 3
+                max_i = int(eval_parts[1]) if has_internal else 0
+                max_p = int(eval_parts[2]) if has_practical else (int(eval_parts[1]) if len(eval_parts)==2 and 'Practical' in sel_sub else 0)
+
+                # --- Auto-fill பட்டன்கள் ---
+                col1, col2, col3 = st.columns(3)
+                if has_internal:
+                    if col1.button(f"அனைவருக்கும் Internal ({max_i}) வழங்குக"):
+                        st.session_state['fill_int'] = max_i
+                if has_practical:
+                    if col2.button(f"அனைவருக்கும் Practical ({max_p}) வழங்குக"):
+                        st.session_state['fill_prac'] = max_p
+
+                # தரவு ஏற்றுதல் மற்றும் எடிட்டர்
                 students = supabase.table("exam_mapping").select("exam_no, student_name, emis_no").eq("exam_id", exam_id).eq("class_name", sel_class).execute().data
-                marks_db = supabase.table("marks").select("*").eq("exam_id", exam_id).eq("subject_id", sub_code).execute().data
-                marks_dict = {m['emis_no']: m for m in marks_db}
+                # ... (marks_dict பெறுதல்) ...
                 
-                df_editor = st.data_editor(pd.DataFrame([
-                    {"Exam No": s['exam_no'], "Name": s['student_name'], "EMIS": s['emis_no'],
-                     "Abs": marks_dict.get(s['emis_no'], {}).get('is_absent', False),
-                     "Theory": marks_dict.get(s['emis_no'], {}).get('theory_mark', 0),
-                     "Internal": marks_dict.get(s['emis_no'], {}).get('internal_mark', 0),
-                     "Practical": marks_dict.get(s['emis_no'], {}).get('practical_mark', 0)} for s in students
-                ]), hide_index=True)
+                rows = []
+                for s in students:
+                    m = marks_dict.get(s['emis_no'], {})
+                    rows.append({
+                        "Exam No": s['exam_no'], "Name": s['student_name'], "EMIS": s['emis_no'],
+                        "Abs": m.get('is_absent', False),
+                        "Theory": m.get('theory_mark', 0),
+                        "Internal": st.session_state.get('fill_int', m.get('internal_mark', 0)) if has_internal else 0,
+                        "Practical": st.session_state.get('fill_prac', m.get('practical_mark', 0)) if has_practical else 0
+                    })
+                
+                df_editor = st.data_editor(pd.DataFrame(rows), hide_index=True, use_container_width=True)
                 
                 if st.button("🚀 பாட மதிப்பெண் சேமி"):
-                    data = [{"exam_id": exam_id, "emis_no": r['EMIS'], "subject_id": sub_code,
-                             "theory_mark": 0 if r['Abs'] else r['Theory'], "internal_mark": 0 if r['Abs'] else r['Internal'],
-                             "practical_mark": 0 if r['Abs'] else r['Practical'], "is_absent": r['Abs']} for _, r in df_editor.iterrows()]
-                    supabase.table("marks").upsert(data, on_conflict="exam_id, emis_no, subject_id").execute()
-                    st.success("சேமிக்கப்பட்டது!")
+                    # சேமிக்கும் தர்க்கம்...
+                    # சேமித்த பின் session_state-ஐ சுத்தம் செய்யவும்
+                    if 'fill_int' in st.session_state: del st.session_state['fill_int']
+                    if 'fill_prac' in st.session_state: del st.session_state['fill_prac']
+                    st.rerun()
 
         # --- Bulk Function (Tab 2 & 3 க்கானது) ---
         def get_bulk_template(target_classes):
