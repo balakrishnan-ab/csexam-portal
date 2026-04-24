@@ -38,7 +38,7 @@ if sel_exam_name != "-- தேர்வு செய்க --":
 
     # --- TAB 2: வகுப்பு ஆசிரியர் (Bulk) ---
     with tab2:
-        sel_class_bulk = st.selectbox("வகுப்பு (Bulk):", ["-- தேர்வு செய்க --"] + sorted([c['class_n'] for c in all_classes]))
+        sel_class_bulk = st.selectbox("வகுப்பு (Bulk):", ["-- தேர்வு செய்க --"] + sorted([c['class_name'] for c in all_classes]))
         if sel_class_bulk != "-- தேர்வு செய்க --":
             # (இங்கே மாணவர் பட்டியலுடன் கூடிய Bulk Upload தர்க்கம்...)
             st.info(f"{sel_class_bulk} வகுப்புக்கான அனைத்து பாடங்களையும் பதிவேற்றவும்.")
@@ -52,7 +52,7 @@ if sel_exam_name != "-- தேர்வு செய்க --":
             st.write(f"{selected_grade}-ஆம் வகுப்பில் உள்ள அனைத்து குரூப்களின் மதிப்பெண் கோப்புகளைப் பதிவேற்றலாம்.")
             
             # 1. குறிப்பிட்ட வகுப்பிற்குரிய அனைத்து குரூப்களைத் திரட்டல்
-            relevant_classes = [c for c in all_classes if c['class_n'].startswith(selected_grade)]
+            relevant_classes = [c for c in all_classes if c['class_name'].startswith(selected_grade)]
             
             # 2. ஒவ்வொரு குரூப்பிற்கும் ஒரு தனித்தனி Template உருவாக்குதல்
             for cls in relevant_classes:
@@ -64,7 +64,7 @@ if sel_exam_name != "-- தேர்வு செய்க --":
                 sub_names = g_info['subjects'].split(',') if g_info else []
                 
                 # கோப்பு தயாரித்தல் (மாணவர் பட்டியல் + பாடங்கள்)
-                mapping = supabase.table("exam_mapping").select("emis_no, student_name").eq("exam_id", exam_id).eq("class_name", cls['class_n']).execute().data
+                mapping = supabase.table("exam_mapping").select("emis_no, student_name").eq("exam_id", exam_id).eq("class_name", cls['class_name']).execute().data
                 df_g = pd.DataFrame(mapping)
                 for sub in sub_names: df_g[f"Theory_{sub.strip()}"] = 0
                 
@@ -72,7 +72,7 @@ if sel_exam_name != "-- தேர்வு செய்க --":
                 output = BytesIO()
                 with pd.ExcelWriter(output, engine='xlsxwriter') as writer:
                     df_g.to_excel(writer, index=False)
-                st.download_button(f"📥 {cls['class_n']} ({group_name}) கோப்பைப் பெற", data=output.getvalue(), file_name=f"Marks_{cls['class_n']}.xlsx")
+                st.download_button(f"📥 {cls['class_name']} ({group_name}) கோப்பைப் பெற", data=output.getvalue(), file_name=f"Marks_{cls['class_name']}.xlsx")
 
             st.divider()
             uploaded_file = st.file_uploader("அனைத்துப் பாடப்பிரிவுகளுக்கும் பூர்த்தி செய்த கோப்பைப் பதிவேற்று", type=["xlsx"])
