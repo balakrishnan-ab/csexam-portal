@@ -30,11 +30,23 @@ if sel_exam_name != "-- தேர்வு செய்க --":
 
     if sel_class != "-- தேர்வு செய்க --":
         tab1, tab2, tab3 = st.tabs(["👨‍🏫 பாட ஆசிரியர்", "📂 வகுப்பு ஆசிரியர் (Bulk)", "🏢 வகுப்பின் அனைத்துப் பிரிவுகள்"])
-    # --- TAB 1: பாட ஆசிரியர் ---
-        with tab1:
-            # பாடம் தேர்வு செய்த பிறகு..
-            if sel_sub != "-- தேர்வு செய்க --":
-                sub_data = next((s for s in all_subjects if s['subject_name'] == sel_sub), None)
+# --- TAB 1: பாட ஆசிரியர் ---
+with tab1:
+    st.info("குறிப்பிட்ட பாடத்தை மட்டும் பதிவு செய்யவும்.")
+    
+    # முதலில் பாடங்களை எடுக்க வேண்டும்
+    class_info = next((c for c in all_classes if c['class_name'] == sel_class), None)
+    group_name = class_info.get('group_name') if class_info else None
+    group_info = next((g for g in all_groups if g['group_name'] == group_name), None)
+    sub_names = [s.strip() for s in group_info['subjects'].split(',')] if group_info else []
+    
+    # sel_sub-ஐ இங்கேதான் நாம் வரையறுக்கிறோம்
+    sel_sub = st.selectbox("பாடம்:", ["-- தேர்வு செய்க --"] + sub_names)
+    
+    # இப்போது இதைப் பயன்படுத்தினால் பிழை வராது
+    if sel_sub != "-- தேர்வு செய்க --":
+        # உங்கள் பாட ஆசிரியர் தர்க்கம் இங்கே தொடரும்...
+        sub_info = next((s for s in all_subjects if s['subject_name'] == sel_sub), None)
                 sub_code = sub_data['subject_code']
                 
                 # eval_type-ஐப் பிரித்தல்
