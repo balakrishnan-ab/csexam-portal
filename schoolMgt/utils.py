@@ -38,6 +38,31 @@ def add_school_header():
         </style>
         
         <div class="school-header-container">
+
+
+def apply_global_styles():
+    st.markdown("""
+        <style>
+        /* எழுத்துக்களைத் தெளிவாக்க */
+        * {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif !important;
+            font-size: 16px !important;
+        }
+        /* மெனு மற்றும் உரைகளை அடர் நிறமாக்க */
+        .stMarkdown, .stText, p, label, div {
+            color: #333333 !important;
+        }
+        /* எண்களைப் பெரிதாக்க (metric values) */
+        .stMetricValue {
+            font-size: 24px !important;
+            font-weight: 800 !important;
+        }
+        /* பட்டன்களின் எழுத்து அளவு */
+        button {
+            font-size: 16px !important;
+        }
+        </style>
+    """, unsafe_allow_html=True)
             <span class="school-title">{school_name}</span>
             <span class="school-address">{address}</span>
         </div>
