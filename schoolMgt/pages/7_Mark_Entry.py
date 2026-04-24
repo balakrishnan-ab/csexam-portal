@@ -25,96 +25,79 @@ sel_exam_name = st.selectbox("தேர்வைத் தேர்ந்தெ�
 
 if sel_exam_name != "-- தேர்வு செய்க --":
     exam_id = next(e['id'] for e in exams if e['exam_name'] == sel_exam_name)
-    class_list = sorted(list(set([c['class_name'] for c in all_classes])))
-    sel_class = st.selectbox("வகுப்பைத் தேர்ந்தெடுக்கவும்:", ["-- தேர்வு செய்க --"] + class_list)
+    tab1, tab2, tab3 = st.tabs(["👨‍🏫 பாட ஆசிரியர்", "📂 வகுப்பு ஆசிரியர் (Bulk)", "🏢 வகுப்பின் அனைத்துப் பிரிவுகள்"])
 
-    if sel_class != "-- தேர்வு செய்க --":
-        tab1, tab2, tab3 = st.tabs(["👨‍🏫 பாட ஆசிரியர்", "📂 வகுப்பு ஆசிரியர் (Bulk)", "🏢 வகுப்பின் அனைத்துப் பிரிவுகள்"])
-
-        # --- TAB 1: பாட ஆசிரியர் ---
-        with tab1:
-            class_info = next((c for c in all_classes if c['class_name'] == sel_class), None)
-            group_name = class_info.get('group_name') if class_info else None
-            group_info = next((g for g in all_groups if g['group_name'] == group_name), None)
-            sub_names = [s.strip() for s in group_info['subjects'].split(',')] if group_info else []
-            
-            sel_sub = st.selectbox("பாடம்:", ["-- தேர்வு செய்க --"] + sub_names)
+    # --- TAB 1: பாட ஆசிரியர் (குறிப்பிட்ட பாடம் மட்டும்) ---
+    with tab1:
+        c1, c2 = st.columns(2)
+        class_list = sorted(list(set([c['class_name'] for c in all_classes])))
+        sel_class_t1 = c1.selectbox("வகுப்பு:", ["-- தேர்வு செய்க --"] + class_list, key="t1_class")
+        
+        if sel_class_t1 != "-- தேர்வு செய்க --":
+            class_info = next((c for c in all_classes if c['class_name'] == sel_class_t1), None)
+            g_info = next((g for g in all_groups if g['group_name'] == class_info.get('group_name')), None)
+            sub_names = [s.strip() for s in g_info['subjects'].split(',')] if g_info else []
+            sel_sub = c2.selectbox("பாடம்:", ["-- தேர்வு செய்க --"] + sub_names, key="t1_sub")
             
             if sel_sub != "-- தேர்வு செய்க --":
                 sub_data = next((s for s in all_subjects if s['subject_name'] == sel_sub), None)
-                if sub_data:
-                    sub_code = sub_data['subject_code']
-                    eval_parts = str(sub_data.get('eval_type', '100')).split('+')
-                    max_t = int(eval_parts[0])
-                    has_internal = len(eval_parts) >= 2
-                    has_practical = len(eval_parts) == 3
-                    max_i = int(eval_parts[1]) if has_internal else 0
-                    max_p = int(eval_parts[2]) if has_practical else 0
+                sub_code = sub_data['subject_code']
+                eval_p = str(sub_data.get('eval_type', '100')).split('+')
+                
+                students = supabase.table("exam_mapping").select("exam_no, student_name, emis_no").eq("exam_id", exam_id).eq("class_name", sel_class_t1).execute().data
+                marks_db = supabase.table("marks").select("*").eq("exam_id", exam_id).eq("subject_id", sub_code).execute().data
+                marks_dict = {m['emis_no']: m for m in marks_db}
+                
+                rows = [{"Exam No": s['exam_no'], "Name": s['student_name'], "EMIS": s['emis_no'],
+                         "Abs": marks_dict.get(s['emis_no'], {}).get('is_absent', False),
+                         "Theory": marks_dict.get(s['emis_no'], {}).get('theory_mark', 0),
+                         "Internal": marks_dict.get(s['emis_no'], {}).get('internal_mark', 0),
+                         "Practical": marks_dict.get(s['emis_no'], {}).get('practical_mark', 0)} for s in students]
+                
+                edited_df = st.data_editor(pd.DataFrame(rows), hide_index=True, use_container_width=True)
+                if st.button("🚀 பாட மதிப்பெண் சேமி"):
+                    data = [{"exam_id": exam_id, "emis_no": r['EMIS'], "subject_id": sub_code,
+                             "theory_mark": 0 if r['Abs'] else r['Theory'], "internal_mark": 0 if r['Abs'] else r['Internal'],
+                             "practical_mark": 0 if r['Abs'] else r['Practical'], "is_absent": r['Abs']} for _, r in edited_df.iterrows()]
+                    supabase.table("marks").upsert(data, on_conflict="exam_id, emis_no, subject_id").execute()
+                    st.success("சேமிக்கப்பட்டது!")
 
-                    # Auto-fill பொத்தான்கள்
-                    c1, c2 = st.columns(2)
-                    if has_internal and c1.button(f"அனைவருக்கும் Internal ({max_i}) வழங்குக"): st.session_state['f_int'] = max_i
-                    if has_practical and c2.button(f"அனைவருக்கும் Practical ({max_p}) வழங்குக"): st.session_state['f_prac'] = max_p
+    # --- Bulk Template Generator (Tab 2 & 3 க்கானது) ---
+    def generate_bulk_df(target_classes):
+        all_dfs = []
+        for c_name in target_classes:
+            mapping = supabase.table("exam_mapping").select("emis_no, student_name").eq("exam_id", exam_id).eq("class_name", c_name).execute().data
+            df = pd.DataFrame(mapping)
+            cls_info = next((c for c in all_classes if c['class_name'] == c_name), None)
+            g_info = next((g for g in all_groups if g['group_name'] == cls_info.get('group_name')), None)
+            for s in [s.strip() for s in g_info['subjects'].split(',')]:
+                sub = next((x for x in all_subjects if x['subject_name'] == s), None)
+                if sub and sub.get('eval_type') != 'NIL':
+                    p = str(sub.get('eval_type', '100')).split('+')
+                    df[f"Theory_{s}"] = 0
+                    if len(p) >= 2: df[f"Internal_{s}"] = 0
+                    if len(p) == 3: df[f"Practical_{s}"] = 0
+            all_dfs.append(df)
+        return all_dfs
 
-                    students = supabase.table("exam_mapping").select("exam_no, student_name, emis_no").eq("exam_id", exam_id).eq("class_name", sel_class).execute().data
-                    marks_db = supabase.table("marks").select("*").eq("exam_id", exam_id).eq("subject_id", sub_code).execute().data
-                    marks_dict = {m['emis_no']: m for m in marks_db}
-                    
-                    df_list = []
-                    for s in students:
-                        m = marks_dict.get(s['emis_no'], {})
-                        df_list.append({
-                            "Exam No": s['exam_no'], "Name": s['student_name'], "EMIS": s['emis_no'],
-                            "Abs": m.get('is_absent', False),
-                            "Theory": m.get('theory_mark', 0),
-                            "Internal": st.session_state.get('f_int', m.get('internal_mark', 0)) if has_internal else 0,
-                            "Practical": st.session_state.get('f_prac', m.get('practical_mark', 0)) if has_practical else 0
-                        })
-                    
-                    df_editor = st.data_editor(pd.DataFrame(df_list), hide_index=True)
-                    if st.button("🚀 சேமி"):
-                        data = [{"exam_id": exam_id, "emis_no": r['EMIS'], "subject_id": sub_code,
-                                 "theory_mark": 0 if r['Abs'] else r['Theory'],
-                                 "internal_mark": 0 if r['Abs'] else r['Internal'],
-                                 "practical_mark": 0 if r['Abs'] else r['Practical'],
-                                 "total_mark": 0 if r['Abs'] else (r['Theory'] + r['Internal'] + r['Practical']),
-                                 "is_absent": r['Abs']} for _, r in df_editor.iterrows()]
-                        supabase.table("marks").upsert(data, on_conflict="exam_id, emis_no, subject_id").execute()
-                        if 'f_int' in st.session_state: del st.session_state['f_int']
-                        if 'f_prac' in st.session_state: del st.session_state['f_prac']
-                        st.success("சேமிக்கப்பட்டது!")
-                        st.rerun()
-
-        # --- Bulk Functions ---
-        def get_bulk_template(c_list):
-            all_dfs = []
-            for c_name in c_list:
-                mapping = supabase.table("exam_mapping").select("emis_no, student_name").eq("exam_id", exam_id).eq("class_name", c_name).execute().data
-                df = pd.DataFrame(mapping)
-                cls_info = next((c for c in all_classes if c['class_name'] == c_name), None)
-                g_info = next((g for g in all_groups if g['group_name'] == cls_info.get('group_name')), None)
-                for s in [s.strip() for s in g_info['subjects'].split(',')]:
-                    sub = next((x for x in all_subjects if x['subject_name'] == s), None)
-                    if sub and sub.get('eval_type') != 'NIL':
-                        p = str(sub.get('eval_type', '100')).split('+')
-                        df[f"Theory_{s}"] = 0
-                        if len(p) >= 2: df[f"Internal_{s}"] = 0
-                        if len(p) == 3: df[f"Practical_{s}"] = 0
-                all_dfs.append(df)
-            return pd.concat(all_dfs, ignore_index=True) if all_dfs else pd.DataFrame()
-
-        with tab2:
-            df_b = get_bulk_template([sel_class])
+    # --- TAB 2: வகுப்பு ஆசிரியர் (தனி வகுப்பு) ---
+    with tab2:
+        sel_class_t2 = st.selectbox("வகுப்பு:", ["-- தேர்வு செய்க --"] + class_list, key="t2_class")
+        if sel_class_t2 != "-- தேர்வு செய்க --":
+            df_b = generate_bulk_df([sel_class_t2])[0]
             output = BytesIO()
             with pd.ExcelWriter(output, engine='xlsxwriter') as writer: df_b.to_excel(writer, index=False)
-            st.download_button("📥 வகுப்பு கோப்பைத் தரவிறக்கு", data=output.getvalue(), file_name=f"Marks_{sel_class}.xlsx")
-            
-        with tab3:
-            grade_val = st.text_input("வகுப்பு எண் (எ.கா: 12):")
-            if grade_val:
-                relevant = [c['class_name'] for c in all_classes if c['class_name'].startswith(grade_val)]
-                output = BytesIO()
-                with pd.ExcelWriter(output, engine='xlsxwriter') as writer:
-                    for c in relevant:
-                        get_bulk_template([c]).to_excel(writer, sheet_name=c, index=False)
-                st.download_button("📥 அனைத்து பிரிவு கோப்பைப் பெற", data=output.getvalue(), file_name=f"Marks_{grade_val}_All.xlsx")
+            st.download_button("📥 வகுப்பு கோப்பைத் தரவிறக்கு", data=output.getvalue(), file_name=f"Marks_{sel_class_t2}.xlsx")
+            st.file_uploader("பதிவேற்றம்:", type=["xlsx"], key="up2")
+
+    # --- TAB 3: அனைத்துப் பிரிவுகள் (Group-wise Sheets) ---
+    with tab3:
+        grade_val = st.text_input("வகுப்பு எண் (எ.கா: 12):")
+        if grade_val:
+            relevant = [c['class_name'] for c in all_classes if c['class_name'].startswith(grade_val)]
+            output = BytesIO()
+            with pd.ExcelWriter(output, engine='xlsxwriter') as writer:
+                for c in relevant:
+                    generate_bulk_df([c])[0].to_excel(writer, sheet_name=c, index=False)
+            st.download_button("📥 அனைத்துப் பிரிவுகளையும் தரவிறக்கு", data=output.getvalue(), file_name=f"Marks_{grade_val}_All.xlsx")
+            st.file_uploader("பதிவேற்றம்:", type=["xlsx"], key="up3")
