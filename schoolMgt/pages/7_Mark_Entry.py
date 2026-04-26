@@ -63,23 +63,41 @@ if sel_exam_name != "-- தேர்வு செய்க --":
                     st.success("சேமிக்கப்பட்டது!")
 
     # --- Bulk Template Generator (Tab 2 & 3 க்கானது) ---
-    def generate_bulk_df(target_classes):
+def generate_bulk_df(target_classes):
         all_dfs = []
         for c_name in target_classes:
+            # மாணவர் பட்டியல்
             mapping = supabase.table("exam_mapping").select("emis_no, student_name").eq("exam_id", exam_id).eq("class_name", c_name).execute().data
             df = pd.DataFrame(mapping)
+            
+            # குரூப் மற்றும் பாடங்கள்
             cls_info = next((c for c in all_classes if c['class_name'] == c_name), None)
             g_info = next((g for g in all_groups if g['group_name'] == cls_info.get('group_name')), None)
-            for s in [s.strip() for s in g_info['subjects'].split(',')]:
+            
+            # பாட மதிப்பெண்களைத் தேடி எடுக்கும் பட்டியல்
+            sub_names = [s.strip() for s in g_info['subjects'].split(',')]
+            
+            # அனைத்து பாடங்களின் மதிப்பெண்களையும் எடுக்க
+            for s in sub_names:
                 sub = next((x for x in all_subjects if x['subject_name'] == s), None)
                 if sub and sub.get('eval_type') != 'NIL':
                     p = str(sub.get('eval_type', '100')).split('+')
-                    df[f"Theory_{s}"] = 0
-                    if len(p) >= 2: df[f"Internal_{s}"] = 0
-                    if len(p) == 3: df[f"Practical_{s}"] = 0
+                    sub_code = sub['subject_code']
+                    
+                    # இந்த தேர்வு மற்றும் பாடத்திற்கு உள்ள மதிப்பெண்களை எடுக்கவும்
+                    marks_db = supabase.table("marks").select("emis_no, theory_mark, internal_mark, practical_mark").eq("exam_id", exam_id).eq("subject_id", sub_code).execute().data
+                    marks_dict = {m['emis_no']: m for m in marks_db}
+                    
+                    # DataFrame-ல் மதிப்பெண்களை நிரப்புதல்
+                    df[f"Theory_{s}"] = df['emis_no'].apply(lambda x: marks_dict.get(x, {}).get('theory_mark', 0))
+                    
+                    if len(p) >= 2:
+                        df[f"Internal_{s}"] = df['emis_no'].apply(lambda x: marks_dict.get(x, {}).get('internal_mark', 0))
+                    if len(p) == 3:
+                        df[f"Practical_{s}"] = df['emis_no'].apply(lambda x: marks_dict.get(x, {}).get('practical_mark', 0))
+            
             all_dfs.append(df)
         return all_dfs
-
     # --- TAB 2: வகுப்பு ஆசிரியர் (தனி வகுப்பு) ---
     with tab2:
         sel_class_t2 = st.selectbox("வகுப்பு:", ["-- தேர்வு செய்க --"] + class_list, key="t2_class")
