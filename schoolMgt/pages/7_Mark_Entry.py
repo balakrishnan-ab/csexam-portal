@@ -3,7 +3,7 @@ import pandas as pd
 from supabase import create_client
 from io import BytesIO
 
-# --- Supabase இணைப்பு ---
+# --- Supabase Connection ---
 def get_supabase_client():
     if "supabase_instance" not in st.session_state:
         st.session_state.supabase_instance = create_client(st.secrets["SUPABASE_URL"], st.secrets["SUPABASE_KEY"])
@@ -44,33 +44,29 @@ if sel_exam_name != "-- தேர்வு செய்க --":
                 if len(p) == 3: df[f"Practical_{s}"] = df['emis_no'].apply(lambda x: m_dict.get(x, {}).get('practical_mark', 0))
         return df
 
-    # --- Supabase-ல் சேமிக்கும் பங்க்ஷன் ---
+    # --- மதிப்பெண்களைப் புதுப்பிக்கும் முறை (Delete & Insert) ---
     def save_to_supabase(df_uploaded):
-        final_data = []
         for _, row in df_uploaded.iterrows():
+            emis = str(row['emis_no'])
             for sub in all_subjects:
                 s_name = sub['subject_name']
-                # NaN மதிப்புகளை 0 ஆக மாற்றுகிறோம்
-                t_val = 0 if pd.isna(row.get(f"Theory_{s_name}")) else row.get(f"Theory_{s_name}", 0)
-                i_val = 0 if pd.isna(row.get(f"Internal_{s_name}")) else row.get(f"Internal_{s_name}", 0)
-                p_val = 0 if pd.isna(row.get(f"Practical_{s_name}")) else row.get(f"Practical_{s_name}", 0)
+                t_col, i_col, p_col = f"Theory_{s_name}", f"Internal_{s_name}", f"Practical_{s_name}"
                 
-                final_data.append({
-                    "exam_id": int(exam_id), # கட்டாயம் integer ஆக இருக்க வேண்டும்
-                    "emis_no": str(row['emis_no']), # emis_no string ஆக இருந்தால்
-                    "subject_id": str(sub['subject_code']),
-                    "theory_mark": int(t_val),
-                    "internal_mark": int(i_val),
-                    "practical_mark": int(p_val)
-                })
-        
-        # இப்போது upsert செய்கிறோம்
-        if final_data:
-            try:
-                supabase.table("marks").upsert(final_data).execute()
-                st.success("மதிப்பெண்கள் சேமிக்கப்பட்டன!")
-            except Exception as e:
-                st.error(f"Supabase பிழை: {e}")
+                if t_col in row.index:
+                    # 1. பழைய மதிப்பெண்ணை நீக்குதல்
+                    supabase.table("marks").delete().eq("exam_id", exam_id).eq("emis_no", emis).eq("subject_id", sub['subject_code']).execute()
+                    
+                    # 2. புதிய மதிப்பெண்ணைச் சேர்த்தல்
+                    new_mark = {
+                        "exam_id": int(exam_id),
+                        "emis_no": emis,
+                        "subject_id": str(sub['subject_code']),
+                        "theory_mark": int(row.get(t_col, 0)) if pd.notna(row.get(t_col)) else 0,
+                        "internal_mark": int(row.get(i_col, 0)) if i_col in row.index and pd.notna(row.get(i_col)) else 0,
+                        "practical_mark": int(row.get(p_col, 0)) if p_col in row.index and pd.notna(row.get(p_col)) else 0
+                    }
+                    supabase.table("marks").insert(new_mark).execute()
+        st.success("அனைத்து மதிப்பெண்களும் புதுப்பிக்கப்பட்டன!")
 
     # --- Tabs ---
     tab1, tab2, tab3 = st.tabs(["👨‍🏫 பாட ஆசிரியர்", "📂 வகுப்பு ஆசிரியர்", "🏢 வகுப்பின் அனைத்துப் பிரிவுகள்"])
