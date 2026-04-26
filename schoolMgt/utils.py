@@ -16,14 +16,11 @@ def add_school_header():
             width: 100%;
         }}
         .school-title {{
-            /* வெள்ளை நிறத்தை உறுதி செய்கிறது */
             color: #FFFFFF !important; 
             margin: 0; 
-            /* திரைக்கு ஏற்ப அளவு மாறுதல் */
             font-size: clamp(20px, 5.5vw, 38px) !important; 
             font-weight: 800 !important;
             line-height: 1.3;
-            /* எழுத்துக்கள் பின்னணியுடன் கலக்காமல் இருக்க நிழல் */
             text-shadow: 2px 2px 8px rgba(0,0,0,0.5) !important;
             display: block;
         }}
@@ -38,7 +35,10 @@ def add_school_header():
         </style>
         
         <div class="school-header-container">
-
+            <span class="school-title">{school_name}</span>
+            <span class="school-address">{address}</span>
+        </div>
+    """, unsafe_allow_html=True)
 
 def apply_global_styles():
     st.markdown("""
@@ -62,8 +62,4 @@ def apply_global_styles():
             font-size: 16px !important;
         }
         </style>
-    """, unsafe_allow_html=True)
-            <span class="school-title">{school_name}</span>
-            <span class="school-address">{address}</span>
-        </div>
     """, unsafe_allow_html=True)
