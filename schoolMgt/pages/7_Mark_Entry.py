@@ -47,38 +47,30 @@ if sel_exam_name != "-- தேர்வு செய்க --":
     # --- Supabase-ல் சேமிக்கும் பங்க்ஷன் ---
     def save_to_supabase(df_uploaded):
         final_data = []
-        # எக்செல் கோப்பில் உள்ள அனைத்து நெடுவரிசைகளையும் ஆய்வு செய்தல்
         for _, row in df_uploaded.iterrows():
-            for col in df_uploaded.columns:
-                if col.startswith(("Theory_", "Internal_", "Practical_")):
-                    # பாடத்தின் பெயரை எடுத்தல் (எ.கா: Theory_Tamil -> Tamil)
-                    parts = col.split('_', 1)
-                    s_name = parts[1]
-                    mark_type = parts[0]
-                    
-                    sub = next((s for s in all_subjects if s['subject_name'] == s_name), None)
-                    if not sub: continue
-                    
-                    # மதிப்பெண் மதிப்பு
-                    val = row[col]
-                    
-                    # ஒவ்வொரு பாடத்திற்கும் ஒரு தனி பதிவு
-                    # (இந்த பதிவு அந்த குறிப்பிட்ட பாடம் மற்றும் அந்த குறிப்பிட்ட மாணவருக்கு மட்டுமே)
-                    final_data.append({
-                        "exam_id": exam_id,
-                        "emis_no": row['emis_no'],
-                        "subject_id": sub['subject_code'],
-                        "theory_mark": val if mark_type == "Theory" else 0,
-                        "internal_mark": val if mark_type == "Internal" else 0,
-                        "practical_mark": val if mark_type == "Practical" else 0
-                    })
+            for sub in all_subjects:
+                s_name = sub['subject_name']
+                # NaN மதிப்புகளை 0 ஆக மாற்றுகிறோம்
+                t_val = 0 if pd.isna(row.get(f"Theory_{s_name}")) else row.get(f"Theory_{s_name}", 0)
+                i_val = 0 if pd.isna(row.get(f"Internal_{s_name}")) else row.get(f"Internal_{s_name}", 0)
+                p_val = 0 if pd.isna(row.get(f"Practical_{s_name}")) else row.get(f"Practical_{s_name}", 0)
+                
+                final_data.append({
+                    "exam_id": int(exam_id), # கட்டாயம் integer ஆக இருக்க வேண்டும்
+                    "emis_no": str(row['emis_no']), # emis_no string ஆக இருந்தால்
+                    "subject_id": str(sub['subject_code']),
+                    "theory_mark": int(t_val),
+                    "internal_mark": int(i_val),
+                    "practical_mark": int(p_val)
+                })
         
-        # Supabase-ல் பதிவேற்றுதல்
-        # இது அந்த குறிப்பிட்ட பாடத்திற்குரிய மதிப்பெண்களை மட்டுமே அந்த மாணவருக்கு மாற்றும்.
-        # மற்ற பாட மதிப்பெண்களை இது தொடாது.
+        # இப்போது upsert செய்கிறோம்
         if final_data:
-            supabase.table("marks").upsert(final_data, on_conflict="exam_id, emis_no, subject_id").execute()
-            st.success("மதிப்பெண்கள் வெற்றிகரமாகச் சேமிக்கப்பட்டன!")
+            try:
+                supabase.table("marks").upsert(final_data).execute()
+                st.success("மதிப்பெண்கள் சேமிக்கப்பட்டன!")
+            except Exception as e:
+                st.error(f"Supabase பிழை: {e}")
 
     # --- Tabs ---
     tab1, tab2, tab3 = st.tabs(["👨‍🏫 பாட ஆசிரியர்", "📂 வகுப்பு ஆசிரியர்", "🏢 வகுப்பின் அனைத்துப் பிரிவுகள்"])
