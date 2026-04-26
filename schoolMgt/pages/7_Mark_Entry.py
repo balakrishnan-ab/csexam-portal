@@ -3,7 +3,7 @@ import pandas as pd
 from supabase import create_client
 from io import BytesIO
 
-# --- Supabase Connection ---
+# --- Supabase Connection ----
 def get_supabase_client():
     if "supabase_instance" not in st.session_state:
         st.session_state.supabase_instance = create_client(st.secrets["SUPABASE_URL"], st.secrets["SUPABASE_KEY"])
