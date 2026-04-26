@@ -63,7 +63,7 @@ if sel_exam_name != "-- தேர்வு செய்க --":
                     st.success("சேமிக்கப்பட்டது!")
 
     # --- Bulk Template Generator (Tab 2 & 3 க்கானது) ---
-def generate_bulk_df(target_classes):
+    def generate_bulk_df(target_classes):
         all_dfs = []
         for c_name in target_classes:
             # மாணவர் பட்டியல்
