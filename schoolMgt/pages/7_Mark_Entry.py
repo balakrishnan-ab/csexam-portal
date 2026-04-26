@@ -91,8 +91,24 @@ if sel_exam_name != "-- தேர்வு செய்க --":
             sel_s = c2.selectbox("பாடம்:", ["-- தேர்வு செய்க --"] + sub_list, key="t1_s")
             if sel_s != "-- தேர்வு செய்க --":
                 df = generate_df(sel_c, sel_s)
+                c3, c4 = st.columns(2)
+                if c3.button("அனைவருக்கும் 10 மதிப்பெண்"):
+                # "Internal_" அல்லது "Practical_" என்று தொடங்கும் நெடுவரிசையைத் தேடி 10 என மாற்றவும்
+                    for col in df.columns:
+                        if col.startswith(("Internal_", "Practical_")):
+                            df[col] = 10
+            
+                if c4.button("அனைவருக்கும் 20 மதிப்பெண்"):
+                    for col in df.columns:
+                        if col.startswith(("Internal_", "Practical_")):
+                            df[col] = 20
+
+                # எடிட்டர் மற்றும் சேமிக்கும் பொத்தான்
                 edited_df = st.data_editor(df, use_container_width=True)
-                if st.button("சேமி", key="save1"): save_to_supabase(edited_df)
+                if st.button("சேமி", key="save1"): 
+                    save_to_supabase(edited_df, sel_c)
+                #edited_df = st.data_editor(df, use_container_width=True)
+                #if st.button("சேமி", key="save1"): save_to_supabase(edited_df)
 
     with tab2:
         sel_c2 = st.selectbox("வகுப்பு:", ["-- தேர்வு செய்க --"] + class_list, key="t2_c")
