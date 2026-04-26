@@ -45,7 +45,7 @@ if sel_exam_name != "-- தேர்வு செய்க --":
         return df
 
     # 2. Supabase-ல் சேமிக்கும் பங்க்ஷன்
-    def save_to_supabase(df_uploaded):
+    def save_to_supabase(df_uploaded, class_name=None):
         final_data = []
         for _, row in df_uploaded.iterrows():
             for sub in all_subjects:
@@ -65,14 +65,19 @@ if sel_exam_name != "-- தேர்வு செய்க --":
                         "practical_mark": int(0 if pd.isna(p_val) else p_val),
                         "total_mark": int(0 if pd.isna(t_val) else t_val) + int(0 if pd.isna(i_val) else i_val) + int(0 if pd.isna(p_val) else p_val)
                     })
-        
         if final_data:
             try:
                 supabase.table("marks").upsert(final_data, on_conflict="exam_id, emis_no, subject_id").execute()
-                st.success("மதிப்பெண்கள் வெற்றிகரமாகச் சேமிக்கப்பட்டன!")
+                
+                # வகுப்பு பெயர் இருந்தால் அதைக் காட்டும், இல்லையென்றால் பொதுவான மெசேஜ்
+                if class_name:
+                    st.success(f"வகுப்பு: {class_name} - மதிப்பெண்கள் வெற்றிகரமாகச் சேமிக்கப்பட்டன! 🎉")
+                else:
+                    st.success("மதிப்பெண்கள் வெற்றிகரமாகச் சேமிக்கப்பட்டன! 🎉")
+                    
             except Exception as e:
                 st.error(f"சேமிப்பதில் பிழை: {e}")
-
+        
     # 3. Tabs அமைப்பு
     tab1, tab2, tab3 = st.tabs(["👨‍🏫 பாட ஆசிரியர்", "📂 வகுப்பு ஆசிரியர்", "🏢 வகுப்பின் அனைத்துப் பிரிவுகள்"])
 
@@ -97,8 +102,7 @@ if sel_exam_name != "-- தேர்வு செய்க --":
             with pd.ExcelWriter(output, engine='xlsxwriter') as writer: df.to_excel(writer, index=False)
             st.download_button("📥 வகுப்பு கோப்பைத் தரவிறக்கு", data=output.getvalue(), file_name=f"Marks_{sel_c2}.xlsx")
             up = st.file_uploader("பதிவேற்று:", type=["xlsx"], key="up2")
-            if up and st.button("சேமி", key="save2"): save_to_supabase(pd.read_excel(up))
-
+            if up and st.button("சேமி", key="save2"): save_to_supabase(pd.read_excel(up), sel_c2)
     with tab3:
         grade = st.text_input("வகுப்பு எண் (எ.கா: 11):")
         if grade:
@@ -108,6 +112,8 @@ if sel_exam_name != "-- தேர்வு செய்க --":
                 for c in relevant: generate_df(c).to_excel(writer, sheet_name=c, index=False)
             st.download_button("📥 அனைத்தையும் தரவிறக்கு", data=output.getvalue(), file_name=f"Marks_{grade}_All.xlsx")
             up3 = st.file_uploader("பதிவேற்று:", type=["xlsx"], key="up3")
+            
             if up3 and st.button("சேமி", key="save3"):
                 xl = pd.ExcelFile(up3)
-                for sheet in xl.sheet_names: save_to_supabase(pd.read_excel(xl, sheet_name=sheet))
+                for sheet in xl.sheet_names: 
+                    save_to_supabase(pd.read_excel(xl, sheet_name=sheet), sheet)
