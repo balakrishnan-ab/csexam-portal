@@ -3,7 +3,7 @@ import pandas as pd
 from supabase import create_client
 from io import BytesIO
 
-# --- Supabase Connection ----
+# --- Supabase Connection ---
 def get_supabase_client():
     if "supabase_instance" not in st.session_state:
         st.session_state.supabase_instance = create_client(st.secrets["SUPABASE_URL"], st.secrets["SUPABASE_KEY"])
@@ -51,33 +51,30 @@ if sel_exam_name != "-- தேர்வு செய்க --":
             for sub in all_subjects:
                 s_name = sub['subject_name']
                 t_col, i_col, p_col = f"Theory_{s_name}", f"Internal_{s_name}", f"Practical_{s_name}"
+                
+                # தரவு இருந்தால் மட்டும் சேர்க்கவும்
                 if t_col in row.index:
-                    t_val = row.get(t_col, 0)
-                    i_val = row.get(i_col, 0) if i_col in row.index else 0
-                    p_val = row.get(p_col, 0) if p_col in row.index else 0
+                    t_val = pd.to_numeric(row.get(t_col, 0), errors='coerce') or 0
+                    i_val = pd.to_numeric(row.get(i_col, 0), errors='coerce') or 0
+                    p_val = pd.to_numeric(row.get(p_col, 0), errors='coerce') or 0
                     
                     final_data.append({
                         "exam_id": int(exam_id),
                         "emis_no": str(row['emis_no']),
                         "subject_id": str(sub['subject_code']),
-                        "theory_mark": int(0 if pd.isna(t_val) else t_val),
-                        "internal_mark": int(0 if pd.isna(i_val) else i_val),
-                        "practical_mark": int(0 if pd.isna(p_val) else p_val),
-                        "total_mark": int(0 if pd.isna(t_val) else t_val) + int(0 if pd.isna(i_val) else i_val) + int(0 if pd.isna(p_val) else p_val)
+                        "theory_mark": int(t_val),
+                        "internal_mark": int(i_val),
+                        "practical_mark": int(p_val),
+                        "total_mark": int(t_val + i_val + p_val)
                     })
+        
         if final_data:
             try:
                 supabase.table("marks").upsert(final_data, on_conflict="exam_id, emis_no, subject_id").execute()
-                
-                # வகுப்பு பெயர் இருந்தால் அதைக் காட்டும், இல்லையென்றால் பொதுவான மெசேஜ்
-                if class_name:
-                    st.success(f"வகுப்பு: {class_name} - மதிப்பெண்கள் வெற்றிகரமாகச் சேமிக்கப்பட்டன! 🎉")
-                else:
-                    st.success("மதிப்பெண்கள் வெற்றிகரமாகச் சேமிக்கப்பட்டன! 🎉")
-                    
+                st.success(f"வகுப்பு: {class_name if class_name else ''} - மதிப்பெண்கள் சேமிக்கப்பட்டன! 🎉")
             except Exception as e:
                 st.error(f"சேமிப்பதில் பிழை: {e}")
-        
+
     # 3. Tabs அமைப்பு
     tab1, tab2, tab3 = st.tabs(["👨‍🏫 பாட ஆசிரியர்", "📂 வகுப்பு ஆசிரியர்", "🏢 வகுப்பின் அனைத்துப் பிரிவுகள்"])
 
@@ -89,26 +86,22 @@ if sel_exam_name != "-- தேர்வு செய்க --":
             g_name = next(c['group_name'] for c in all_classes if c['class_name'] == sel_c)
             sub_list = [s.strip() for s in next(g['subjects'] for g in all_groups if g['group_name'] == g_name).split(',')]
             sel_s = c2.selectbox("பாடம்:", ["-- தேர்வு செய்க --"] + sub_list, key="t1_s")
+            
             if sel_s != "-- தேர்வு செய்க --":
                 df = generate_df(sel_c, sel_s)
-                c3, c4 = st.columns(2)
-                if c3.button("அனைவருக்கும் 10 மதிப்பெண்"):
-                # "Internal_" அல்லது "Practical_" என்று தொடங்கும் நெடுவரிசையைத் தேடி 10 என மாற்றவும்
+                c3, c4, c5 = st.columns(3)
+                if c3.button("அனைவருக்கும் 10"):
                     for col in df.columns:
-                        if col.startswith(("Internal_", "Practical_")):
-                            df[col] = 10
-            
-                if c4.button("அனைவருக்கும் 20 மதிப்பெண்"):
+                        if col.startswith(("Internal_", "Practical_")): df[col] = 10
+                if c4.button("அனைவருக்கும் 20"):
                     for col in df.columns:
-                        if col.startswith(("Internal_", "Practical_")):
-                            df[col] = 20
-
-                # எடிட்டர் மற்றும் சேமிக்கும் பொத்தான்
+                        if col.startswith(("Internal_", "Practical_")): df[col] = 20
+                if c5.button("அனைவருக்கும் 25"):
+                    for col in df.columns:
+                        if col.startswith(("Internal_", "Practical_")): df[col] = 25
+                
                 edited_df = st.data_editor(df, use_container_width=True)
-                if st.button("சேமி", key="save1"): 
-                    save_to_supabase(edited_df, sel_c)
-                #edited_df = st.data_editor(df, use_container_width=True)
-                #if st.button("சேமி", key="save1"): save_to_supabase(edited_df)
+                if st.button("சேமி", key="save1"): save_to_supabase(edited_df, sel_c)
 
     with tab2:
         sel_c2 = st.selectbox("வகுப்பு:", ["-- தேர்வு செய்க --"] + class_list, key="t2_c")
@@ -119,6 +112,7 @@ if sel_exam_name != "-- தேர்வு செய்க --":
             st.download_button("📥 வகுப்பு கோப்பைத் தரவிறக்கு", data=output.getvalue(), file_name=f"Marks_{sel_c2}.xlsx")
             up = st.file_uploader("பதிவேற்று:", type=["xlsx"], key="up2")
             if up and st.button("சேமி", key="save2"): save_to_supabase(pd.read_excel(up), sel_c2)
+
     with tab3:
         grade = st.text_input("வகுப்பு எண் (எ.கா: 11):")
         if grade:
@@ -128,8 +122,6 @@ if sel_exam_name != "-- தேர்வு செய்க --":
                 for c in relevant: generate_df(c).to_excel(writer, sheet_name=c, index=False)
             st.download_button("📥 அனைத்தையும் தரவிறக்கு", data=output.getvalue(), file_name=f"Marks_{grade}_All.xlsx")
             up3 = st.file_uploader("பதிவேற்று:", type=["xlsx"], key="up3")
-            
             if up3 and st.button("சேமி", key="save3"):
                 xl = pd.ExcelFile(up3)
-                for sheet in xl.sheet_names: 
-                    save_to_supabase(pd.read_excel(xl, sheet_name=sheet), sheet)
+                for sheet in xl.sheet_names: save_to_supabase(pd.read_excel(xl, sheet_name=sheet), sheet)
