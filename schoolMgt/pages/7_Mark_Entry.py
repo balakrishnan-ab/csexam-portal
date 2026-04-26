@@ -44,30 +44,39 @@ if sel_exam_name != "-- தேர்வு செய்க --":
                 if len(p) == 3: df[f"Practical_{s}"] = df['emis_no'].apply(lambda x: m_dict.get(x, {}).get('practical_mark', 0))
         return df
 
-    # --- மதிப்பெண்களைப் புதுப்பிக்கும் முறை (Delete & Insert) ---
-    def save_to_supabase(df_uploaded):
+    # --- மதிப்பெண்களைப் புதுப்பிக்கும் முறை (Delete & Insert) ---def save_to_supabase(df_uploaded):
+        final_data = []
         for _, row in df_uploaded.iterrows():
-            emis = str(row['emis_no'])
             for sub in all_subjects:
                 s_name = sub['subject_name']
-                t_col, i_col, p_col = f"Theory_{s_name}", f"Internal_{s_name}", f"Practical_{s_name}"
+                t_val = row.get(f"Theory_{s_name}", 0)
+                i_val = row.get(f"Internal_{s_name}", 0)
+                p_val = row.get(f"Practical_{s_name}", 0)
                 
-                if t_col in row.index:
-                    # 1. பழைய மதிப்பெண்ணை நீக்குதல்
-                    supabase.table("marks").delete().eq("exam_id", exam_id).eq("emis_no", emis).eq("subject_id", sub['subject_code']).execute()
-                    
-                    # 2. புதிய மதிப்பெண்ணைச் சேர்த்தல்
-                    new_mark = {
-                        "exam_id": int(exam_id),
-                        "emis_no": emis,
-                        "subject_id": str(sub['subject_code']),
-                        "theory_mark": int(row.get(t_col, 0)) if pd.notna(row.get(t_col)) else 0,
-                        "internal_mark": int(row.get(i_col, 0)) if i_col in row.index and pd.notna(row.get(i_col)) else 0,
-                        "practical_mark": int(row.get(p_col, 0)) if p_col in row.index and pd.notna(row.get(p_col)) else 0
-                    }
-                    supabase.table("marks").insert(new_mark).execute()
-        st.success("அனைத்து மதிப்பெண்களும் புதுப்பிக்கப்பட்டன!")
-
+                # தரவைச் சரியாகத் தொகுத்தல்
+                final_data.append({
+                    "exam_id": int(exam_id),
+                    "emis_no": str(row['emis_no']),
+                    "subject_id": str(sub['subject_code']),
+                    "theory_mark": int(0 if pd.isna(t_val) else t_val),
+                    "internal_mark": int(0 if pd.isna(i_val) else i_val),
+                    "practical_mark": int(0 if pd.isna(p_val) else p_val),
+                    "total_mark": int(0 if pd.isna(t_val) else t_val) + 
+                                  int(0 if pd.isna(i_val) else i_val) + 
+                                  int(0 if pd.isna(p_val) else p_val)
+                })
+        
+        # Upsert முறை (இதுவே சிறந்தது)
+        if final_data:
+            try:
+                # இங்கு on_conflict மிக முக்கியம், இதுதான் duplicate-ஐத் தடுக்கும்
+                supabase.table("marks").upsert(
+                    final_data, 
+                    on_conflict="exam_id, emis_no, subject_id"
+                ).execute()
+                st.success("மதிப்பெண்கள் வெற்றிகரமாகச் சேமிக்கப்பட்டன!")
+            except Exception as e:
+                st.error(f"சேமிப்பதில் பிழை: {e}")
     # --- Tabs ---
     tab1, tab2, tab3 = st.tabs(["👨‍🏫 பாட ஆசிரியர்", "📂 வகுப்பு ஆசிரியர்", "🏢 வகுப்பின் அனைத்துப் பிரிவுகள்"])
 
