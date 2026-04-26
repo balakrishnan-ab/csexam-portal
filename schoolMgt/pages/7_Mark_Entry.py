@@ -45,7 +45,7 @@ if sel_exam_name != "-- தேர்வு செய்க --":
         return df
 
     # --- Supabase-ல் சேமிக்கும் பங்க்ஷன் ---
-def save_to_supabase(df_uploaded):
+    def save_to_supabase(df_uploaded):
         final_data = []
         # எக்செல் கோப்பில் உள்ள அனைத்து நெடுவரிசைகளையும் ஆய்வு செய்தல்
         for _, row in df_uploaded.iterrows():
