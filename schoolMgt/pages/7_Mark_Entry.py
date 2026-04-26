@@ -63,7 +63,41 @@ if sel_exam_name != "-- தேர்வு செய்க --":
             df = generate_bulk_df(sel_class)
             if df is not None: st.dataframe(df, use_container_width=True)
             else: st.warning("இந்த வகுப்பிற்கு மாணவர்கள் ஒதுக்கப்படவில்லை.")
-
+    # --- TAB 2: வகுப்பு ஆசிரியர் (தனி வகுப்பு - Bulk Entry) ---
+    with tab2:
+        st.subheader("வகுப்பு வாரியான மதிப்பெண் பதிவேற்றம்")
+        
+        # 1. வகுப்புகளைத் தேர்வு செய்ய ஒரு Selectbox அவசியம்
+        class_list = sorted(list(set([c['class_name'] for c in all_classes])))
+        sel_class_t2 = st.selectbox("வகுப்பைத் தேர்ந்தெடுக்கவும்:", ["-- தேர்வு செய்க --"] + class_list, key="t2_class")
+        
+        # 2. வகுப்பு தேர்வு செய்தவுடன் தரவை எடுத்தல்
+        if sel_class_t2 != "-- தேர்வு செய்க --":
+            df_b = generate_bulk_df(sel_class_t2) # உங்கள் ஏற்கனவே உள்ள பங்க்ஷன்
+            
+            if df_b is not None:
+                st.write(f"வகுப்பு: {sel_class_t2} - மாணவர் பட்டியல்")
+                
+                # 3. தரவிறக்க பொத்தான்
+                output = BytesIO()
+                with pd.ExcelWriter(output, engine='xlsxwriter') as writer:
+                    df_b.to_excel(writer, index=False)
+                
+                st.download_button(
+                    label="📥 வகுப்பு கோப்பைத் தரவிறக்கு", 
+                    data=output.getvalue(), 
+                    file_name=f"Marks_{sel_class_t2}.xlsx",
+                    mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+                )
+                
+                # 4. பதிவேற்றம்
+                uploaded_file = st.file_uploader("பூர்த்தி செய்த கோப்பைப் பதிவேற்றவும்:", type=["xlsx"], key="up2")
+                if uploaded_file:
+                    st.success("கோப்பு பதிவேற்றப்பட்டது! (இதற்கான சேமிப்பு லாஜிக்கை கீழே சேர்க்கவும்)")
+            else:
+                st.warning("இந்த வகுப்பிற்குத் தரவு இல்லை.")
+        else:
+            st.info("தயவுசெய்து ஒரு வகுப்பைத் தேர்ந்தெடுக்கவும்.")
     with tab3:
         grade_val = st.text_input("வகுப்பு எண் (எ.கா: 11):")
         if grade_val:
