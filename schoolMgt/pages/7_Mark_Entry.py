@@ -91,13 +91,66 @@ if sel_exam_name != "-- தேர்வு செய்க --":
                 )
                 
                 # 4. பதிவேற்றம்
-                uploaded_file = st.file_uploader("பூர்த்தி செய்த கோப்பைப் பதிவேற்றவும்:", type=["xlsx"], key="up2")
-                if uploaded_file:
-                    st.success("கோப்பு பதிவேற்றப்பட்டது! (இதற்கான சேமிப்பு லாஜிக்கை கீழே சேர்க்கவும்)")
-            else:
-                st.warning("இந்த வகுப்பிற்குத் தரவு இல்லை.")
-        else:
-            st.info("தயவுசெய்து ஒரு வகுப்பைத் தேர்ந்தெடுக்கவும்.")
+               # Tab 2: பதிவேற்றம் மற்றும் சேமித்தல்
+        uploaded_file = st.file_uploader("பூர்த்தி செய்த கோப்பைப் பதிவேற்றவும்:", type=["xlsx"], key="up2")
+        if uploaded_file:
+           df_uploaded = pd.read_excel(uploaded_file)
+           if st.button("🚀 மதிப்பெண்களைச் சேமி"):
+                data_to_upsert = []
+            
+            # எக்செல் கோப்பின் ஒவ்வொரு வரிசையையும் வாசித்தல்
+            for _, row in df_uploaded.iterrows():
+                emis = row['emis_no']
+                
+                # கோப்பில் உள்ள பாடங்களை ஸ்கேன் செய்தல்
+                for col in df_uploaded.columns:
+                    if col.startswith(("Theory_", "Internal_", "Practical_")):
+                        mark_type, sub_name = col.split("_")
+                        
+                        # பாடக் குறியீட்டை (Subject Code) கண்டறிதல்
+                        sub = next((s for s in all_subjects if s['subject_name'] == sub_name), None)
+                        if not sub: continue
+                        
+                        # மதிப்பெண் பொருத்தம்
+                        val = row[col]
+                        
+                        # ஒரு வரிசையில் ஒரு மாணவரின் அனைத்து பாட மதிப்பெண்களையும் சேர்க்கும் வகையில் dict உருவாக்குதல்
+                        # ஏற்கனவே அந்த மாணவரின் மதிப்பெண் அந்தப் பாடத்திற்கு இருக்கிறதா எனப் பார்க்க upsert உதவும்
+                        data_to_upsert.append({
+                            "exam_id": exam_id,
+                            "emis_no": emis,
+                            "subject_id": sub['subject_code'],
+                            "theory_mark": val if mark_type == "Theory" else 0, # இதை மேலும் மேம்படுத்தலாம்
+                            "internal_mark": val if mark_type == "Internal" else 0,
+                            "practical_mark": val if mark_type == "Practical" else 0
+                        })
+
+                # சுருக்கப்பட்ட மதிப்பெண்களை ஒரு வரிசைப்படுத்துதல் (பொருத்தமான பாடத்திற்கு மட்டும் மதிப்பெண் சேரும்படி)
+                # குறிப்பு: ஒரே வரியில் பல பாடங்கள் இருந்தால், ஒவ்வொரு பாடத்திற்கும் தனித்தனி dict தேவை.
+                # கீழே உள்ளது சரியான முறை:
+            
+                final_data = []
+                # ஒவ்வொரு மாணவருக்கும் ஒவ்வொரு பாடத்திற்குமான பதிவை உருவாக்கவும்
+                for _, row in df_uploaded.iterrows():
+                  for sub in all_subjects:
+                    s_name = sub['subject_name']
+                    # அந்தப் பாடத்திற்குரிய மதிப்பெண் நெடுவரிசைகள் உள்ளதா எனப் பார்த்தல்
+                    t_val = row.get(f"Theory_{s_name}", 0)
+                    i_val = row.get(f"Internal_{s_name}", 0)
+                    p_val = row.get(f"Practical_{s_name}", 0)
+                    
+                    final_data.append({
+                        "exam_id": exam_id,
+                        "emis_no": row['emis_no'],
+                        "subject_id": sub['subject_code'],
+                        "theory_mark": t_val if pd.notna(t_val) else 0,
+                        "internal_mark": i_val if pd.notna(i_val) else 0,
+                        "practical_mark": p_val if pd.notna(p_val) else 0
+                    })
+
+                # Supabase Upsert
+                supabase.table("marks").upsert(final_data, on_conflict="exam_id, emis_no, subject_id").execute()
+                st.success("அனைத்து மதிப்பெண்களும் வெற்றிகரமாகப் புதுப்பிக்கப்பட்டன! 🎉")
     with tab3:
         grade_val = st.text_input("வகுப்பு எண் (எ.கா: 11):")
         if grade_val:
