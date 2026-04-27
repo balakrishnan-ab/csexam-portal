@@ -7,9 +7,9 @@ if "BASE_URL" not in st.session_state:
 st.set_page_config(page_title="GHSS Portal", layout="wide")
 # மையப்படுத்தப்பட்ட பள்ளியின் பெயர் (வண்ணமயமாக)
 st.markdown("""
-    <h1 style='text-align: center; color: #2E86C1; background-color: #F4F6F7; padding: 20px; border-radius: 10px;'>
+    <h3 style='text-align: center; color: #2E86C1; background-color: #F4F6F7; padding: 20px; border-radius: 10px;'>
         🏫 அரசு மேல்நிலைப் பள்ளி - தேவனங்குறிச்சி
-    </h1>
+    </h3>
 """, unsafe_allow_html=True)
 
 # லோகோ மற்றும் மெனு மேலாண்மை
@@ -18,7 +18,7 @@ col1, col2, col3 = st.columns([1, 6, 1])
 with col2:
     # லோகோ சரியாக தெரியவில்லை என்றால், st.image பயன்படுத்தவும்
     try:
-        st.image("school_logo.jpg", width=150)
+        st.image("school_logo.jpg", width=100)
     except:
         st.warning("லோகோ கோப்பு சரியாக ஏற்றப்படவில்லை.")# பக்கங்களை வகைப்படுத்துதல்
 timetable_pages = [
