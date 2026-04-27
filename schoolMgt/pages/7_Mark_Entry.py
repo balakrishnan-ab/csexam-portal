@@ -176,6 +176,14 @@ if sel_exam_name != "-- தேர்வு செய்க --":
                                 df[target_col] = val_int
                                 st.session_state[state_key] = df
                                 st.rerun()
+                st.write("---")
+
+                edited_df = st.data_editor(df, use_container_width=True, key=f"editor_{state_key}")
+                st.session_state[state_key] = edited_df
+                if st.button("சேமி", key="save1"): 
+                    save_to_supabase(edited_df, sel_c)
+
+                
     with tab2:
         sel_c2 = st.selectbox("வகுப்பு:", ["-- தேர்வு செய்க --"] + class_list, key="t2_c")
         if sel_c2 != "-- தேர்வு செய்க --":
