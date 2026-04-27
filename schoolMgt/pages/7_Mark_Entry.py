@@ -133,3 +133,19 @@ if sel_exam_name != "-- தேர்வு செய்க --":
             st.download_button("📥 வகுப்பு கோப்பைத் தரவிறக்கு", data=output.getvalue(), file_name=f"Marks_{sel_c2}.xlsx")
             up = st.file_uploader("பதிவேற்று:", type=["xlsx"], key="up2")
             if up and st.button("சேமி", key="save2"): save_to_supabase(pd.read_excel(up), sel_c2)
+    with tab3:
+        grade = st.text_input("வகுப்பு எண் (எ.கா: 11):")
+        if grade:
+            relevant = sorted([c['class_name'] for c in all_classes if c['class_name'].startswith(grade)])
+            output = BytesIO()
+            with pd.ExcelWriter(output, engine='xlsxwriter') as writer:
+                for c in relevant: 
+                    # அந்தந்த வகுப்பின் தற்போதைய மதிப்பெண்களுடன் ஷீட்கள் உருவாகும்
+                    generate_df(c).to_excel(writer, sheet_name=c, index=False)
+            st.download_button("📥 அனைத்தையும் தரவிறக்கு", data=output.getvalue(), file_name=f"Marks_{grade}_All.xlsx")
+            
+            up3 = st.file_uploader("பதிவேற்று:", type=["xlsx"], key="up3")
+            if up3 and st.button("சேமி", key="save3"):
+                xl = pd.ExcelFile(up3)
+                for sheet in xl.sheet_names: 
+                    save_to_supabase(pd.read_excel(xl, sheet_name=sheet), sheet)
