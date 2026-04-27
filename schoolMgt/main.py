@@ -12,15 +12,6 @@ st.markdown("""
     </h3>
 """, unsafe_allow_html=True)
 
-# லோகோ மற்றும் மெனு மேலாண்மை
-# லோகோவுக்கு பதில் ஒரு சிறிய படமாக மேலே வைக்கலாம்
-col1, col2, col3 = st.columns([1, 6, 1])
-with col2:
-    # லோகோ சரியாக தெரியவில்லை என்றால், st.image பயன்படுத்தவும்
-    try:
-        st.image("school_logo.jpg", width=100)
-    except:
-        st.warning("லோகோ கோப்பு சரியாக ஏற்றப்படவில்லை.")# பக்கங்களை வகைப்படுத்துதல்
 timetable_pages = [
     st.Page("pages/12_Staff_Allotment.py", title="Staff Allotments"),
     st.Page("pages/13_Combined_Groups.py", title="Combined Calss Creation"),
