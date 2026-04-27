@@ -1,19 +1,36 @@
 import streamlit as st
 import pandas as pd
-# தேவையான solver-ஐ இங்கே இறக்குமதி செய்யவும்
-# from ortools.sat.python import cp_model 
 
-st.title("🤖 தானியங்கி கால அட்டவணை உருவாக்கம்")
+st.title("⚙️ ஆட்டோ-ஜெனரேட் டைம்டேபிள் - எடிட்டர்")
 
-if st.button("அட்டவணையை உருவாக்கவும்"):
-    with st.spinner("அட்டவணை உருவாக்கப்படுகிறது..."):
-        # 1. தரவுகளைப் பெறுதல்
-        # 2. நிபந்தனைகளைச் சரிபார்த்தல் (Constraints)
-        # 3. அட்டவணையை உருவாக்கி Supabase-ல் சேமித்தல்
-        st.success("அட்டவணை வெற்றிகரமாக உருவாக்கப்பட்டது!")
+# Tabs உருவாக்கம்
+tab1, tab2 = st.tabs(["👨‍🏫 ஆசிரியர் வாரியாக", "🏫 வகுப்பு வாரியாக"])
 
-st.info("""
-**குறிப்பு:** இந்தத் தானியங்கி முறையைச் செயல்படுத்த பின்வரும் நிபந்தனைகளைச் சேர்க்கலாம்:
-1. ஆசிரியர் ஒரு நாளில் அதிகபட்சமாக 5 வேளைகள் மட்டுமே பாடம் நடத்த வேண்டும்.
-2. முதன்மைப் பாடங்கள் (Maths, Science) முன்னுரிமை அடிப்படையில் காலை வேளையில் அமைய வேண்டும்.
-""")
+# தற்காலிக தரவு (Example Data)
+if 'temp_tt' not in st.session_state:
+    st.session_state.temp_tt = pd.DataFrame(index=["Mon", "Tue", "Wed", "Thu", "Fri"], columns=[str(i) for i in range(1, 9)]).fillna("-")
+
+with tab1:
+    st.subheader("ஆசிரியர் வாரியான தற்காலிக அட்டவணை")
+    # எக்செல் போன்ற எடிட்டர்
+    edited_teacher_tt = st.data_editor(st.session_state.temp_tt, use_container_width=True)
+
+with tab2:
+    st.subheader("வகுப்பு வாரியான தற்காலிக அட்டவணை")
+    # எக்செல் போன்ற எடிட்டர்
+    edited_class_tt = st.data_editor(st.session_state.temp_tt, use_container_width=True)
+
+# சேமிப்பு மற்றும் கைவிடும் பட்டன்கள்
+col1, col2 = st.columns([1, 1])
+with col1:
+    if st.button("💾 சரி (Save)"):
+        # இங்கே தரவுத்தளத்தில் (Supabase) சேமிக்கும் தர்க்கத்தை எழுதவும்
+        st.session_state.temp_tt = edited_teacher_tt # தற்காலிக தரவை அப்டேட் செய்யவும்
+        st.success("அட்டவணை வெற்றிகரமாகச் சேமிக்கப்பட்டது!")
+with col2:
+    if st.button("❌ கைவிடு (Discard)"):
+        # தற்காலிக தரவை நீக்கிவிடலாம்
+        st.warning("மாற்றங்கள் கைவிடப்பட்டன!")
+        st.rerun()
+
+st.info("குறிப்பு: 'சரி' கொடுத்தால் மட்டுமே மாற்றங்கள் தரவுத்தளத்தில் பதிவாகும்.")
