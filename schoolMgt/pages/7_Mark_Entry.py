@@ -39,11 +39,14 @@ if sel_exam_name != "-- தேர்வு செய்க --":
         for s_name in sub_list:
             sub = next((x for x in all_subjects if x['subject_name'] == s_name), None)
             if sub:
-                eval_type = str(sub.get('eval_type', '100'))
-                marks_db = supabase.table("marks").select("emis_no, theory_mark, internal_mark, practical_mark").eq("exam_id", exam_id).eq("subject_id", sub['subject_code']).execute().data
-                m_dict = {str(m['emis_no']): m for m in marks_db}
+                eval_type_raw = str(sub.get('eval_type', '100'))
+                # எண்கள் மட்டும் உள்ளதா என உறுதி செய்து, மற்ற குறியீடுகளை நீக்கிக்கொள்ளுங்கள்
+                eval_parts = [int(p) for p in eval_type_raw.split('+') if p.strip().isdigit()]
 
-                # ஏற்கனவே மதிப்பெண் இருந்தால் அதைக் காட்டும், இல்லையெனில் 0
+            # ஒருவேளை எந்த எண்ணும் கிடைக்கவில்லை என்றால் (பாடம் NIL ஆக இருந்தால்)
+                if not eval_parts:
+                    eval_parts = [0]
+            # ஏற்கனவே மதிப்பெண் இருந்தால் அதைக் காட்டும், இல்லையெனில் 0
                 df[f"Theory_{s_name}"] = df['emis_no'].apply(lambda x: m_dict.get(str(x), {}).get('theory_mark', 0))
                 
                 if "+" in eval_type:
@@ -75,14 +78,13 @@ if sel_exam_name != "-- தேர்வு செய்க --":
             for sub in all_subjects:
                 s_name = sub['subject_name']
                 
-                # அந்த பாடத்திற்குரிய eval_type மற்றும் நெடுவரிசைகளை எடுத்தல்
-                eval_type = str(sub.get('eval_type', '100'))
-                eval_parts = [int(p) for p in eval_type.split('+')]
-                
-                # தியரி நெடுவரிசை (எப்போதும் உண்டு)
-                t_col = f"Theory_{s_name}"
-                t_val = pd.to_numeric(row.get(t_col, 0), errors='coerce') or 0
-                
+               eval_type_raw = str(sub.get('eval_type', '100'))
+                # எண்கள் மட்டும் உள்ளதா என உறுதி செய்து, மற்ற குறியீடுகளை நீக்கிக்கொள்ளுங்கள்
+                eval_parts = [int(p) for p in eval_type_raw.split('+') if p.strip().isdigit()]
+
+                # ஒருவேளை எந்த எண்ணும் கிடைக்கவில்லை என்றால் (பாடம் NIL ஆக இருந்தால்)
+                if not eval_parts:
+                        eval_parts = [0]   
                 # தியரி சரிபார்ப்பு
                 if t_val > eval_parts[0]:
                     st.error(f"பிழை: {row['student_name']} - {s_name} தியரி மதிப்பெண் {eval_parts[0]}-க்கு மேல் உள்ளது!")
