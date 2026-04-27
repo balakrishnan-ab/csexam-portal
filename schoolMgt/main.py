@@ -6,13 +6,15 @@ if "BASE_URL" not in st.session_state:
     
 st.set_page_config(page_title="GHSS Portal", layout="wide")
 # மையப்படுத்தப்பட்ட பள்ளியின் பெயர் (வண்ணமயமாக)
-st.markdown("""
+col1, col2, col3 = st.columns([1, 6, 1])
+with col1:
+    st.image("https://raw.githubusercontent.com/balakrishnan-ab/csexam-portal/main/schoolMgt/school_logo.jpg", width=20%)
+with col1:
+    st.markdown("""
     <h3 style='text-align: center; color: #2E86C1; background-color: #F4F6F7; padding: 20px; border-radius: 10px;'>
         🏫 அரசு மேல்நிலைப் பள்ளி - தேவனங்குறிச்சி
     </h3>
 """, unsafe_allow_html=True)
-# இப்படி முயற்சி செய்யுங்கள்:
-st.image("https://raw.githubusercontent.com/balakrishnan-ab/csexam-portal/main/schoolMgt/school_logo.jpg", width=150)
 timetable_pages = [
     st.Page("pages/12_Staff_Allotment.py", title="Staff Allotments"),
     st.Page("pages/13_Combined_Groups.py", title="Combined Calss Creation"),
