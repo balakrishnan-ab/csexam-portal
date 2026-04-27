@@ -12,14 +12,21 @@ if 'temp_tt' not in st.session_state:
 
 with tab1:
     st.subheader("ஆசிரியர் வாரியான தற்காலிக அட்டவணை")
-    # எக்செல் போன்ற எடிட்டர்
-    edited_teacher_tt = st.data_editor(st.session_state.temp_tt, use_container_width=True)
+    # key="teacher_editor" என்று கொடுக்கவும்
+    edited_teacher_tt = st.data_editor(
+        st.session_state.temp_tt, 
+        use_container_width=True, 
+        key="teacher_editor"
+    )
 
 with tab2:
     st.subheader("வகுப்பு வாரியான தற்காலிக அட்டவணை")
-    # எக்செல் போன்ற எடிட்டர்
-    edited_class_tt = st.data_editor(st.session_state.temp_tt, use_container_width=True)
-
+    # key="class_editor" என்று கொடுக்கவும்
+    edited_class_tt = st.data_editor(
+        st.session_state.temp_tt, 
+        use_container_width=True, 
+        key="class_editor"
+    )
 # சேமிப்பு மற்றும் கைவிடும் பட்டன்கள்
 col1, col2 = st.columns([1, 1])
 with col1:
