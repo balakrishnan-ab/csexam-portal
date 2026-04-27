@@ -43,6 +43,7 @@ general_pages = [
 
 # நேவிகேஷன் மெனுவை உருவாக்குதல்
 pg = st.navigation({
+    "முகப்பு": [st.Page("pages/home.py", title="பள்ளி விவரம்")],
     "நிர்வாகம் (General)": general_pages,
     "கால அட்டவணை (Time Table)": timetable_pages,
     "தேர்வு மதிப்பெண் விவரங்கள் (Marks)": marks_pages,
