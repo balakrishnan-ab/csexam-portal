@@ -8,6 +8,8 @@ st.set_page_config(page_title="GHSS Portal", layout="wide")
 
 # பக்கங்களை வகைப்படுத்துதல்
 timetable_pages = [
+    st.Page("pages/12_Staff_Allotment.py", title="Staff Allotments"),
+    st.Page("pages/13_Combined_Groups.py", title="Combined Calss Creation"),
     st.Page("pages/14_Weekly_Time_Table.py", title="Weekly Time Table"),
     st.Page("pages/15_Timetable_Report.py", title="Timetable Report"),
 ]
@@ -24,7 +26,7 @@ general_pages = [
     st.Page("pages/2_Groups.py", title="Groups"),
     st.Page("pages/3_Classes.py", title="Classes"),
     st.Page("pages/11_1_Teacher Entry.py", title="Teacher Deatils"),
-    st.Page("pages/11_Staff_Management.py", title="Staff Management"),
+    st.Page("pages/11_Staff Management.py", title="Staff Management"),
 ]
 
 # நேவிகேஷன் மெனுவை உருவாக்குதல்
