@@ -16,6 +16,8 @@ timetable_pages = [
 ]
 
 marks_pages = [
+    st.Page("pages/5_Exam_Creation.py", title="Exam Creation"),
+    st.Page("pages/6_Roll_No_Generator.py", title="Roll No Genetator"),
     st.Page("pages/7_Mark_Entry.py", title="Mark Entry"),
     st.Page("pages/8_ClassSecwise_Report.py", title="Class Section wise Report"),
     st.Page("pages/9_Classwise_Report.py", title="Classwise Report"),
