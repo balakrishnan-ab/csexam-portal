@@ -85,15 +85,9 @@ if sel_exam_name != "-- தேர்வு செய்க --":
                         "total_mark": int(t_val + i_val + p_val)
                     })
             if error_found: break
-         if not error_found and final_data:
-            try:
-                supabase.table("marks").upsert(final_data, on_conflict="exam_id, emis_no, subject_id").execute()
-                st.success(f"வகுப்பு: {class_name if class_name else ''} - மதிப்பெண்கள் சேமிக்கப்பட்டன! 🎉")
-            except Exception as e:
-                st.error(f"சேமிப்பதில் பிழை: {e}")
-       # if not error_found and final_data:
-       #     supabase.table("marks").upsert(final_data, on_conflict="exam_id, emis_no, subject_id").execute()
-       #     st.success("மதிப்பெண்கள் சேமிக்கப்பட்டன!")
+        if not error_found and final_data:
+            supabase.table("marks").upsert(final_data, on_conflict="exam_id, emis_no, subject_id").execute()
+            st.success("மதிப்பெண்கள் சேமிக்கப்பட்டன!")
 
     # 3. Tabs அமைப்பு
     tab1, tab2, tab3 = st.tabs(["👨‍🏫 பாட ஆசிரியர்", "📂 வகுப்பு ஆசிரியர்", "🏢 வகுப்பின் அனைத்துப் பிரிவுகள்"])
