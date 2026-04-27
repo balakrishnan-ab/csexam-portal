@@ -29,6 +29,7 @@ general_pages = [
     st.Page("pages/2_Groups.py", title="Groups"),
     st.Page("pages/3_Classes.py", title="Classes"),
     st.Page("pages/11_1_Teacher Entry.py", title="Teacher Deatils"),
+    st.Page("pages/4_Students.py", title="Students Entry"),
 ]
   
 
