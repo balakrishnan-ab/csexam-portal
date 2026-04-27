@@ -12,7 +12,7 @@ with col1:
 with col2:
     st.markdown("""
     <h3 style='text-align: center; color: #2E86C1; background-color: #F4F6F7; padding: 20px; border-radius: 10px;'>
-         அரசு மேல்நிலைப் பள்ளி - தேவனங்குறிச்சி
+         அரசு மேல்நிலைப் பள்ளி - தேவனாங்குறிச்சி
     </h3>
 """, unsafe_allow_html=True)
 timetable_pages = [
