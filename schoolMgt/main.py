@@ -11,7 +11,8 @@ st.markdown("""
         🏫 அரசு மேல்நிலைப் பள்ளி - தேவனங்குறிச்சி
     </h3>
 """, unsafe_allow_html=True)
-
+# இப்படி முயற்சி செய்யுங்கள்:
+st.image("https://raw.githubusercontent.com/balakrishnan-ab/csexam-portal/main/schoolMgt/school_logo.jpg", width=150)
 timetable_pages = [
     st.Page("pages/12_Staff_Allotment.py", title="Staff Allotments"),
     st.Page("pages/13_Combined_Groups.py", title="Combined Calss Creation"),
