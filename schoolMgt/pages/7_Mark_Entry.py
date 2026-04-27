@@ -29,21 +29,22 @@ if sel_exam_name != "-- தேர்வு செய்க --":
     def generate_df(c_name, sub_filter=None):
         mapping = supabase.table("exam_mapping").select("emis_no, student_name").eq("exam_id", exam_id).eq("class_name", c_name).execute().data
         df = pd.DataFrame(mapping)
-        cls_info = next((c for c in all_classes if c['class_name'] == c_name), None)
-        g_info = next((g for g in all_groups if g['group_name'] == cls_info.get('group_name')), None)
-        sub_list = [sub_filter] if sub_filter else [s.strip() for s in g_info['subjects'].split(',')]
-
-        for s in sub_list:
-            sub = next((x for x in all_subjects if x['subject_name'] == s), None)
-            if sub and sub.get('eval_type') != 'NIL':
-                p = str(sub.get('eval_type', '100')).split('+')
-                marks_db = supabase.table("marks").select("emis_no, theory_mark, internal_mark, practical_mark").eq("exam_id", exam_id).eq("subject_id", sub['subject_code']).execute().data
-                m_dict = {m['emis_no']: m for m in marks_db}
-                df[f"Theory_{s}"] = df['emis_no'].apply(lambda x: m_dict.get(x, {}).get('theory_mark', 0))
-                if len(p) >= 2: df[f"Internal_{s}"] = df['emis_no'].apply(lambda x: m_dict.get(x, {}).get('internal_mark', 0))
-                if len(p) == 3: df[f"Practical_{s}"] = df['emis_no'].apply(lambda x: m_dict.get(x, {}).get('practical_mark', 0))
+        
+        # பாட விவரம் மற்றும் அதன் Code-ஐ எடுக்கவும்
+        sub = next((x for x in all_subjects if x['subject_name'] == sub_filter), None)
+        if sub:
+            # அந்த பாடத்திற்கான அனைத்து மதிப்பெண்களையும் ஒரே நேரத்தில் எடுக்கவும்
+            marks_db = supabase.table("marks").select("emis_no, theory_mark, internal_mark, practical_mark").eq("exam_id", exam_id).eq("subject_id", sub['subject_code']).execute().data
+            
+            # மாணவர்களின் EMIS எண் அடிப்படையில் மதிப்பெண்களை Mapping செய்யவும்
+            m_dict = {str(m['emis_no']): m for m in marks_db}
+            
+            # மதிப்பெண்களை DataFrame-ல் நிரப்பவும்
+            df[f"Theory_{sub_filter}"] = df['emis_no'].apply(lambda x: m_dict.get(str(x), {}).get('theory_mark', 0))
+            df[f"Internal_{sub_filter}"] = df['emis_no'].apply(lambda x: m_dict.get(str(x), {}).get('internal_mark', 0))
+            df[f"Practical_{sub_filter}"] = df['emis_no'].apply(lambda x: m_dict.get(str(x), {}).get('practical_mark', 0))
+            
         return df
-
     # 2. Supabase-ல் சேமிக்கும் பங்க்ஷன்
     def save_to_supabase(df_uploaded, class_name=None):
         final_data = []
