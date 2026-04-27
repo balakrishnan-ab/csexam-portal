@@ -1,9 +1,35 @@
 import streamlit as st
 
-# 🌍 மெயினில் மட்டும் ஒருமுறை அறிவிக்கிறோம்
+# ஏற்கனவே உள்ள அமைப்புகள்
 if "BASE_URL" not in st.session_state:
     st.session_state.BASE_URL = "https://script.google.com/macros/s/AKfycbxcCywCOjo9On8r3xpfyswIzkeroo6PGApMyjEaChLfsVEMwHQNfyBEXs2sqrd51zEN5w/exec"
     
 st.set_page_config(page_title="GHSS Portal", layout="wide")
-st.title("🏫 GHSS - பள்ளி மேலாண்மை போர்ட்டல்")
-st.write("இடதுபுறம் உள்ள மெனுவைப் பயன்படுத்தி நிர்வாக வேலைகளைத் தொடங்கவும்.")
+
+# பக்கங்களை வகைப்படுத்துதல்
+timetable_pages = [
+    st.Page("pages/14_Weekly_Time_Table.py", title="Weekly Time Table"),
+    st.Page("pages/15_Timetable_Report.py", title="Timetable Report"),
+]
+
+marks_pages = [
+    st.Page("pages/7_Mark_Entry.py", title="Mark Entry"),
+    st.Page("pages/8_Classwise_Report.py", title="Classwise Report"),
+    st.Page("pages/10_Student_Report_Card.py", title="Report Card"),
+]
+
+general_pages = [
+    st.Page("pages/1_Subjects.py", title="Subjects"),
+    st.Page("pages/2_Groups.py", title="Groups"),
+    st.Page("pages/3_Classes.py", title="Classes"),
+    st.Page("pages/11_Staff_Management.py", title="Staff Management"),
+]
+
+# நேவிகேஷன் மெனுவை உருவாக்குதல்
+pg = st.navigation({
+    "நிர்வாகம் (General)": general_pages,
+    "கால அட்டவணை (Time Table)": timetable_pages,
+    "மதிப்பெண் (Marks)": marks_pages,
+})
+
+pg.run()
