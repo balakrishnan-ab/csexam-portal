@@ -32,108 +32,64 @@ if sel_exam_name != "-- தேர்வு செய்க --":
         
         cls_info = next((c for c in all_classes if c['class_name'] == c_name), None)
         g_info = next((g for g in all_groups if g['group_name'] == cls_info.get('group_name')), None)
-        
-        # பாட ஆசிரியர் பக்கம் எனில் ஒரு பாடம், இல்லையெனில் அனைத்து பாடங்கள்
         sub_list = [sub_filter] if sub_filter else [s.strip() for s in g_info['subjects'].split(',')]
 
         for s_name in sub_list:
             sub = next((x for x in all_subjects if x['subject_name'] == s_name), None)
             if sub:
                 eval_type_raw = str(sub.get('eval_type', '100'))
-                # எண்கள் மட்டும் உள்ளதா என உறுதி செய்து, மற்ற குறியீடுகளை நீக்கிக்கொள்ளுங்கள்
                 eval_parts = [int(p) for p in eval_type_raw.split('+') if p.strip().isdigit()]
+                if not eval_parts: eval_parts = [0]
+                
+                marks_db = supabase.table("marks").select("emis_no, theory_mark, internal_mark, practical_mark").eq("exam_id", exam_id).eq("subject_id", sub['subject_code']).execute().data
+                m_dict = {str(m['emis_no']): m for m in marks_db}
 
-            # ஒருவேளை எந்த எண்ணும் கிடைக்கவில்லை என்றால் (பாடம் NIL ஆக இருந்தால்)
-                if not eval_parts:
-                    eval_parts = [0]
-            # ஏற்கனவே மதிப்பெண் இருந்தால் அதைக் காட்டும், இல்லையெனில் 0
                 df[f"Theory_{s_name}"] = df['emis_no'].apply(lambda x: m_dict.get(str(x), {}).get('theory_mark', 0))
                 
-                if "+" in eval_type:
-                    # பாடத்தின் மதிப்பீட்டு முறையை பட்டியலாக மாற்றவும் (எ.கா: "70+20+10" -> [70, 20, 10])
-                    parts = [int(p) for p in eval_type.split('+')]
-                    # தியரி மதிப்பெண் (முதல் பகுதி எப்போதும் தியரி)
-                    df[f"Theory_{s_name}"] = df['emis_no'].apply(lambda x: m_dict.get(str(x), {}).get('theory_mark', 0))
-    
-                    # மீதமுள்ள பகுதிகளை ஒவ்வொன்றாகச் சோதித்து Internal அல்லது Practical-ஆ எனத் தீர்மானிக்கவும்
-                    for i in range(1, len(parts)):
-                        score = parts[i]
-                        
-                        # 10 அல்லது 40 இருந்தால் அது 'Internal'
-                        if score in [10, 40]:
-                            df[f"Internal_{s_name}"] = df['emis_no'].apply(lambda x: m_dict.get(str(x), {}).get('internal_mark', 0))
-    
-                        # 20 அல்லது 25 இருந்தால் அது 'Practical'
-                        elif score in [20, 25]:
-                            df[f"Practical_{s_name}"] = df['emis_no'].apply(lambda x: m_dict.get(str(x), {}).get('practical_mark', 0))
-        
+                for i in range(1, len(eval_parts)):
+                    score = eval_parts[i]
+                    if score in [10, 40]:
+                        df[f"Internal_{s_name}"] = df['emis_no'].apply(lambda x: m_dict.get(str(x), {}).get('internal_mark', 0))
+                    elif score in [20, 25]:
+                        df[f"Practical_{s_name}"] = df['emis_no'].apply(lambda x: m_dict.get(str(x), {}).get('practical_mark', 0))
         return df
 
-    # 2. Supabase-ல் சேமிக்கும் பங்க்ஷன் (Validation-உடன்)
+    # 2. Supabase-ல் சேமிக்கும் பங்க்ஷன்
     def save_to_supabase(df_uploaded, class_name=None):
         final_data = []
         error_found = False
-    
         for _, row in df_uploaded.iterrows():
             for sub in all_subjects:
                 s_name = sub['subject_name']
+                t_col, i_col, p_col = f"Theory_{s_name}", f"Internal_{s_name}", f"Practical_{s_name}"
                 
-               eval_type_raw = str(sub.get('eval_type', '100'))
-                # எண்கள் மட்டும் உள்ளதா என உறுதி செய்து, மற்ற குறியீடுகளை நீக்கிக்கொள்ளுங்கள்
-                eval_parts = [int(p) for p in eval_type_raw.split('+') if p.strip().isdigit()]
-
-                # ஒருவேளை எந்த எண்ணும் கிடைக்கவில்லை என்றால் (பாடம் NIL ஆக இருந்தால்)
-                if not eval_parts:
-                        eval_parts = [0]   
-                # தியரி சரிபார்ப்பு
-                if t_val > eval_parts[0]:
-                    st.error(f"பிழை: {row['student_name']} - {s_name} தியரி மதிப்பெண் {eval_parts[0]}-க்கு மேல் உள்ளது!")
-                    error_found = True; break
-
-                # அகமதிப்பீடு மற்றும் செய்முறை மதிப்பெண்களை eval_type மதிப்புகளை வைத்து சரிபார்த்தல்
-                i_val, p_val = 0, 0
-            
-                # eval_parts-ல் உள்ள 2-வது மற்றும் 3-வது பகுதிகளை வரிசையாகச் சோதித்தல்
-                for i in range(1, len(eval_parts)):
-                    limit = eval_parts[i]
-                
-                    # Internal (10, 40)
-                    if limit in [10, 40]:
-                        col_name = f"Internal_{s_name}"
-                        if col_name in row.index:
-                            i_val = pd.to_numeric(row.get(col_name, 0), errors='coerce') or 0
-                            if i_val > limit:
-                                st.error(f"பிழை: {row['student_name']} - {s_name} Internal மதிப்பெண் {limit}-க்கு மேல் உள்ளது!")
-                                error_found = True; break
-                            
-                    # Practical (20, 25)
-                    elif limit in [20, 25]:
-                        col_name = f"Practical_{s_name}"
-                        if col_name in row.index:
-                            p_val = pd.to_numeric(row.get(col_name, 0), errors='coerce') or 0
-                            if p_val > limit:
-                                st.error(f"பிழை: {row['student_name']} - {s_name} Practical மதிப்பெண் {limit}-க்கு மேல் உள்ளது!")
-                                error_found = True; break
-                
-                if error_found: break
-            
-                final_data.append({
-                    "exam_id": int(exam_id),
-                    "emis_no": str(row['emis_no']),
-                    "subject_id": str(sub['subject_code']),
-                    "theory_mark": int(t_val),
-                    "internal_mark": int(i_val),
-                    "practical_mark": int(p_val),
-                    "total_mark": int(t_val + i_val + p_val)
-                })
+                if t_col in row.index:
+                    t_val = pd.to_numeric(row.get(t_col, 0), errors='coerce') or 0
+                    i_val = pd.to_numeric(row.get(i_col, 0), errors='coerce') or 0
+                    p_val = pd.to_numeric(row.get(p_col, 0), errors='coerce') or 0
+                    
+                    eval_parts = [int(p) for p in str(sub.get('eval_type', '100')).split('+') if p.strip().isdigit()]
+                    if not eval_parts: eval_parts = [0]
+                    
+                    if t_val > eval_parts[0]:
+                        st.error(f"பிழை: {row['student_name']} - {s_name} தியரி மதிப்பெண் அதிகம்!")
+                        error_found = True; break
+                    
+                    final_data.append({
+                        "exam_id": int(exam_id),
+                        "emis_no": str(row['emis_no']),
+                        "subject_id": str(sub['subject_code']),
+                        "theory_mark": int(t_val),
+                        "internal_mark": int(i_val),
+                        "practical_mark": int(p_val),
+                        "total_mark": int(t_val + i_val + p_val)
+                    })
             if error_found: break
         
         if not error_found and final_data:
-            try:
-                supabase.table("marks").upsert(final_data, on_conflict="exam_id, emis_no, subject_id").execute()
-                st.success(f"வகுப்பு: {class_name if class_name else ''} - மதிப்பெண்கள் சேமிக்கப்பட்டன! 🎉")
-            except Exception as e:
-                st.error(f"சேமிப்பதில் பிழை: {e}")
+            supabase.table("marks").upsert(final_data, on_conflict="exam_id, emis_no, subject_id").execute()
+            st.success("மதிப்பெண்கள் சேமிக்கப்பட்டன!")
+
     # 3. Tabs அமைப்பு
     tab1, tab2, tab3 = st.tabs(["👨‍🏫 பாட ஆசிரியர்", "📂 வகுப்பு ஆசிரியர்", "🏢 வகுப்பின் அனைத்துப் பிரிவுகள்"])
 
@@ -141,7 +97,6 @@ if sel_exam_name != "-- தேர்வு செய்க --":
         class_list = sorted(list(set([c['class_name'] for c in all_classes])))
         c1, c2 = st.columns(2)
         sel_c = c1.selectbox("வகுப்பு:", ["-- தேர்வு செய்க --"] + class_list, key="t1_c")
-        
         if sel_c != "-- தேர்வு செய்க --":
             g_name = next(c['group_name'] for c in all_classes if c['class_name'] == sel_c)
             sub_list = [s.strip() for s in next(g['subjects'] for g in all_groups if g['group_name'] == g_name).split(',')]
@@ -149,70 +104,32 @@ if sel_exam_name != "-- தேர்வு செய்க --":
             
             if sel_s != "-- தேர்வு செய்க --":
                 state_key = f"df_{sel_c}_{sel_s}"
-                if state_key not in st.session_state:
-                    st.session_state[state_key] = generate_df(sel_c, sel_s)
+                if state_key not in st.session_state: st.session_state[state_key] = generate_df(sel_c, sel_s)
                 
                 df = st.session_state[state_key]
-                
-                # --- டைனமிக் பட்டன்கள் ---
                 sub = next((x for x in all_subjects if x['subject_name'] == sel_s), None)
-                eval_type = str(sub.get('eval_type', '100'))
-                parts = eval_type.split('+')
-                remaining_parts = parts[1:] # இது [20, 10] என இருக்கும் என்று வைத்துக்கொள்வோம்
+                remaining = [int(p) for p in str(sub.get('eval_type', '100')).split('+') if p.strip().isdigit()][1:]
                 
-                if remaining_parts:
-                    cols = st.columns(len(remaining_parts))
-                    for i, val in enumerate(remaining_parts):
-                        # எந்த மதிப்பெண் எந்த நெடுவரிசைக்கு உரியது என உறுதி செய்தல்
-                        val_int = int(val)
-                        target_col = ""
-                        
-                        # லாஜிக்: 10 அல்லது 40 என்றால் Internal, 20 அல்லது 25 என்றால் Practical
-                        if val_int in [10, 40]:
-                            target_col = f"Internal_{sel_s}"
-                        elif val_int in [20, 25]:
-                            target_col = f"Practical_{sel_s}"
-                        
+                if remaining:
+                    cols = st.columns(len(remaining))
+                    for i, val in enumerate(remaining):
                         if cols[i].button(f"Fill {val} to ALL"):
-                            if target_col and target_col in df.columns:
-                                df[target_col] = val_int
+                            target = f"Internal_{sel_s}" if val in [10, 40] else f"Practical_{sel_s}"
+                            if target in df.columns:
+                                df[target] = val
                                 st.session_state[state_key] = df
                                 st.rerun()
-                st.write("---")
-
+                
                 edited_df = st.data_editor(df, use_container_width=True, key=f"editor_{state_key}")
                 st.session_state[state_key] = edited_df
-                if st.button("சேமி", key="save1"): 
-                    save_to_supabase(edited_df, sel_c)
+                if st.button("சேமி", key="save1"): save_to_supabase(edited_df, sel_c)
 
-                
     with tab2:
         sel_c2 = st.selectbox("வகுப்பு:", ["-- தேர்வு செய்க --"] + class_list, key="t2_c")
         if sel_c2 != "-- தேர்வு செய்க --":
-            # இங்கே ஏற்கனவே உள்ள மதிப்பெண்களுடன் கோப்பு தரவிறக்கம் ஆகும்
             df_down = generate_df(sel_c2)
             output = BytesIO()
-            with pd.ExcelWriter(output, engine='xlsxwriter') as writer: 
-                df_down.to_excel(writer, index=False)
+            with pd.ExcelWriter(output, engine='xlsxwriter') as writer: df_down.to_excel(writer, index=False)
             st.download_button("📥 வகுப்பு கோப்பைத் தரவிறக்கு", data=output.getvalue(), file_name=f"Marks_{sel_c2}.xlsx")
-            
             up = st.file_uploader("பதிவேற்று:", type=["xlsx"], key="up2")
-            if up and st.button("சேமி", key="save2"): 
-                save_to_supabase(pd.read_excel(up), sel_c2)
-
-    with tab3:
-        grade = st.text_input("வகுப்பு எண் (எ.கா: 11):")
-        if grade:
-            relevant = sorted([c['class_name'] for c in all_classes if c['class_name'].startswith(grade)])
-            output = BytesIO()
-            with pd.ExcelWriter(output, engine='xlsxwriter') as writer:
-                for c in relevant: 
-                    # அந்தந்த வகுப்பின் தற்போதைய மதிப்பெண்களுடன் ஷீட்கள் உருவாகும்
-                    generate_df(c).to_excel(writer, sheet_name=c, index=False)
-            st.download_button("📥 அனைத்தையும் தரவிறக்கு", data=output.getvalue(), file_name=f"Marks_{grade}_All.xlsx")
-            
-            up3 = st.file_uploader("பதிவேற்று:", type=["xlsx"], key="up3")
-            if up3 and st.button("சேமி", key="save3"):
-                xl = pd.ExcelFile(up3)
-                for sheet in xl.sheet_names: 
-                    save_to_supabase(pd.read_excel(xl, sheet_name=sheet), sheet)
+            if up and st.button("சேமி", key="save2"): save_to_supabase(pd.read_excel(up), sel_c2)
