@@ -74,48 +74,58 @@ if sel_exam_name != "-- தேர்வு செய்க --":
         for _, row in df_uploaded.iterrows():
             for sub in all_subjects:
                 s_name = sub['subject_name']
-                t_col, i_col, p_col = f"Theory_{s_name}", f"Internal_{s_name}", f"Practical_{s_name}"
+                
+                # அந்த பாடத்திற்குரிய eval_type மற்றும் நெடுவரிசைகளை எடுத்தல்
+                eval_type = str(sub.get('eval_type', '100'))
+                eval_parts = [int(p) for p in eval_type.split('+')]
+                
+                # தியரி நெடுவரிசை (எப்போதும் உண்டு)
+                t_col = f"Theory_{s_name}"
+                t_val = pd.to_numeric(row.get(t_col, 0), errors='coerce') or 0
+                
+                # தியரி சரிபார்ப்பு
+                if t_val > eval_parts[0]:
+                    st.error(f"பிழை: {row['student_name']} - {s_name} தியரி மதிப்பெண் {eval_parts[0]}-க்கு மேல் உள்ளது!")
+                    error_found = True; break
+
+                # அகமதிப்பீடு மற்றும் செய்முறை மதிப்பெண்களை eval_type மதிப்புகளை வைத்து சரிபார்த்தல்
+                i_val, p_val = 0, 0
             
-                if t_col in row.index:
-                    t_val = pd.to_numeric(row.get(t_col, 0), errors='coerce') or 0
-                    i_val = pd.to_numeric(row.get(i_col, 0), errors='coerce') or 0
-                    p_val = pd.to_numeric(row.get(p_col, 0), errors='coerce') or 0
+                # eval_parts-ல் உள்ள 2-வது மற்றும் 3-வது பகுதிகளை வரிசையாகச் சோதித்தல்
+                for i in range(1, len(eval_parts)):
+                    limit = eval_parts[i]
                 
-                    # மதிப்பீட்டு முறை (எ.கா: 70+20+10)
-                    eval_parts = [int(p) for p in str(sub.get('eval_type', '100')).split('+')]
-                
-                    # 1. தியரி மதிப்பெண் சரிபார்ப்பு (முதல் பகுதி)
-                    if t_val > eval_parts[0]:
-                        st.error(f"பிழை: {row['student_name']} - {s_name} தியரி மதிப்பெண் {eval_parts[0]-க்கு மேல் உள்ளது!")
-                        error_found = True; break
-                
-                    # 2. மீதமுள்ள பகுதிகளை அதன் மதிப்புகளை வைத்து சரிபார்க்கவும்
-                    for i in range(1, len(eval_parts)):
-                        limit = eval_parts[i]
-                        # limit 10 அல்லது 40 ஆக இருந்தால் அது Internal-ஐக் குறிக்கும்
-                        if limit in [10, 40]:
+                    # Internal (10, 40)
+                    if limit in [10, 40]:
+                        col_name = f"Internal_{s_name}"
+                        if col_name in row.index:
+                            i_val = pd.to_numeric(row.get(col_name, 0), errors='coerce') or 0
                             if i_val > limit:
                                 st.error(f"பிழை: {row['student_name']} - {s_name} Internal மதிப்பெண் {limit}-க்கு மேல் உள்ளது!")
                                 error_found = True; break
-                        # limit 20 அல்லது 25 ஆக இருந்தால் அது Practical-ஐக் குறிக்கும்
-                        elif limit in [20, 25]:
+                            
+                    # Practical (20, 25)
+                    elif limit in [20, 25]:
+                        col_name = f"Practical_{s_name}"
+                        if col_name in row.index:
+                            p_val = pd.to_numeric(row.get(col_name, 0), errors='coerce') or 0
                             if p_val > limit:
                                 st.error(f"பிழை: {row['student_name']} - {s_name} Practical மதிப்பெண் {limit}-க்கு மேல் உள்ளது!")
                                 error_found = True; break
                 
-                    if error_found: break
-                
-                    final_data.append({
-                        "exam_id": int(exam_id),
-                        "emis_no": str(row['emis_no']),
-                        "subject_id": str(sub['subject_code']),
-                        "theory_mark": int(t_val),
-                        "internal_mark": int(i_val),
-                        "practical_mark": int(p_val),
-                        "total_mark": int(t_val + i_val + p_val)
-                    })
+                if error_found: break
+            
+                final_data.append({
+                    "exam_id": int(exam_id),
+                    "emis_no": str(row['emis_no']),
+                    "subject_id": str(sub['subject_code']),
+                    "theory_mark": int(t_val),
+                    "internal_mark": int(i_val),
+                    "practical_mark": int(p_val),
+                    "total_mark": int(t_val + i_val + p_val)
+                })
             if error_found: break
-    
+        
         if not error_found and final_data:
             try:
                 supabase.table("marks").upsert(final_data, on_conflict="exam_id, emis_no, subject_id").execute()
