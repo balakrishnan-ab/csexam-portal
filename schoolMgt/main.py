@@ -8,7 +8,7 @@ st.set_page_config(page_title="GHSS Portal", layout="wide")
 # மையப்படுத்தப்பட்ட பள்ளியின் பெயர் (வண்ணமயமாக)
 col1, col2, col3 = st.columns([1, 6, 1])
 with col1:
-    st.image("https://raw.githubusercontent.com/balakrishnan-ab/csexam-portal/main/schoolMgt/school_logo.jpg", width=20%)
+    st.image("https://raw.githubusercontent.com/balakrishnan-ab/csexam-portal/main/schoolMgt/school_logo.jpg", width=80)
 with col1:
     st.markdown("""
     <h3 style='text-align: center; color: #2E86C1; background-color: #F4F6F7; padding: 20px; border-radius: 10px;'>
