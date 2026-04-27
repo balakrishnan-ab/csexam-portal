@@ -5,7 +5,8 @@ if "BASE_URL" not in st.session_state:
     st.session_state.BASE_URL = "https://script.google.com/macros/s/AKfycbxcCywCOjo9On8r3xpfyswIzkeroo6PGApMyjEaChLfsVEMwHQNfyBEXs2sqrd51zEN5w/exec"
     
 st.set_page_config(page_title="GHSS Portal", layout="wide")
-
+st.logo("school_logo.jpg") 
+st.sidebar.markdown("# **GHSS - தேவனங்குறிச்சி**")
 # பக்கங்களை வகைப்படுத்துதல்
 timetable_pages = [
     st.Page("pages/12_Staff_Allotment.py", title="Staff Allotments"),
