@@ -37,7 +37,7 @@ general_pages = [
 pg = st.navigation({
     "நிர்வாகம் (General)": general_pages,
     "கால அட்டவணை (Time Table)": timetable_pages,
-    "மதிப்பெண் (Marks)": marks_pages,
+    "தேர்வு மதிப்பெண் விவரங்கள் (Marks)": marks_pages,
 })
 
 pg.run()
