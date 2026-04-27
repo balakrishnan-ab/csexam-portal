@@ -21,6 +21,7 @@ timetable_pages = [
     st.Page("pages/14_Weekly_Time_Table.py", title="Weekly Time Table"),
     st.Page("pages/11_Staff Management.py", title="Staff Management"),
     st.Page("pages/15_Timetable_Report.py", title="Timetable Report"),
+    st.Page("pages/16_Auto_Timetable_Generator.py", title="Timetable Auto Generator"),
 ]
 
 marks_pages = [
