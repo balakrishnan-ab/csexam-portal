@@ -14,7 +14,8 @@ timetable_pages = [
 
 marks_pages = [
     st.Page("pages/7_Mark_Entry.py", title="Mark Entry"),
-    st.Page("pages/8_Classwise_Report.py", title="Classwise Report"),
+    st.Page("pages/8_ClassSecwise_Report.py", title="Class Section wise Report"),
+    st.Page("pages/9_Classwise_Report.py", title="Classwise Report"),
     st.Page("pages/10_Student_Report_Card.py", title="Report Card"),
 ]
 
@@ -22,6 +23,7 @@ general_pages = [
     st.Page("pages/1_Subjects.py", title="Subjects"),
     st.Page("pages/2_Groups.py", title="Groups"),
     st.Page("pages/3_Classes.py", title="Classes"),
+    st.Page("pages/11_1_Teacher Entry.py", title="Teacher Deatils"),
     st.Page("pages/11_Staff_Management.py", title="Staff Management"),
 ]
 
