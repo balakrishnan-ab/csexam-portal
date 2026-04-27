@@ -89,45 +89,52 @@ if sel_exam_name != "-- தேர்வு செய்க --":
         class_list = sorted(list(set([c['class_name'] for c in all_classes])))
         c1, c2 = st.columns(2)
         sel_c = c1.selectbox("வகுப்பு:", ["-- தேர்வு செய்க --"] + class_list, key="t1_c")
+        
         if sel_c != "-- தேர்வு செய்க --":
             g_name = next(c['group_name'] for c in all_classes if c['class_name'] == sel_c)
             sub_list = [s.strip() for s in next(g['subjects'] for g in all_groups if g['group_name'] == g_name).split(',')]
             sel_s = c2.selectbox("பாடம்:", ["-- தேர்வு செய்க --"] + sub_list, key="t1_s")
-            if sel_s != "-- தேர்வு செய்க --":
-                df = generate_df(sel_c, sel_s)
             
-                # பாடத்தின் மதிப்பீட்டு முறை (eval_type)
+            if sel_s != "-- தேர்வு செய்க --":
+                # Session State-ல் தரவைச் சேமித்தல்
+                state_key = f"df_{sel_c}_{sel_s}"
+                if state_key not in st.session_state:
+                    st.session_state[state_key] = generate_df(sel_c, sel_s)
+                
+                df = st.session_state[state_key]
+                
+                # --- டைனமிக் பட்டன்கள் ---
                 sub = next((x for x in all_subjects if x['subject_name'] == sel_s), None)
                 eval_type = str(sub.get('eval_type', '100'))
-            
-                # தியரியைத் தவிர்த்து மீதமுள்ள மதிப்பெண் பிரிவுகளைப் பிரித்தல்
                 parts = eval_type.split('+')
-                # 'parts[0]' என்பது தியரி, அதை விட்டுவிட்டு மீதமுள்ளவற்றை மட்டும் எடுக்கிறோம்
-                remaining_parts = parts[1:] 
-            
-                # டைனமிக் பட்டன்களை உருவாக்குதல்
-                if remaining_parts:
-                    st.write("---")
-                    st.caption("மதிப்பெண்களை நிரப்பவும்:")
-                    cols = st.columns(len(remaining_parts))
+                remaining_parts = parts[1:] # தியரியைத் தவிர்த்து மற்றவை
                 
+                if remaining_parts:
+                    cols = st.columns(len(remaining_parts))
                     for i, val in enumerate(remaining_parts):
                         btn_label = f"Fill {val} to ALL"
-                        # எந்த நெடுவரிசைகளில் மதிப்பெண் நிரப்ப வேண்டும் என்று கண்டுபிடித்தல்
-                        target_cols = []
-                        if i == 0: target_cols = [c for c in df.columns if c.startswith("Internal_")]
-                        if i == 1: target_cols = [c for c in df.columns if c.startswith("Practical_")]
-                    
                         if cols[i].button(btn_label):
-                            for col in target_cols:
-                                df[col] = int(val)
-            
-                st.write("---")
-                # எடிட்டர் மற்றும் சேமிக்கும் பொத்தான்
-                edited_df = st.data_editor(df, use_container_width=True)
-                if st.button("சேமி", key="save1"): 
-                    save_to_supabase(edited_df, sel_c)            
+                            # Internal அல்லது Practical நெடுவரிசையை மட்டும் கண்டறிதல்
+                            target_col = "Internal_" + sel_s if i == 0 else "Practical_" + sel_s
+                            if target_col in df.columns:
+                                df[target_col] = int(val)
+                                st.session_state[state_key] = df
+                                st.rerun()
                 
+                st.write("---")
+                
+                # --- Data Editor ---
+                edited_df = st.data_editor(
+                    df, 
+                    use_container_width=True, 
+                    key=f"editor_{state_key}"
+                )
+                
+                # மாற்றங்களைச் சேமித்தல்
+                st.session_state[state_key] = edited_df
+                
+                if st.button("சேமி", key="save1"): 
+                    save_to_supabase(edited_df, sel_c)                
     with tab2:
         sel_c2 = st.selectbox("வகுப்பு:", ["-- தேர்வு செய்க --"] + class_list, key="t2_c")
         if sel_c2 != "-- தேர்வு செய்க --":
