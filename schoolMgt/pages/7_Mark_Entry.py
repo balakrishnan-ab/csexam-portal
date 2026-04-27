@@ -47,39 +47,64 @@ if sel_exam_name != "-- தேர்வு செய்க --":
                 df[f"Theory_{s_name}"] = df['emis_no'].apply(lambda x: m_dict.get(str(x), {}).get('theory_mark', 0))
                 
                 if "+" in eval_type:
-                    parts = eval_type.split('+')
-                    if len(parts) >= 2:
-                        df[f"Internal_{s_name}"] = df['emis_no'].apply(lambda x: m_dict.get(str(x), {}).get('internal_mark', 0))
-                    if len(parts) == 3:
-                        df[f"Practical_{s_name}"] = df['emis_no'].apply(lambda x: m_dict.get(str(x), {}).get('practical_mark', 0))
+                    # பாடத்தின் மதிப்பீட்டு முறையை பட்டியலாக மாற்றவும் (எ.கா: "70+20+10" -> [70, 20, 10])
+                    parts = [int(p) for p in eval_type.split('+')]
+                    # தியரி மதிப்பெண் (முதல் பகுதி எப்போதும் தியரி)
+                    df[f"Theory_{s_name}"] = df['emis_no'].apply(lambda x: m_dict.get(str(x), {}).get('theory_mark', 0))
+    
+                    # மீதமுள்ள பகுதிகளை ஒவ்வொன்றாகச் சோதித்து Internal அல்லது Practical-ஆ எனத் தீர்மானிக்கவும்
+                    for i in range(1, len(parts)):
+                        score = parts[i]
+                        
+                        # 10 அல்லது 40 இருந்தால் அது 'Internal'
+                        if score in [10, 40]:
+                            df[f"Internal_{s_name}"] = df['emis_no'].apply(lambda x: m_dict.get(str(x), {}).get('internal_mark', 0))
+    
+                        # 20 அல்லது 25 இருந்தால் அது 'Practical'
+                        elif score in [20, 25]:
+                            df[f"Practical_{s_name}"] = df['emis_no'].apply(lambda x: m_dict.get(str(x), {}).get('practical_mark', 0))
+        
         return df
 
     # 2. Supabase-ல் சேமிக்கும் பங்க்ஷன் (Validation-உடன்)
     def save_to_supabase(df_uploaded, class_name=None):
         final_data = []
         error_found = False
-        
+    
         for _, row in df_uploaded.iterrows():
             for sub in all_subjects:
                 s_name = sub['subject_name']
                 t_col, i_col, p_col = f"Theory_{s_name}", f"Internal_{s_name}", f"Practical_{s_name}"
-                
+            
                 if t_col in row.index:
                     t_val = pd.to_numeric(row.get(t_col, 0), errors='coerce') or 0
                     i_val = pd.to_numeric(row.get(i_col, 0), errors='coerce') or 0
                     p_val = pd.to_numeric(row.get(p_col, 0), errors='coerce') or 0
-                    
-                    # அதிகபட்ச மதிப்பெண் சரிபார்ப்பு (எ.கா: 70+20+10)
-                    eval_parts = str(sub.get('eval_type', '100')).split('+')
-                    max_t = int(eval_parts[0])
-                    max_i = int(eval_parts[1]) if len(eval_parts) >= 2 else 0
-                    max_p = int(eval_parts[2]) if len(eval_parts) == 3 else 0
-
-                    if t_val > max_t or i_val > max_i or p_val > max_p:
-                        st.error(f"பிழை: {row['student_name']} - {s_name} பாடத்தில் நிர்ணயிக்கப்பட்ட மதிப்பெண்ணை விட அதிக மதிப்பெண் உள்ளது!")
-                        error_found = True
-                        break
-                    
+                
+                    # மதிப்பீட்டு முறை (எ.கா: 70+20+10)
+                    eval_parts = [int(p) for p in str(sub.get('eval_type', '100')).split('+')]
+                
+                    # 1. தியரி மதிப்பெண் சரிபார்ப்பு (முதல் பகுதி)
+                    if t_val > eval_parts[0]:
+                        st.error(f"பிழை: {row['student_name']} - {s_name} தியரி மதிப்பெண் {eval_parts[0]-க்கு மேல் உள்ளது!")
+                        error_found = True; break
+                
+                    # 2. மீதமுள்ள பகுதிகளை அதன் மதிப்புகளை வைத்து சரிபார்க்கவும்
+                    for i in range(1, len(eval_parts)):
+                        limit = eval_parts[i]
+                        # limit 10 அல்லது 40 ஆக இருந்தால் அது Internal-ஐக் குறிக்கும்
+                        if limit in [10, 40]:
+                            if i_val > limit:
+                                st.error(f"பிழை: {row['student_name']} - {s_name} Internal மதிப்பெண் {limit}-க்கு மேல் உள்ளது!")
+                                error_found = True; break
+                        # limit 20 அல்லது 25 ஆக இருந்தால் அது Practical-ஐக் குறிக்கும்
+                        elif limit in [20, 25]:
+                            if p_val > limit:
+                                st.error(f"பிழை: {row['student_name']} - {s_name} Practical மதிப்பெண் {limit}-க்கு மேல் உள்ளது!")
+                                error_found = True; break
+                
+                    if error_found: break
+                
                     final_data.append({
                         "exam_id": int(exam_id),
                         "emis_no": str(row['emis_no']),
@@ -90,14 +115,13 @@ if sel_exam_name != "-- தேர்வு செய்க --":
                         "total_mark": int(t_val + i_val + p_val)
                     })
             if error_found: break
-        
+    
         if not error_found and final_data:
             try:
                 supabase.table("marks").upsert(final_data, on_conflict="exam_id, emis_no, subject_id").execute()
-                st.success(f"வகுப்பு: {class_name if class_name else ''} - மதிப்பெண்கள் வெற்றிகரமாகச் சேமிக்கப்பட்டன! 🎉")
+                st.success(f"வகுப்பு: {class_name if class_name else ''} - மதிப்பெண்கள் சேமிக்கப்பட்டன! 🎉")
             except Exception as e:
                 st.error(f"சேமிப்பதில் பிழை: {e}")
-
     # 3. Tabs அமைப்பு
     tab1, tab2, tab3 = st.tabs(["👨‍🏫 பாட ஆசிரியர்", "📂 வகுப்பு ஆசிரியர்", "🏢 வகுப்பின் அனைத்துப் பிரிவுகள்"])
 
