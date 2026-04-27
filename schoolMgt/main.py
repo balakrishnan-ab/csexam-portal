@@ -1,6 +1,6 @@
 import streamlit as st
 
-# ஏற்கனவே உள்ள அமைப்புகள்
+# ஏற்கனவே உள்ள அமைப்புகள் 
 if "BASE_URL" not in st.session_state:
     st.session_state.BASE_URL = "https://script.google.com/macros/s/AKfycbxcCywCOjo9On8r3xpfyswIzkeroo6PGApMyjEaChLfsVEMwHQNfyBEXs2sqrd51zEN5w/exec"
     
