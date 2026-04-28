@@ -46,12 +46,28 @@ if 'master_tt' not in st.session_state:
 # 5. Tabs உருவாக்கம்
 tab1, tab2 = st.tabs(["👨‍🏫 ஆசிரியர் வாரியாக", "🏫 வகுப்பு வாரியாக"])
 
+# 1. மாஸ்டர் டேபிளை உருவாக்கும்போது நாட்களை Index ஆக சேர்க்கவும்
+if 'master_tt' not in st.session_state:
+    # MultiIndex: (ஆசிரியர், நாள்)
+    idx = pd.MultiIndex.from_product([teachers_list, days], names=['Teacher', 'Day'])
+    st.session_state.master_tt = pd.DataFrame(index=idx, columns=periods).fillna("-")
+
+# 2. Tab 1-ல் காட்சிப்படுத்தும் முறை (மாற்றியமைக்கப்பட்டது)
 with tab1:
-    st.subheader("ஆசிரியர்களுக்கான வாராந்திர அட்டவணை (8 பாடவேளைகள்)")
+    st.subheader("அனைத்து ஆசிரியர்களின் வாராந்திர அட்டவணை")
+    
+    # ஒவ்வொரு ஆசிரியருக்கும் தனித்தனியாக 6 நாட்களுடன் காட்ட
     for teacher in teachers_list:
         st.markdown(f"#### 👨‍🏫 ஆசிரியர்: {teacher}")
-        teacher_df = st.session_state.master_tt.loc[[teacher]]
-        st.dataframe(teacher_df, use_container_width=True)
+        
+        # அந்த ஆசிரியரின் 6 நாட்களையும் பிரித்தல்
+        teacher_df = st.session_state.master_tt.loc[teacher]
+        
+        # இதை Data Editor-ஆக மாற்றினால் எடிட் செய்ய வசதியாக இருக்கும்
+        edited_df = st.data_editor(teacher_df, use_container_width=True, key=f"edit_{teacher}")
+        
+        # திருத்தப்பட்ட தரவை மீண்டும் மாஸ்டர் அட்டவணையில் ஏற்றுதல்
+        st.session_state.master_tt.loc[teacher] = edited_df
         st.write("---")
 
 with tab2:
