@@ -54,32 +54,39 @@ with tab1:
         st.write("---")
 
 with tab2:
-    st.subheader("வகுப்பு வாரியான எடிட்டர்")
+    st.subheader("வகுப்பு வாரியான கால அட்டவணை எடிட்டர்")
     
-    # வகுப்புகளின் பட்டியல்
-    classes_list = sorted(list(set([a['class_name'] for a in allot_data])))
-    
-    # 3 காலம்கள் வீதம் எடிட்டர்களை உருவாக்க
+    # 1. அனைத்து வகுப்புகளின் பட்டியல் (Unique Classes)
+    # Master Table-லிருந்து வகுப்புகளைப் பிரிக்கிறோம்
+    df_stack = st.session_state.master_tt.stack().reset_index()
+    df_stack.columns = ['Teacher', 'Day', 'Period', 'Class']
+    classes = sorted(df_stack['Class'].unique())
+    # '-' என்பது வகுப்பே இல்லாத கட்டம், அதை நீக்கிவிடவும்
+    if '-' in classes: classes.remove('-')
+
+    # 2. 3-காலம் Grid அமைப்பு
     cols_per_row = 3
-    for i in range(0, len(classes_list), cols_per_row):
+    for i in range(0, len(classes), cols_per_row):
         cols = st.columns(cols_per_row)
-        for j, cls in enumerate(classes_list[i : i + cols_per_row]):
+        for j, cls in enumerate(classes[i : i + cols_per_row]):
             with cols[j]:
                 st.markdown(f"**🏫 வகுப்பு: {cls}**")
                 
-                # Pivot செய்யப்பட்ட தரவிலிருந்து அந்த வகுப்பை மட்டும் பிரித்தல்
-                # முதலில் stack செய்து பின் class வாரியாக filter செய்கிறோம்
-                df_stack = st.session_state.master_tt.stack().reset_index()
-                df_stack.columns = ['Teacher', 'Day', 'Period', 'Class']
-                
-                # இந்த வகுப்புக்கான கால அட்டவணை (Days vs Periods)
+                # 3. குறிப்பிட்ட வகுப்பின் தரவை மட்டும் பிரித்தல்
+                # pivot மூலம் Days x Periods அமைப்பிற்கு மாற்றுகிறோம்
                 cls_df = df_stack[df_stack['Class'] == cls].pivot(index='Day', columns='Period', values='Teacher')
                 
-                # எடிட் செய்யும் வசதி
-                edited_cls = st.data_editor(cls_df, use_container_width=True, key=f"edit_cls_{cls}")
+                # 4. எடிட் செய்யும் வசதி
+                edited_cls = st.data_editor(
+                    cls_df, 
+                    use_container_width=True, 
+                    key=f"edit_cls_{cls}"
+                )
                 
-                # குறிப்பு: இங்கே எடிட் செய்தால், master_tt-ஐ அப்டேட் செய்வது சிக்கலானது. 
-                # எனவே எடிட்டிங்கை 'ஆசிரியர் வாரியாக' வைத்துவிட்டு, 'வகுப்பு வாரியாக' பார்ப்பது சிறந்தது.
+                # குறிப்பு: இங்கே எடிட் செய்வது ஒரு தற்காலிக பார்வையாக இருக்கும். 
+                # மாற்றங்கள் சேமிக்கப்பட வேண்டும் எனில், மீண்டும் Master Table-க்கு மேப் செய்ய வேண்டும்.
+        
+        st.write("---")
 # 5. சேமிப்பு பொத்தான்
 if st.button("💾 அனைத்தையும் சேமி"):
     st.success("வெற்றிகரமாகச் சேமிக்கப்பட்டது!")
