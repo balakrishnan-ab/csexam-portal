@@ -18,60 +18,38 @@ except:
 def get_all_data():
     allot = supabase.table("staff_allotment").select("*").execute()
     teachers = supabase.table("teachers").select("full_name").execute()
-    return allot.data, [t['full_name'] for t in teachers.data]
+    weekly_tt = supabase.table("weekly_timetable").select("*").execute()
+    return allot.data, [t['full_name'] for t in teachers.data], weekly_tt.data
 
-allot_data, teachers_list = get_all_data()
+allot_data, teachers_list, db_list_new = get_all_data()
 periods = [str(i) for i in range(1, 9)]
 days = ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat"]
 
-# 3. Master Table நிர்வகித்தல் (Teacher, Day -> Periods)
+# அட்டவணை ஸ்டைல் பங்க்ஷன்
+def style_table(df):
+    return df.style.set_table_styles([
+        {'selector': 'th', 'props': [('background-color', '#1f77b4'), ('color', 'white')]},
+        {'selector': 'th.row_heading', 'props': [('background-color', '#f0f2f6')]}
+    ])
+
+# 3. Master Table நிர்வகித்தல்
 if 'master_tt' not in st.session_state:
     idx = pd.MultiIndex.from_product([teachers_list, days], names=['Teacher', 'Day'])
     st.session_state.master_tt = pd.DataFrame(index=idx, columns=periods).fillna("-")
 
-# 4. ஆட்டோ-ஃபில் தர்க்கம்
-if st.button("🤖 அனைவருக்கும் தானாக நிரப்பு (Auto-Assign All)"):
-    idx = pd.MultiIndex.from_product([teachers_list, days], names=['Teacher', 'Day'])
-    new_df = pd.DataFrame(index=idx, columns=periods).fillna("-")
-    
-    all_tasks = []
-    for a in allot_data:
-        all_tasks.extend([a['class_name']] * int(a.get('periods_per_week', 0)))
-    
-    task_idx = 0
-    for t in teachers_list:
-        for d in days:
-            for p in periods:
-                if task_idx < len(all_tasks):
-                    new_df.at[(t, d), p] = all_tasks[task_idx]
-                    task_idx += 1
-    st.session_state.master_tt = new_df
-    st.rerun()
-
-# 5. Tabs உருவாக்கம்
-tab1, tab2 = st.tabs(["👨‍🏫 ஆசிரியர் வாரியாக", "🏫 வகுப்பு வாரியான பார்வை"])
+# 4. Tabs உருவாக்கம்
+tab1, tab2, tab3 = st.tabs(["👨‍🏫 ஆசிரியர் எடிட்டர்", "🏫 வகுப்பு வாரியான பார்வை", "📋 ஆசிரியர் ரிப்போர்ட்"])
 
 with tab1:
-    st.subheader("அனைத்து ஆசிரியர்களின் வாராந்திர அட்டவணை")
+    st.subheader("அனைத்து ஆசிரியர்களின் வாராந்திர எடிட்டர்")
     cols_per_row = 3
-    
     for i in range(0, len(teachers_list), cols_per_row):
         cols = st.columns(cols_per_row)
         for j, teacher in enumerate(teachers_list[i : i + cols_per_row]):
             with cols[j]:
                 st.markdown(f"**👨‍🏫 {teacher}**")
-                
-                # அந்த ஆசிரியரின் 6 நாட்கள் கொண்ட டேபிளை பிரித்தல்
                 teacher_df = st.session_state.master_tt.loc[teacher]
-                
-                # எடிட்டர் (Mon-Sat வரிசையாக இருக்கும்)
-                edited_df = st.data_editor(
-                    teacher_df, 
-                    use_container_width=True, 
-                    key=f"edit_{teacher}"
-                )
-                
-                # மாற்றங்களைச் சேமித்தல்
+                edited_df = st.data_editor(teacher_df, use_container_width=True, key=f"edit_{teacher}")
                 st.session_state.master_tt.loc[teacher] = edited_df
         st.write("---")
 
@@ -82,6 +60,21 @@ with tab2:
     class_view = df_stack.pivot_table(index='Class', columns='Period', aggfunc='first')
     st.dataframe(class_view, use_container_width=True)
 
-# 6. சேமிப்பு பொத்தான்
+with tab3:
+    st.markdown("### 👨‍🏫 ஆசிரியர் வாரியான கால அட்டவணை (ரிப்போர்ட்)")
+    unique_teachers = sorted(list(set([entry['teacher_name'] for entry in db_list_new])))
+    
+    for i in range(0, len(unique_teachers), 3):
+        cols = st.columns(3)
+        for j, teacher_name in enumerate(unique_teachers[i:i+3]):
+            with cols[j]:
+                st.markdown(f"**ஆசிரியர்: {teacher_name}**")
+                df_teacher = pd.DataFrame(index=[d[:3] for d in days], columns=periods).fillna("-")
+                for entry in db_list_new:
+                    if entry['teacher_name'] == teacher_name:
+                        df_teacher.at[entry['day_of_week'][:3], str(entry['period_number'])] = f"{entry['class_name']}-{entry['subject_name'][:3]}"
+                st.write(style_table(df_teacher).to_html(), unsafe_allow_html=True)
+
+# 5. சேமிப்பு பொத்தான்
 if st.button("💾 அனைத்தையும் சேமி"):
     st.success("வெற்றிகரமாகச் சேமிக்கப்பட்டது!")
