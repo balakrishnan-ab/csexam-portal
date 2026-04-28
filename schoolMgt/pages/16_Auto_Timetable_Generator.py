@@ -18,17 +18,14 @@ except:
 def get_all_data():
     allot = supabase.table("staff_allotment").select("*").execute()
     teachers = supabase.table("teachers").select("full_name").execute()
-    weekly_tt = supabase.table("weekly_timetable").select("*").execute()
-    
     # பெயர்களை மட்டும் சுத்தப்படுத்துதல் (அடைப்புக்குறிகளை நீக்குதல்)
     clean_allot = allot.data
     for a in clean_allot:
-        # 'RAVIKUMAR C (CR)' -> 'RAVIKUMAR C'
         if '(' in a['teacher_name']:
             a['teacher_name'] = a['teacher_name'].split('(')[0].strip()
-            
-    return clean_allot, [t['full_name'].strip() for t in teachers.data], weekly_tt.data
-allot_data, teachers_list, db_list_new = get_all_data()
+    return clean_allot, [t['full_name'].strip() for t in teachers.data]
+
+allot_data, teachers_list = get_all_data()
 periods = [str(i) for i in range(1, 9)]
 days = ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat"]
 
@@ -37,44 +34,35 @@ if 'master_tt' not in st.session_state:
     idx = pd.MultiIndex.from_product([teachers_list, days], names=['Teacher', 'Day'])
     st.session_state.master_tt = pd.DataFrame(index=idx, columns=periods).fillna("-")
 
-# 4. ஆட்டோ-ஃபில் தர்க்கம்
+# 4. ஆட்டோ-ஃபில் தர்க்கம் (நிபந்தனைகளுடன்)
 if st.button("🤖 நிபந்தனைகளுடன் தானாக நிரப்பு"):
     idx = pd.MultiIndex.from_product([teachers_list, days], names=['Teacher', 'Day'])
     new_df = pd.DataFrame(index=idx, columns=periods).fillna("-")
     
-    # 1. ஆசிரியருக்கு உரிய வகுப்புகளை மட்டும் பட்டியலிடுதல்
     teacher_allotments = {}
     for a in allot_data:
         t_name = a['teacher_name']
         if t_name not in teacher_allotments: teacher_allotments[t_name] = []
         teacher_allotments[t_name].extend([a['class_name']] * int(a.get('periods_per_week', 0)))
 
-    # 2. நிரப்புதல் தர்க்கம்
     for t in teachers_list:
         assigned_classes = teacher_allotments.get(t, [])
         for d in days:
             last_class = None
             consecutive_count = 0
-            
             for p in periods:
                 if not assigned_classes: break
-                
-                # தர்க்கம்:
-                # 1. ஒரே வகுப்பு தொடர்ந்து 3 முறை வரக்கூடாது (consecutive_count < 2)
-                # 2. கிடைக்கக்கூடிய வகுப்பைத் தேடுதல்
-                found = False
                 for i, cls in enumerate(assigned_classes):
                     if cls != last_class or consecutive_count < 2:
                         new_df.at[(t, d), p] = cls
-                        last_class = cls
-                        # தொடர்ந்து வருவது ஒரே வகுப்பா எனச் சரிபார்த்தல்
                         consecutive_count = (consecutive_count + 1) if cls == last_class else 1
+                        last_class = cls
                         assigned_classes.pop(i)
-                        found = True
                         break
-                
     st.session_state.master_tt = new_df
-    st.rerun()# 5. Tabs உருவாக்கம்
+    st.rerun()
+
+# 5. Tabs உருவாக்கம்
 tab1, tab2 = st.tabs(["👨‍🏫 ஆசிரியர் எடிட்டர்", "🏫 வகுப்பு வாரியான பார்வை"])
 
 with tab1:
@@ -85,9 +73,9 @@ with tab1:
         for j, teacher in enumerate(teachers_list[i : i + cols_per_row]):
             with cols[j]:
                 st.markdown(f"**👨‍🏫 {teacher}**")
-                teacher_df = st.session_state.master_tt.loc[teacher]
+                teacher_df = st.session_state.master_tt.xs(teacher, level='Teacher')
                 edited_df = st.data_editor(teacher_df, use_container_width=True, key=f"edit_{teacher}")
-                st.session_state.master_tt.loc[teacher] = edited_df
+                st.session_state.master_tt.loc[(teacher, slice(None)), :] = edited_df.values
         st.write("---")
 
 with tab2:
@@ -97,21 +85,18 @@ with tab2:
     
     selected_classes = st.multiselect("தேவையான வகுப்புகளைத் தேர்ந்தெடுக்கவும்:", all_classes, default=all_classes[:3])
     
-    cols_per_row = 3
-    for i in range(0, len(selected_classes), cols_per_row):
-        cols = st.columns(cols_per_row)
-        for j, cls in enumerate(selected_classes[i : i + cols_per_row]):
-            with cols[j]:
-                st.markdown(f"**🏫 வகுப்பு: {cls}**")
-                df_stack = st.session_state.master_tt.stack().reset_index()
-                df_stack.columns = ['Teacher', 'Day', 'Period', 'Class_Val']
-                
-                cls_df = df_stack[df_stack['Class_Val'] == cls].pivot(index='Day', columns='Period', values='Teacher')
-                
-                if cls_df.empty:
-                    cls_df = pd.DataFrame(index=days, columns=periods).fillna("-")
-                
-                st.data_editor(cls_df, use_container_width=True, key=f"edit_cls_{cls}")
+    for cls in selected_classes:
+        st.markdown(f"**🏫 வகுப்பு: {cls}**")
+        df_stack = st.session_state.master_tt.stack().reset_index()
+        df_stack.columns = ['Teacher', 'Day', 'Period', 'Class_Val']
+        
+        cls_df = df_stack[df_stack['Class_Val'] == cls].pivot(index='Day', columns='Period', values='Teacher')
+        
+        # வகுப்பு விவரங்கள் சரியாக இல்லையெனில் காலி டேபிள்
+        if cls_df.empty:
+            cls_df = pd.DataFrame(index=days, columns=periods).fillna("-")
+            
+        st.data_editor(cls_df, use_container_width=True, key=f"edit_cls_{cls}")
         st.write("---")
 
 # 6. சேமிப்பு பொத்தான்
