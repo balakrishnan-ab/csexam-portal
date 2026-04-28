@@ -19,8 +19,15 @@ def get_all_data():
     allot = supabase.table("staff_allotment").select("*").execute()
     teachers = supabase.table("teachers").select("full_name").execute()
     weekly_tt = supabase.table("weekly_timetable").select("*").execute()
-    return allot.data, [t['full_name'] for t in teachers.data], weekly_tt.data
-
+    
+    # பெயர்களை மட்டும் சுத்தப்படுத்துதல் (அடைப்புக்குறிகளை நீக்குதல்)
+    clean_allot = allot.data
+    for a in clean_allot:
+        # 'RAVIKUMAR C (CR)' -> 'RAVIKUMAR C'
+        if '(' in a['teacher_name']:
+            a['teacher_name'] = a['teacher_name'].split('(')[0].strip()
+            
+    return clean_allot, [t['full_name'].strip() for t in teachers.data], weekly_tt.data
 allot_data, teachers_list, db_list_new = get_all_data()
 periods = [str(i) for i in range(1, 9)]
 days = ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat"]
