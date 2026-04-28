@@ -21,7 +21,6 @@ def get_all_data():
     return allot.data, [t['full_name'] for t in teachers.data]
 
 allot_data, teachers_list = get_all_data()
-days = ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat"]
 periods = [str(i) for i in range(1, 9)]
 
 # 3. ஆட்டோ-ஃபில் தர்க்கம்
@@ -48,30 +47,15 @@ if 'master_tt' not in st.session_state:
 tab1, tab2 = st.tabs(["👨‍🏫 ஆசிரியர் வாரியாக", "🏫 வகுப்பு வாரியாக"])
 
 with tab1:
-
     st.subheader("ஆசிரியர்களுக்கான வாராந்திர அட்டவணை (8 பாடவேளைகள்)")
-    
-    # 8 பாடவேளைகளை உறுதி செய்ய (1 to 8)
-    periods_8 = [str(i) for i in range(1, 9)]
-    
     for teacher in teachers_list:
         st.markdown(f"#### 👨‍🏫 ஆசிரியர்: {teacher}")
-        
-        # அந்த ஆசிரியரின் தரவை மட்டும் பிரித்தல்
         teacher_df = st.session_state.master_tt.loc[[teacher]]
-        
-        # 8 வேளைகள் இல்லை என்றால் அதைச் சேர்க்கவும் (எடிட்டரின் வசதிக்காக)
-        for p in periods_8:
-            if p not in teacher_df.columns:
-                teacher_df[p] = "-"
-        
-        # அட்டவணை தோற்றம் (Styling)
-        # காலங்களை மட்டும் பிரித்து காட்டுகிறோம்
-        st.dataframe(teacher_df[periods_8], use_container_width=True)
+        st.dataframe(teacher_df, use_container_width=True)
         st.write("---")
+
 with tab2:
     st.subheader("வகுப்பு வாரியான பார்வை")
-    # மாஸ்டர் டேபிளை வகுப்பு வாரியாக மாற்றுதல் (Pivot Logic)
     df_stack = st.session_state.master_tt.stack().reset_index()
     df_stack.columns = ['Teacher', 'Period', 'Class']
     class_view = df_stack.pivot_table(index='Class', columns='Period', aggfunc='first')
@@ -80,4 +64,3 @@ with tab2:
 # 6. சேமிப்பு பொத்தான்
 if st.button("💾 அனைத்தையும் சேமி"):
     st.success("வெற்றிகரமாகச் சேமிக்கப்பட்டது!")
-    # இங்கே உங்கள் Supabase .upsert() தர்க்கத்தை சேர்க்கவும்
