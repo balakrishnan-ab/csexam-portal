@@ -56,19 +56,20 @@ if 'master_tt' not in st.session_state:
 with tab1:
     st.subheader("அனைத்து ஆசிரியர்களின் வாராந்திர அட்டவணை")
     
-    # ஆசிரியர்களின் பட்டியலை 3-ஆகப் பிரித்தல்
     cols_per_row = 3
     for i in range(0, len(teachers_list), cols_per_row):
-        cols = st.columns(cols_per_row) # வரிசைக்கு 3 காலம்கள்
+        cols = st.columns(cols_per_row)
         
         for j, teacher in enumerate(teachers_list[i : i + cols_per_row]):
             with cols[j]:
                 st.markdown(f"**👨‍🏫 {teacher}**")
                 
-                # அந்த ஆசிரியரின் 6 நாட்களையும் பெறுதல்
+                # 1. குறிப்பிட்ட ஆசிரியரின் தரவைப் பெறுதல் (6 நாட்கள் x 8 வேளைகள்)
                 teacher_df = st.session_state.master_tt.loc[teacher]
                 
-                # எடிட்டிங் வசதி (சிறிய அளவில்)
+                # 2. நாட்கள் இடது பக்கம் வர, Dataframe-ஐ அப்படியே காட்டினால் போதும் 
+                # (ஏனெனில் நாம் முந்தைய படியில் index=days என்று அமைத்திருக்கிறோம்)
+                
                 edited_df = st.data_editor(
                     teacher_df, 
                     use_container_width=True, 
@@ -78,8 +79,7 @@ with tab1:
                 # மாற்றங்களை மாஸ்டர் டேபிளில் சேமித்தல்
                 st.session_state.master_tt.loc[teacher] = edited_df
         
-        st.write("---") # வரிசைக்கு வரிசை இடைவெளி
-
+        st.write("---")
 with tab2:
     st.subheader("வகுப்பு வாரியான பார்வை")
     df_stack = st.session_state.master_tt.stack().reset_index()
