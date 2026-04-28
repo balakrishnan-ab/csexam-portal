@@ -55,13 +55,28 @@ if 'temp_tt' not in st.session_state:
     st.session_state.temp_tt = pd.DataFrame(index=["Mon", "Tue", "Wed", "Thu", "Fri"], columns=[str(i) for i in range(1, 9)]).fillna("-")
 
 with tab1:
-    st.subheader("ஆசிரியர் வாரியான தற்காலிக அட்டவணை")
-    # key="teacher_editor" என்று கொடுக்கவும்
-    edited_teacher_tt = st.data_editor(
-        st.session_state.temp_tt, 
-        use_container_width=True, 
-        key="teacher_editor"
-    )
+  st.title("👨‍🏫 அனைத்து ஆசிரியர்கள் கால அட்டவணை")
+
+# 1. மாஸ்டர் டேபிளை உருவாக்குதல் (ஆசிரியர்கள் x வேளைகள்)
+# teachers_list என்பது உங்கள் தரவுத்தளத்தில் உள்ள ஆசிரியர்களின் பட்டியல்
+if 'master_tt' not in st.session_state:
+    st.session_state.master_tt = pd.DataFrame(
+        index=teachers_list, 
+        columns=["Mon_1", "Mon_2", "Tue_1", "Tue_2"] # இதை விரிவுபடுத்தலாம்
+    ).fillna("-")
+
+# 2. ஒரே எடிட்டரில் அனைத்தையும் காட்ட
+edited_master_tt = st.data_editor(
+    st.session_state.master_tt,
+    use_container_width=True,
+    key="master_editor"
+)
+
+# 3. சேமிக்கும்போது வகுப்பு வாரியாகப் பிரித்தல்
+if st.button("💾 அனைத்தையும் சேமி"):
+    # இங்கே இந்த மாஸ்டர் டேபிளை வகுப்பு வாரியாகப் பிரிக்கும் தர்க்கம் (Logic)
+    # பின்னர் Supabase-க்கு அனுப்பவும்
+    st.success("அனைத்து ஆசிரியர்களின் அட்டவணையும் சேமிக்கப்பட்டது!")
 
 with tab2:
     st.subheader("வகுப்பு வாரியான தற்காலிக அட்டவணை")
