@@ -31,33 +31,43 @@ if 'master_tt' not in st.session_state:
     st.session_state.master_tt = pd.DataFrame(index=idx, columns=periods).fillna("-")
 
 # 4. ஆட்டோ-ஃபில் தர்க்கம்
-if st.button("🤖 அனைவருக்கும் தானாக நிரப்பு (Auto-Assign All)"):
-    # புதிய Master Table-ஐ உருவாக்குதல்
+if st.button("🤖 நிபந்தனைகளுடன் தானாக நிரப்பு"):
     idx = pd.MultiIndex.from_product([teachers_list, days], names=['Teacher', 'Day'])
     new_df = pd.DataFrame(index=idx, columns=periods).fillna("-")
     
-    # staff_allotment அட்டவணையிலிருந்து தரவை எடுத்தல்
-    # allot_data என்பது supabase-லிருந்து பெறப்பட்டது (இதுவே உங்கள் staff_allotment அட்டவணை)
-    
-    all_tasks = []
+    # 1. ஆசிரியருக்கு உரிய வகுப்புகளை மட்டும் பட்டியலிடுதல்
+    teacher_allotments = {}
     for a in allot_data:
-        # உங்கள் அட்டவணையில் உள்ள column பெயர்கள்: class_name, periods_per_week
-        cls = a['class_name']
-        p_count = int(a.get('periods_per_week', 0))
-        all_tasks.extend([cls] * p_count)
-    
-    # ஆசிரியர்களுக்குப் பாடங்களை வரிசையாக நிரப்புதல்
-    task_idx = 0
+        t_name = a['teacher_name']
+        if t_name not in teacher_allotments: teacher_allotments[t_name] = []
+        teacher_allotments[t_name].extend([a['class_name']] * int(a.get('periods_per_week', 0)))
+
+    # 2. நிரப்புதல் தர்க்கம்
     for t in teachers_list:
+        assigned_classes = teacher_allotments.get(t, [])
         for d in days:
+            last_class = None
+            consecutive_count = 0
+            
             for p in periods:
-                if task_idx < len(all_tasks):
-                    new_df.at[(t, d), p] = all_tasks[task_idx]
-                    task_idx += 1
-    
+                if not assigned_classes: break
+                
+                # தர்க்கம்:
+                # 1. ஒரே வகுப்பு தொடர்ந்து 3 முறை வரக்கூடாது (consecutive_count < 2)
+                # 2. கிடைக்கக்கூடிய வகுப்பைத் தேடுதல்
+                found = False
+                for i, cls in enumerate(assigned_classes):
+                    if cls != last_class or consecutive_count < 2:
+                        new_df.at[(t, d), p] = cls
+                        last_class = cls
+                        # தொடர்ந்து வருவது ஒரே வகுப்பா எனச் சரிபார்த்தல்
+                        consecutive_count = (consecutive_count + 1) if cls == last_class else 1
+                        assigned_classes.pop(i)
+                        found = True
+                        break
+                
     st.session_state.master_tt = new_df
-    st.rerun()
-# 5. Tabs உருவாக்கம்
+    st.rerun()# 5. Tabs உருவாக்கம்
 tab1, tab2 = st.tabs(["👨‍🏫 ஆசிரியர் எடிட்டர்", "🏫 வகுப்பு வாரியான பார்வை"])
 
 with tab1:
