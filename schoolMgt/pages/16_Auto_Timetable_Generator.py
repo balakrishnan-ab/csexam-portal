@@ -54,7 +54,7 @@ with tab1:
         st.write("---")
 
 with tab2:
-   st.subheader("வகுப்பு வாரியான பார்வை")
+    st.subheader("வகுப்பு வாரியான பார்வை")
     
     # 1. முதலில் தரவை அடுக்கி (stack), Index-ஐ Reset செய்கிறோம்
     df_stack = st.session_state.master_tt.stack().reset_index()
