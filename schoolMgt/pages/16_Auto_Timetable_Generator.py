@@ -46,13 +46,11 @@ if 'master_tt' not in st.session_state:
 # 5. Tabs உருவாக்கம்
 tab1, tab2 = st.tabs(["👨‍🏫 ஆசிரியர் வாரியாக", "🏫 வகுப்பு வாரியாக"])
 
-# 1. மாஸ்டர் டேபிளை உருவாக்கும்போது நாட்களை Index ஆக சேர்க்கவும்
+4. Master Table நிர்வகித்தல்
 if 'master_tt' not in st.session_state:
-    # MultiIndex: (ஆசிரியர், நாள்)
+    # MultiIndex உருவாக்குதல் மற்றும் அதற்குப் பெயரிடுதல் (இதைக் கவனமாகச் சேர்க்கவும்)
     idx = pd.MultiIndex.from_product([teachers_list, days], names=['Teacher', 'Day'])
-    st.session_state.master_tt = pd.DataFrame(index=idx, columns=periods).fillna("-")
-
-# 2. Tab 1-ல் காட்சிப்படுத்தும் முறை (மாற்றியமைக்கப்பட்டது)
+    st.session_state.master_tt = pd.DataFrame(index=idx, columns=periods).fillna("-")# 2. Tab 1-ல் காட்சிப்படுத்தும் முறை (மாற்றியமைக்கப்பட்டது)
 with tab1:
     st.subheader("அனைத்து ஆசிரியர்களின் வாராந்திர அட்டவணை")
     
