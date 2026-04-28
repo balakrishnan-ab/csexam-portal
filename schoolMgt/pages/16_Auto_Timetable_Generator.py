@@ -38,7 +38,7 @@ if 'master_tt' not in st.session_state:
     st.session_state.master_tt = pd.DataFrame(index=idx, columns=periods).fillna("-")
 
 # 4. Tabs உருவாக்கம்
-tab1, tab2 = st.tabs(["👨‍🏫 ஆசிரியர் எடிட்டர்", "🏫 வகுப்பு வாரியான பார்வை", "📋 ஆசிரியர் ரிப்போர்ட்"])
+tab1, tab2 = st.tabs(["👨‍🏫 ஆசிரியர் எடிட்டர்", "🏫 வகுப்பு வாரியான பார்வை"])
 
 with tab1:
     st.subheader("அனைத்து ஆசிரியர்களின் வாராந்திர எடிட்டர்")
