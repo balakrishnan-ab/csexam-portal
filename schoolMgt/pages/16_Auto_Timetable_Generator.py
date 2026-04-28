@@ -56,27 +56,32 @@ with tab1:
 with tab2:
     st.subheader("வகுப்பு வாரியான கால அட்டவணை எடிட்டர்")
     
-    # 1. வகுப்புகளை Supabase-லிருந்து எடுத்தல்
+    # 1. Supabase-லிருந்து வகுப்புகளைப் பெறுதல்
     classes_data = supabase.table("classes").select("class_name").execute().data
-    classes_list = sorted([c['class_name'] for c in classes_data])
+    all_classes = [c['class_name'] for c in classes_data]
     
-    # 2. 3-காலம் Grid அமைப்பு
+    # 2. வகுப்புகளை வரிசைப்படுத்த (Sort) மற்றும் Filter செய்ய
+    # '12-A', '11-A', '10-A' என வரிசைப்படுத்த சுலபமான வழி (Reverse Sort)
+    all_classes.sort(reverse=True) 
+    
+    # பில்டர் வசதி (Multi-select)
+    selected_classes = st.multiselect("தேவையான வகுப்புகளைத் தேர்ந்தெடுக்கவும்:", all_classes, default=all_classes[:3])
+    
+    # 3. 3-காலம் Grid அமைப்பு (Filter செய்யப்பட்ட வகுப்புகளுக்கு மட்டும்)
     cols_per_row = 3
-    for i in range(0, len(classes_list), cols_per_row):
+    for i in range(0, len(selected_classes), cols_per_row):
         cols = st.columns(cols_per_row)
-        for j, cls in enumerate(classes_list[i : i + cols_per_row]):
+        for j, cls in enumerate(selected_classes[i : i + cols_per_row]):
             with cols[j]:
                 st.markdown(f"**🏫 வகுப்பு: {cls}**")
                 
-                # தரவை வகுப்பு வாரியாக Filter செய்தல்
-                # Master table (Teacher, Day) -> (Class, Day) ஆக மாற்ற வேண்டும்
+                # Master table (Teacher, Day) -> (Class, Day) ஆக மாற்றும் தர்க்கம்
                 df_stack = st.session_state.master_tt.stack().reset_index()
                 df_stack.columns = ['Teacher', 'Day', 'Period', 'Class_Val']
                 
-                # இந்த வகுப்புக்குரிய அட்டவணையை எடுத்தல்
                 cls_df = df_stack[df_stack['Class_Val'] == cls].pivot(index='Day', columns='Period', values='Teacher')
                 
-                # 6 நாட்கள் மற்றும் 8 பாடவேளைகள் இல்லை எனில் காலி டேபிள் காட்டுதல்
+                # காலி அட்டவணை சரிபார்ப்பு
                 if cls_df.empty:
                     cls_df = pd.DataFrame(index=days, columns=periods).fillna("-")
                 
@@ -86,6 +91,6 @@ with tab2:
                     use_container_width=True, 
                     key=f"edit_cls_{cls}"
                 )
-# 5. சேமிப்பு பொத்தான்
+        st.write("---")# 5. சேமிப்பு பொத்தான்
 if st.button("💾 அனைத்தையும் சேமி"):
     st.success("வெற்றிகரமாகச் சேமிக்கப்பட்டது!")
