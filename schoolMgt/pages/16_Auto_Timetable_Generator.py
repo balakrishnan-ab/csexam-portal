@@ -24,7 +24,7 @@ allot_data, teachers_list = get_all_data()
 periods = [str(i) for i in range(1, 9)]
 days = ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat"]
 
-# 3. Master Table உருவாக்குதல் (MultiIndex)
+# 3. Master Table நிர்வகித்தல்
 if 'master_tt' not in st.session_state:
     idx = pd.MultiIndex.from_product([teachers_list, days], names=['Teacher', 'Day'])
     st.session_state.master_tt = pd.DataFrame(index=idx, columns=periods).fillna("-")
