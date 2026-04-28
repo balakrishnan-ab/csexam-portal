@@ -38,7 +38,7 @@ if 'master_tt' not in st.session_state:
     st.session_state.master_tt = pd.DataFrame(index=idx, columns=periods).fillna("-")
 
 # 4. Tabs உருவாக்கம்
-tab1, tab2, tab3 = st.tabs(["👨‍🏫 ஆசிரியர் எடிட்டர்", "🏫 வகுப்பு வாரியான பார்வை", "📋 ஆசிரியர் ரிப்போர்ட்"])
+tab1, tab2 = st.tabs(["👨‍🏫 ஆசிரியர் எடிட்டர்", "🏫 வகுப்பு வாரியான பார்வை", "📋 ஆசிரியர் ரிப்போர்ட்"])
 
 with tab1:
     st.subheader("அனைத்து ஆசிரியர்களின் வாராந்திர எடிட்டர்")
@@ -68,20 +68,6 @@ with tab2:
     class_view = df_stack.pivot_table(index='Class', columns='Period', aggfunc='first')
     
     st.dataframe(class_view, use_container_width=True)
-with tab3:
-    st.markdown("### 👨‍🏫 ஆசிரியர் வாரியான கால அட்டவணை (ரிப்போர்ட்)")
-    unique_teachers = sorted(list(set([entry['teacher_name'] for entry in db_list_new])))
-    
-    for i in range(0, len(unique_teachers), 3):
-        cols = st.columns(3)
-        for j, teacher_name in enumerate(unique_teachers[i:i+3]):
-            with cols[j]:
-                st.markdown(f"**ஆசிரியர்: {teacher_name}**")
-                df_teacher = pd.DataFrame(index=[d[:3] for d in days], columns=periods).fillna("-")
-                for entry in db_list_new:
-                    if entry['teacher_name'] == teacher_name:
-                        df_teacher.at[entry['day_of_week'][:3], str(entry['period_number'])] = f"{entry['class_name']}-{entry['subject_name'][:3]}"
-                st.write(style_table(df_teacher).to_html(), unsafe_allow_html=True)
 
 # 5. சேமிப்பு பொத்தான்
 if st.button("💾 அனைத்தையும் சேமி"):
