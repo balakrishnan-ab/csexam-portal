@@ -68,7 +68,7 @@ with tab1:
         # அட்டவணை தோற்றம் (Styling)
         # காலங்களை மட்டும் பிரித்து காட்டுகிறோம்
         st.dataframe(teacher_df[periods_8], use_container_width=True)
-        st.write("---")ி
+        st.write("---")
 with tab2:
     st.subheader("வகுப்பு வாரியான பார்வை")
     # மாஸ்டர் டேபிளை வகுப்பு வாரியாக மாற்றுதல் (Pivot Logic)
