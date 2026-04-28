@@ -56,37 +56,36 @@ with tab1:
 with tab2:
     st.subheader("வகுப்பு வாரியான கால அட்டவணை எடிட்டர்")
     
-    # 1. அனைத்து வகுப்புகளின் பட்டியல் (Unique Classes)
-    # Master Table-லிருந்து வகுப்புகளைப் பிரிக்கிறோம்
-    df_stack = st.session_state.master_tt.stack().reset_index()
-    df_stack.columns = ['Teacher', 'Day', 'Period', 'Class']
-    classes = sorted(df_stack['Class'].unique())
-    # '-' என்பது வகுப்பே இல்லாத கட்டம், அதை நீக்கிவிடவும்
-    if '-' in classes: classes.remove('-')
-
+    # 1. வகுப்புகளை Supabase-லிருந்து எடுத்தல்
+    classes_data = supabase.table("classes").select("class_name").execute().data
+    classes_list = sorted([c['class_name'] for c in classes_data])
+    
     # 2. 3-காலம் Grid அமைப்பு
     cols_per_row = 3
-    for i in range(0, len(classes), cols_per_row):
+    for i in range(0, len(classes_list), cols_per_row):
         cols = st.columns(cols_per_row)
-        for j, cls in enumerate(classes[i : i + cols_per_row]):
+        for j, cls in enumerate(classes_list[i : i + cols_per_row]):
             with cols[j]:
                 st.markdown(f"**🏫 வகுப்பு: {cls}**")
                 
-                # 3. குறிப்பிட்ட வகுப்பின் தரவை மட்டும் பிரித்தல்
-                # pivot மூலம் Days x Periods அமைப்பிற்கு மாற்றுகிறோம்
-                cls_df = df_stack[df_stack['Class'] == cls].pivot(index='Day', columns='Period', values='Teacher')
+                # தரவை வகுப்பு வாரியாக Filter செய்தல்
+                # Master table (Teacher, Day) -> (Class, Day) ஆக மாற்ற வேண்டும்
+                df_stack = st.session_state.master_tt.stack().reset_index()
+                df_stack.columns = ['Teacher', 'Day', 'Period', 'Class_Val']
                 
-                # 4. எடிட் செய்யும் வசதி
+                # இந்த வகுப்புக்குரிய அட்டவணையை எடுத்தல்
+                cls_df = df_stack[df_stack['Class_Val'] == cls].pivot(index='Day', columns='Period', values='Teacher')
+                
+                # 6 நாட்கள் மற்றும் 8 பாடவேளைகள் இல்லை எனில் காலி டேபிள் காட்டுதல்
+                if cls_df.empty:
+                    cls_df = pd.DataFrame(index=days, columns=periods).fillna("-")
+                
+                # எடிட்டர்
                 edited_cls = st.data_editor(
                     cls_df, 
                     use_container_width=True, 
                     key=f"edit_cls_{cls}"
                 )
-                
-                # குறிப்பு: இங்கே எடிட் செய்வது ஒரு தற்காலிக பார்வையாக இருக்கும். 
-                # மாற்றங்கள் சேமிக்கப்பட வேண்டும் எனில், மீண்டும் Master Table-க்கு மேப் செய்ய வேண்டும்.
-        
-        st.write("---")
 # 5. சேமிப்பு பொத்தான்
 if st.button("💾 அனைத்தையும் சேமி"):
     st.success("வெற்றிகரமாகச் சேமிக்கப்பட்டது!")
