@@ -54,21 +54,32 @@ with tab1:
         st.write("---")
 
 with tab2:
-    st.subheader("வகுப்பு வாரியான பார்வை")
+    st.subheader("வகுப்பு வாரியான எடிட்டர்")
     
-    # 1. முதலில் தரவை அடுக்கி (stack), Index-ஐ Reset செய்கிறோம்
-    df_stack = st.session_state.master_tt.stack().reset_index()
+    # வகுப்புகளின் பட்டியல்
+    classes_list = sorted(list(set([a['class_name'] for a in allot_data])))
     
-    # 2. இப்போது சரியாக 4 காலம்கள் இருப்பதை உறுதி செய்து பெயரிடுகிறோம்
-    # MultiIndex-ல் ஏற்கனவே 'Teacher', 'Day' என்று பெயரிட்டுள்ளோம்.
-    # எனவே, stack() செய்தபின் வரும் புதிய காலம் 'Period' மற்றும் தரவு 'Class' ஆகும்.
-    df_stack.columns = ['Teacher', 'Day', 'Period', 'Class']
-    
-    # 3. Pivot அட்டவணை உருவாக்குதல்
-    class_view = df_stack.pivot_table(index='Class', columns='Period', aggfunc='first')
-    
-    st.dataframe(class_view, use_container_width=True)
-
+    # 3 காலம்கள் வீதம் எடிட்டர்களை உருவாக்க
+    cols_per_row = 3
+    for i in range(0, len(classes_list), cols_per_row):
+        cols = st.columns(cols_per_row)
+        for j, cls in enumerate(classes_list[i : i + cols_per_row]):
+            with cols[j]:
+                st.markdown(f"**🏫 வகுப்பு: {cls}**")
+                
+                # Pivot செய்யப்பட்ட தரவிலிருந்து அந்த வகுப்பை மட்டும் பிரித்தல்
+                # முதலில் stack செய்து பின் class வாரியாக filter செய்கிறோம்
+                df_stack = st.session_state.master_tt.stack().reset_index()
+                df_stack.columns = ['Teacher', 'Day', 'Period', 'Class']
+                
+                # இந்த வகுப்புக்கான கால அட்டவணை (Days vs Periods)
+                cls_df = df_stack[df_stack['Class'] == cls].pivot(index='Day', columns='Period', values='Teacher')
+                
+                # எடிட் செய்யும் வசதி
+                edited_cls = st.data_editor(cls_df, use_container_width=True, key=f"edit_cls_{cls}")
+                
+                # குறிப்பு: இங்கே எடிட் செய்தால், master_tt-ஐ அப்டேட் செய்வது சிக்கலானது. 
+                # எனவே எடிட்டிங்கை 'ஆசிரியர் வாரியாக' வைத்துவிட்டு, 'வகுப்பு வாரியாக' பார்ப்பது சிறந்தது.
 # 5. சேமிப்பு பொத்தான்
 if st.button("💾 அனைத்தையும் சேமி"):
     st.success("வெற்றிகரமாகச் சேமிக்கப்பட்டது!")
