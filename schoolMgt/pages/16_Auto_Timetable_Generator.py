@@ -36,8 +36,12 @@ def style_table(df):
 if 'master_tt' not in st.session_state:
     idx = pd.MultiIndex.from_product([teachers_list, days], names=['Teacher', 'Day'])
     st.session_state.master_tt = pd.DataFrame(index=idx, columns=periods).fillna("-")
-
-# 4. Tabs உருவாக்கம்
+# 4. ஆட்டோ-ஃபில் தர்க்கம் (இங்கேதான் பட்டன் இருக்க வேண்டும்)
+if st.button("🤖 அனைவருக்கும் தானாக நிரப்பு (Auto-Assign All)"):
+    # ... ஆட்டோ ஃபில் தர்க்கம் ...
+    st.session_state.master_tt = new_df
+    st.rerun()
+# 5. Tabs உருவாக்கம்
 tab1, tab2 = st.tabs(["👨‍🏫 ஆசிரியர் எடிட்டர்", "🏫 வகுப்பு வாரியான பார்வை"])
 
 with tab1:
