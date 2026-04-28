@@ -24,7 +24,7 @@ allot_data, teachers_list = get_all_data()
 periods = [str(i) for i in range(1, 9)]
 days = ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat"]
 
-# 3. Master Table நிர்வகித்தல்
+# 3. Master Table நிர்வகித்தல் (Teacher, Day -> Periods)
 if 'master_tt' not in st.session_state:
     idx = pd.MultiIndex.from_product([teachers_list, days], names=['Teacher', 'Day'])
     st.session_state.master_tt = pd.DataFrame(index=idx, columns=periods).fillna("-")
@@ -60,11 +60,18 @@ with tab1:
         for j, teacher in enumerate(teachers_list[i : i + cols_per_row]):
             with cols[j]:
                 st.markdown(f"**👨‍🏫 {teacher}**")
-                # அந்த ஆசிரியரின் 6 நாட்களையும் பெறுதல்
+                
+                # அந்த ஆசிரியரின் 6 நாட்கள் கொண்ட டேபிளை பிரித்தல்
                 teacher_df = st.session_state.master_tt.loc[teacher]
                 
-                # எடிட்டர்
-                edited_df = st.data_editor(teacher_df, use_container_width=True, key=f"edit_{teacher}")
+                # எடிட்டர் (Mon-Sat வரிசையாக இருக்கும்)
+                edited_df = st.data_editor(
+                    teacher_df, 
+                    use_container_width=True, 
+                    key=f"edit_{teacher}"
+                )
+                
+                # மாற்றங்களைச் சேமித்தல்
                 st.session_state.master_tt.loc[teacher] = edited_df
         st.write("---")
 
