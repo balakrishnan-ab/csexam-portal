@@ -48,13 +48,25 @@ if 'master_tt' not in st.session_state:
 tab1, tab2 = st.tabs(["👨‍🏫 ஆசிரியர் வாரியாக", "🏫 வகுப்பு வாரியாக"])
 
 with tab1:
-    st.subheader("அனைத்து ஆசிரியர்கள் கால அட்டவணை")
-    st.session_state.master_tt = st.data_editor(
-        st.session_state.master_tt,
-        use_container_width=True,
-        key="master_editor"
-    )
 
+    st.subheader("ஆசிரியர்களுக்கான வாராந்திர அட்டவணை")
+    
+    # மாஸ்டர் அட்டவணையில் உள்ள ஒவ்வொரு ஆசிரியருக்கும் ஒரு அட்டவணை
+    for teacher in teachers_list:
+        st.markdown(f"**ஆசிரியர்: {teacher}**")
+        
+        # மாஸ்டர் அட்டவணையில் அந்த ஆசிரியரின் வரிசையை மட்டும் பிரித்தல்
+        teacher_df = st.session_state.master_tt.loc[[teacher]]
+        
+        # அட்டவணை தோற்றம் (Styling)
+        styled_df = teacher_df.style.set_table_styles([
+            {'selector': 'th', 'props': [('background-color', '#2E86C1'), ('color', 'white')]},
+            {'selector': 'td', 'props': [('text-align', 'center')]}
+        ])
+        
+        # ஒவ்வொரு ஆசிரியருக்கும் ஒரு டேபிள்
+        st.write(styled_df.to_html(), unsafe_allow_html=True)
+        st.write("---") # இடைவெளி
 with tab2:
     st.subheader("வகுப்பு வாரியான பார்வை")
     # மாஸ்டர் டேபிளை வகுப்பு வாரியாக மாற்றுதல் (Pivot Logic)
