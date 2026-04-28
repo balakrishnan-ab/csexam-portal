@@ -30,15 +30,23 @@ if 'master_tt' not in st.session_state:
     idx = pd.MultiIndex.from_product([teachers_list, days], names=['Teacher', 'Day'])
     st.session_state.master_tt = pd.DataFrame(index=idx, columns=periods).fillna("-")
 
-# 4. ஆட்டோ-ஃபில் தர்க்கம் (இங்கே 'new_df' சரியாக வரையறுக்கப்பட்டுள்ளது)
+# 4. ஆட்டோ-ஃபில் தர்க்கம்
 if st.button("🤖 அனைவருக்கும் தானாக நிரப்பு (Auto-Assign All)"):
+    # புதிய Master Table-ஐ உருவாக்குதல்
     idx = pd.MultiIndex.from_product([teachers_list, days], names=['Teacher', 'Day'])
     new_df = pd.DataFrame(index=idx, columns=periods).fillna("-")
     
+    # staff_allotment அட்டவணையிலிருந்து தரவை எடுத்தல்
+    # allot_data என்பது supabase-லிருந்து பெறப்பட்டது (இதுவே உங்கள் staff_allotment அட்டவணை)
+    
     all_tasks = []
     for a in allot_data:
-        all_tasks.extend([a['class_name']] * int(a.get('periods_per_week', 0)))
+        # உங்கள் அட்டவணையில் உள்ள column பெயர்கள்: class_name, periods_per_week
+        cls = a['class_name']
+        p_count = int(a.get('periods_per_week', 0))
+        all_tasks.extend([cls] * p_count)
     
+    # ஆசிரியர்களுக்குப் பாடங்களை வரிசையாக நிரப்புதல்
     task_idx = 0
     for t in teachers_list:
         for d in days:
@@ -46,9 +54,9 @@ if st.button("🤖 அனைவருக்கும் தானாக நி�
                 if task_idx < len(all_tasks):
                     new_df.at[(t, d), p] = all_tasks[task_idx]
                     task_idx += 1
+    
     st.session_state.master_tt = new_df
     st.rerun()
-
 # 5. Tabs உருவாக்கம்
 tab1, tab2 = st.tabs(["👨‍🏫 ஆசிரியர் எடிட்டர்", "🏫 வகுப்பு வாரியான பார்வை"])
 
