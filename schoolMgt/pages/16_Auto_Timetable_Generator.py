@@ -54,12 +54,20 @@ with tab1:
         st.write("---")
 
 with tab2:
-    st.subheader("வகுப்பு வாரியான பார்வை")
+   st.subheader("வகுப்பு வாரியான பார்வை")
+    
+    # 1. முதலில் தரவை அடுக்கி (stack), Index-ஐ Reset செய்கிறோம்
     df_stack = st.session_state.master_tt.stack().reset_index()
+    
+    # 2. இப்போது சரியாக 4 காலம்கள் இருப்பதை உறுதி செய்து பெயரிடுகிறோம்
+    # MultiIndex-ல் ஏற்கனவே 'Teacher', 'Day' என்று பெயரிட்டுள்ளோம்.
+    # எனவே, stack() செய்தபின் வரும் புதிய காலம் 'Period' மற்றும் தரவு 'Class' ஆகும்.
     df_stack.columns = ['Teacher', 'Day', 'Period', 'Class']
+    
+    # 3. Pivot அட்டவணை உருவாக்குதல்
     class_view = df_stack.pivot_table(index='Class', columns='Period', aggfunc='first')
+    
     st.dataframe(class_view, use_container_width=True)
-
 with tab3:
     st.markdown("### 👨‍🏫 ஆசிரியர் வாரியான கால அட்டவணை (ரிப்போர்ட்)")
     unique_teachers = sorted(list(set([entry['teacher_name'] for entry in db_list_new])))
