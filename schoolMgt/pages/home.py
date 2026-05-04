@@ -13,6 +13,6 @@ st.markdown("""
 # புகைப்படங்கள்
 col1, col2 = st.columns(2)
 with col1:
-    st.image("photo1.jpg")
+    st.image("https://github.com/balakrishnan-ab/csexam-portal/blob/main/schoolMgt/pages/photo1.jpg")
 with col2:
-    st.image("photo2.jpg")
+    st.image("https://github.com/balakrishnan-ab/csexam-portal/blob/main/schoolMgt/pages/photo2.jpg")
