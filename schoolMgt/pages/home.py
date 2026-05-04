@@ -1,7 +1,7 @@
 import streamlit as st
 
 st.title("🏫 அரசு மேல்நிலைப் பள்ளி - தேவனங்குறிச்சி")
-st.image("school_building.jpg", caption="எங்கள் பள்ளி")
+st.image("https://github.com/balakrishnan-ab/csexam-portal/edit/main/schoolMgt/school_building.jpg", caption="எங்கள் பள்ளி")
 
 st.markdown("""
 ### பள்ளி பற்றிய விவரங்கள்:
