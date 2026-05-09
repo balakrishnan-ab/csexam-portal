@@ -157,11 +157,14 @@ if sel_exam_name and sel_base_class != "-- தேர்வு செய்க --
         df_final = pd.DataFrame(report_rows).sort_values(by=["Fails", "மொத்தம்"], ascending=[True, False]).reset_index(drop=True)
         
         df_final["Rank"] = "-"
+        df_final["Rank"] = df_final["Rank"].astype(object) 
+        
         rank_v = 1
         for idx, r in df_final.iterrows():
-            if r["Fails"] == 0:
-                df_final.at[idx, "Rank"] = rank_v; rank_v += 1
-        
+            if int(r["Fails"]) == 0:
+                # இப்போது இங்கு பிழை வராது
+                df_final.at[idx, "Rank"] = rank_v 
+                rank_v += 1
         cols = ["Rank", "தேர்வு எண்", "பெயர்", "பிரிவு", "மொத்தம்", "Fails"] + union_subs
         
         # Color Styling Logic
