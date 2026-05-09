@@ -159,3 +159,68 @@ if sel_exam_name != "-- தேர்வு செய்க --":
                 xl = pd.ExcelFile(up3)
                 for sheet in xl.sheet_names: 
                     save_to_supabase(pd.read_excel(xl, sheet_name=sheet), sheet)
+    with tab4:
+        st.subheader("📋 பாடவாரி விரிவான பகுப்பாய்வு")
+        
+        # தற்போதைய தேர்விற்கான அனைத்து மதிப்பெண்களையும் பெறுதல்
+        marks_response = supabase.table("marks").select("*").eq("exam_id", exam_id).execute()
+        marks_data = marks_response.data
+        
+        if not marks_data:
+            st.warning("தேர்ந்தெடுக்கப்பட்ட தேர்விற்கு இன்னும் மதிப்பெண்கள் பதியப்படவில்லை.")
+        else:
+            m_df = pd.DataFrame(marks_data)
+            analysis_list = []
+
+            # ஒவ்வொரு பாடமாக ஆய்வு செய்தல்
+            for sub in all_subjects:
+                s_id = str(sub['subject_code'])
+                s_name = sub['subject_name']
+                
+                # இந்த பாடத்திற்கான மதிப்பெண்கள் மட்டும்
+                sub_marks = m_df[m_df['subject_id'] == s_id]
+                
+                if not sub_marks.empty:
+                    # 1. Total - மொத்த மாணவர்கள்
+                    total_stu = len(sub_marks)
+                    
+                    # 2. App - தேர்வு எழுதியவர்கள் (Absent அல்லாதவர்கள்)
+                    appeared_df = sub_marks[sub_marks['is_absent'] == False]
+                    app_count = len(appeared_df)
+                    
+                    # 3. Pass/Fail (35 மதிப்பெண் தேர்ச்சி எனில்)
+                    pass_df = appeared_df[appeared_df['total_mark'] >= 35]
+                    pass_count = len(pass_df)
+                    fail_count = app_count - pass_count
+                    
+                    # 4. Pass%
+                    pass_pc = round((pass_count / app_count) * 100, 2) if app_count > 0 else 0
+                    
+                    # 5. Min, Max, Avg
+                    min_mark = appeared_df['total_mark'].min() if app_count > 0 else 0
+                    max_mark = appeared_df['total_mark'].max() if app_count > 0 else 0
+                    avg_mark = round(appeared_df['total_mark'].mean(), 2) if app_count > 0 else 0
+                    
+                    analysis_list.append({
+                        "Subject": s_name,
+                        "Total": total_stu,
+                        "App": app_count,
+                        "Pass": pass_count,
+                        "Fail": fail_count,
+                        "Pass%": f"{pass_pc}%",
+                        "Min": min_mark,
+                        "Max": max_mark,
+                        "Avg": avg_mark
+                    })
+
+            if analysis_list:
+                ana_df = pd.DataFrame(analysis_list)
+                
+                # அட்டவணையைத் திரையில் காட்டுதல்
+                st.dataframe(ana_df, use_container_width=True, hide_index=True)
+                
+                # Excel தரவிறக்கம்
+                output_ana = BytesIO()
+                with pd.ExcelWriter(output_ana, engine='xlsxwriter') as writer:
+                    ana_df.to_excel(writer, index=False, sheet_name='Analysis')
+                st.download_button("📥 பகுப்பாய்வு அறிக்கையைத் தரவிறக்கு", data=output_ana.getvalue(), file_name=f"Subject_Analysis_{sel_exam_name}.xlsx")
