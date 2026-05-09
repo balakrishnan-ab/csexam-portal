@@ -14,7 +14,7 @@ def get_supabase_client():
 
 supabase = get_supabase_client()
 
-# --- CSS ஸ்டைலிங் (Metric Cards & Info Cards) ---
+# --- CSS ஸ்டைலிங் (Dashboard & Cards) ---
 st.markdown("""
     <style>
     .metric-container { display: flex; flex-wrap: wrap; gap: 10px; justify-content: space-between; width: 100%; margin-bottom: 20px; }
@@ -25,13 +25,6 @@ st.markdown("""
     .responsive-subtitle { font-size: 22px; font-weight: bold; color: #334155; border-bottom: 2px solid #e2e8f0; margin: 15px 0; }
     </style>
     """, unsafe_allow_html=True)
-
-# --- 1. விலக்கு அளிக்கப்பட்ட மாணவர்கள் (EMIS எண்கள்) ---
-# இங்கே உங்கள் பள்ளியில் உள்ள மாணவர்களின் EMIS எண்களைச் சேர்த்துக் கொள்ளுங்கள்
-EXEMPTED_STUDENTS = {
-    "3322110099": ["Tamil", "English"], 
-    "3322110088": ["Tamil"]
-}
 
 # --- தரவுகள் பெறுதல் ---
 exams_data = supabase.table("exams").select("*").execute().data
@@ -77,9 +70,6 @@ if sel_exam_name and sel_base_class != "-- தேர்வு செய்க --
 
         for s in all_students:
             st_count["total"] += 1
-            emis = str(s['emis_no'])
-            exempt_subs = EXEMPTED_STUDENTS.get(emis, []) 
-            
             row_raw = {"தேர்வு எண்": s.get('exam_no', '-'), "பிரிவு": s['section'], "பெயர்": s['student_name']}
             total_m, fails, wrote_any, fail_subs, student_centums = 0, 0, False, [], []
             
@@ -88,35 +78,43 @@ if sel_exam_name and sel_base_class != "-- தேர்வு செய்க --
                     row_raw[sn] = "-"; continue
                 
                 subject_stats[sn]["total"] += 1
-                if sn in exempt_subs:
-                    row_raw[sn] = "EXEMPTED"; continue
-
                 s_obj = sub_info_map.get(sn)
                 m = next((m for m in marks_data if m['emis_no'] == s['emis_no'] and m['subject_id'] == s_obj['subject_code']), None) if s_obj else None
                 
-                if m and not m.get('is_absent'):
-                    wrote_any = True
-                    tot = m.get('total_mark', 0)
-                    eval_type = str(s_obj.get('eval_type', '90+10'))
+                if m:
+                    # null/None எனில் EXEMPTED லாஜிக்
+                    is_abs = m.get('is_absent')
                     
-                    is_subj_pass = True
-                    if '70' in eval_type:
-                        if m.get('theory_mark', 0) < 15 or m.get('practical_mark', 0) < 15 or tot < 35: is_subj_pass = False
+                    if is_abs is None:
+                        row_raw[sn] = "EXEMPTED"
+                        continue
+
+                    if not is_abs:
+                        wrote_any = True
+                        tot = m.get('total_mark', 0)
+                        eval_type = str(s_obj.get('eval_type', '90+10'))
+                        
+                        is_subj_pass = True
+                        if '70' in eval_type:
+                            if m.get('theory_mark', 0) < 15 or m.get('practical_mark', 0) < 15 or tot < 35: is_subj_pass = False
+                        else:
+                            if tot < 35: is_subj_pass = False
+                        
+                        subject_stats[sn]["app"] += 1
+                        subject_stats[sn]["marks"].append(tot)
+                        if is_subj_pass: 
+                            subject_stats[sn]["pass"] += 1
+                            if tot == 100: student_centums.append(sn)
+                        else: 
+                            subject_stats[sn]["fail"] += 1; fails += 1; fail_subs.append(sn)
+                        total_m += tot
+                        row_raw[sn] = tot
                     else:
-                        if tot < 35: is_subj_pass = False
-                    
-                    subject_stats[sn]["app"] += 1
-                    subject_stats[sn]["marks"].append(tot)
-                    if is_subj_pass: 
-                        subject_stats[sn]["pass"] += 1
-                        if tot == 100: student_centums.append(sn)
-                    else: 
-                        subject_stats[sn]["fail"] += 1; fails += 1; fail_subs.append(sn)
-                    total_m += tot
-                    row_raw[sn] = tot
+                        row_raw[sn] = "ABS"; fails += 1; fail_subs.append(sn)
+                        subject_stats[sn]["app"] += 1; subject_stats[sn]["fail"] += 1
                 else:
-                    row_raw[sn] = "ABS"; fails += 1; fail_subs.append(sn)
-                    subject_stats[sn]["app"] += 1; subject_stats[sn]["fail"] += 1
+                    # மதிப்பெண் பதியப்படவில்லையெனில் (Database-ல் row இல்லை எனில்)
+                    row_raw[sn] = "-"
 
             if wrote_any:
                 st_count["present"] += 1
@@ -128,14 +126,16 @@ if sel_exam_name and sel_base_class != "-- தேர்வு செய்க --
                 if fails >= len(s['my_subjects']): fail_cats["All"].append(txt)
                 elif fails in [1,2,3,4,5]: fail_cats[fails].append(txt)
             else:
-                absent_list.append(f"{s['student_name']} ({s['section']})")
+                # அனைத்துப் பாடங்களும் ABS அல்லது row இல்லையெனில்
+                if any(row_raw.get(sub) == "ABS" for sub in union_subs):
+                    absent_list.append(f"{s['student_name']} ({s['section']})")
 
             row_raw.update({"மொத்தம்": total_m, "Fails": fails, "தோல்வி விவரம்": f"({', '.join(fail_subs)})" if fail_subs else ""})
             report_rows.append(row_raw)
 
-        # --- 📱 Dashboard Cards ---
+        # --- Dashboard Metrics ---
         p_count = st_count["present"]
-        fail_a = p_count - st_count["pass"]
+        fail_count = p_count - st_count["pass"]
         pass_pc = round((st_count["pass"]/p_count)*100, 1) if p_count > 0 else 0
         avg_v = round(sum([r['மொத்தம்'] for r in report_rows if r['மொத்தம்'] > 0])/p_count, 1) if p_count > 0 else 0
 
@@ -144,60 +144,73 @@ if sel_exam_name and sel_base_class != "-- தேர்வு செய்க --
                 <div class="metric-card"><div class="stat-label">TOTAL</div><div class="stat-val">{st_count['total']}</div></div>
                 <div class="metric-card"><div class="stat-label">PRESENT</div><div class="stat-val">{p_count}</div></div>
                 <div class="metric-card"><div class="stat-label">PASS</div><div class="stat-val" style="color:green">{st_count['pass']}</div></div>
-                <div class="metric-card"><div class="stat-label">FAIL</div><div class="stat-val" style="color:red">{fail_a}</div></div>
+                <div class="metric-card"><div class="stat-label">FAIL</div><div class="stat-val" style="color:red">{fail_count}</div></div>
                 <div class="metric-card"><div class="stat-label">PASS %</div><div class="stat-val" style="color:green">{pass_pc}%</div></div>
                 <div class="metric-card"><div class="stat-label">AVG</div><div class="stat-val" style="color:blue">{avg_v}</div></div>
             </div>
         """, unsafe_allow_html=True)
 
         st.divider()
-        c_exp1, c_exp2 = st.columns(2)
-        with c_exp1:
+        c_e1, c_e2 = st.columns(2)
+        with c_e1:
             with st.expander(f"🏆 100/100 எடுத்தவர்கள்: {len(centum_list)} பேர்"):
                 for itm in centum_list: st.markdown(f'<div class="info-card">🥇 {itm}</div>', unsafe_allow_html=True)
-        with c_exp2:
+        with c_e2:
             with st.expander(f"🚶 தேர்வு எழுதாதவர்கள்: {len(absent_list)} பேர்"):
                 for itm in absent_list: st.markdown(f'<div class="info-card" style="border-left-color:red; background-color:#fff5f5;">❌ {itm}</div>', unsafe_allow_html=True)
 
-        # --- 📈 பாடவாரி பகுப்பாய்வு ---
+        # --- பாடவாரி விரிவான பகுப்பாய்வு ---
         st.markdown('<div class="responsive-subtitle">📈 பாடவாரி விரிவான பகுப்பாய்வு</div>', unsafe_allow_html=True)
         sub_analysis = []
         for sn in union_subs:
             stt = subject_stats[sn]
-            sub_analysis.append({"Subject": sn, "Total": stt["total"], "App": stt["app"], "Pass": stt["pass"], "Fail": stt["fail"], "Pass%": f"{round((stt['pass']/stt['app'])*100,1) if stt['app']>0 else 0}%", "Max": max(stt["marks"]) if stt["marks"] else 0, "Avg": round(sum(stt["marks"])/len(stt["marks"]),1) if stt["marks"] else 0, "Only This": stt["only_this"]})
+            sub_analysis.append({
+                "Subject": sn, 
+                "Total": stt["total"], 
+                "App": stt["app"], 
+                "Pass": stt["pass"], 
+                "Fail": stt["fail"], 
+                "Pass%": f"{round((stt['pass']/stt['app'])*100,1) if stt['app']>0 else 0}%", 
+                "Max": max(stt["marks"]) if stt["marks"] else 0, 
+                "Avg": round(sum(stt["marks"])/len(stt["marks"]),1) if stt["marks"] else 0, 
+                "Only This": stt["only_this"]
+            })
         st.table(pd.DataFrame(sub_analysis))
 
-        # --- 📋 முழுமையான மதிப்பெண் பட்டியல் ---
+        # --- முழுமையான மதிப்பெண் பட்டியல் ---
         st.markdown('<div class="responsive-subtitle">📋 முழுமையான மதிப்பெண் பட்டியல்</div>', unsafe_allow_html=True)
         df_final = pd.DataFrame(report_rows).sort_values(by=["Fails", "மொத்தம்"], ascending=[True, False]).reset_index(drop=True)
+        
+        # Rank Column Setup & Fixing TypeError
         df_final["Rank"] = "-"
-        df_final["Rank"] = df_final["Rank"].astype(object) # TypeError தவிர்க்க
+        df_final["Rank"] = df_final["Rank"].astype(object)
         
         rv = 1
         for idx, row in df_final.iterrows():
-            if int(row["Fails"]) == 0: df_final.at[idx, "Rank"] = rv; rv += 1
+            if int(row["Fails"]) == 0:
+                df_final.at[idx, "Rank"] = rv; rv += 1
         
         cols = ["Rank", "தேர்வு எண்", "பெயர்", "பிரிவு", "மொத்தம்", "Fails"] + union_subs
-        
+
+        # Styling Logic (AttributeError தவிர்க்க map பயன்படுத்துகிறோம்)
         def highlight_status(val):
             if val == 'ABS': return 'color: red'
             if val == 'EXEMPTED': return 'color: blue'
-            if isinstance(val, int) and val < 35 and val > 0: return 'color: red'
+            if isinstance(val, (int, float)) and val < 35 and val > 0: return 'color: red'
             return ''
 
-        # map() பயன்படுத்தப்பட்டுள்ளது AttributeError தவிர்க்க
         st.dataframe(df_final[cols].style.map(highlight_status), use_container_width=True, hide_index=True)
 
-        # --- 📉 தோல்வி விவரங்கள் ---
+        # --- விரிவான தோல்விப் பட்டியல் ---
         st.divider()
         st.markdown('<div class="responsive-subtitle">📉 தோல்வி அடைந்த மாணவர்களின் விரிவான விவரம்</div>', unsafe_allow_html=True)
-        f_c1, f_c2 = st.columns(2)
-        with f_c1:
+        f_col1, f_col2 = st.columns(2)
+        with f_col1:
             for n in [1, 2, 3]:
                 if fail_cats[n]:
                     with st.expander(f"❌ {n} பாடத்தில் தோல்வி: {len(fail_cats[n])} பேர்"):
                         for itm in fail_cats[n]: st.markdown(f'<div class="info-card" style="border-left-color:orange; background-color:#fffaf0;">⚠️ {itm}</div>', unsafe_allow_html=True)
-        with f_c2:
+        with f_col2:
             for n in [4, 5, "All"]:
                 if fail_cats[n]:
                     lbl = f"{n} பாடத்தில் தோல்வி" if n != "All" else "அனைத்துப் பாடங்களிலும் தோல்வி"
