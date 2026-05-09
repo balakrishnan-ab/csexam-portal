@@ -37,14 +37,15 @@ if sel_exam_name != "-- தேர்வு செய்க --":
         for s_name in sub_list:
             sub = next((x for x in all_subjects if x['subject_name'] == s_name), None)
             if sub:
-                eval_type_raw = str(sub.get('eval_type', '100'))
-                eval_parts = [int(p) for p in eval_type_raw.split('+') if p.strip().isdigit()]
-                if not eval_parts: eval_parts = [0]
-                
-                marks_db = supabase.table("marks").select("emis_no, theory_mark, internal_mark, practical_mark").eq("exam_id", exam_id).eq("subject_id", sub['subject_code']).execute().data
+                marks_db = supabase.table("marks").select("emis_no, theory_mark, internal_mark, practical_mark, is_absent").eq("exam_id", exam_id).eq("subject_id", sub['subject_code']).execute().data
                 m_dict = {str(m['emis_no']): m for m in marks_db}
 
+                # Absent மற்றும் மதிப்பெண் காலங்களைச் சேர்த்தல்
+                df[f"Absent_{s_name}"] = df['emis_no'].apply(lambda x: m_dict.get(str(x), {}).get('is_absent', False))
                 df[f"Theory_{s_name}"] = df['emis_no'].apply(lambda x: m_dict.get(str(x), {}).get('theory_mark', 0))
+                
+                eval_type_raw = str(sub.get('eval_type', '100'))
+                eval_parts = [int(p) for p in eval_type_raw.split('+') if p.strip().isdigit()]
                 
                 for i in range(1, len(eval_parts)):
                     score = eval_parts[i]
@@ -61,33 +62,36 @@ if sel_exam_name != "-- தேர்வு செய்க --":
         for _, row in df_uploaded.iterrows():
             for sub in all_subjects:
                 s_name = sub['subject_name']
+                a_col = f"Absent_{s_name}"
                 t_col, i_col, p_col = f"Theory_{s_name}", f"Internal_{s_name}", f"Practical_{s_name}"
                 
                 if t_col in row.index:
+                    is_abs = row.get(a_col, False)
                     t_val = pd.to_numeric(row.get(t_col, 0), errors='coerce') or 0
                     i_val = pd.to_numeric(row.get(i_col, 0), errors='coerce') or 0
                     p_val = pd.to_numeric(row.get(p_col, 0), errors='coerce') or 0
                     
                     eval_parts = [int(p) for p in str(sub.get('eval_type', '100')).split('+') if p.strip().isdigit()]
-                    if not eval_parts: eval_parts = [0]
                     
-                    if t_val > eval_parts[0]:
+                    if not is_abs and t_val > eval_parts[0]:
                         st.error(f"பிழை: {row['student_name']} - {s_name} தியரி மதிப்பெண் அதிகம்!")
                         error_found = True; break
                     
+                    # Absent என்றால் மதிப்பெண்களை 0 ஆக மாற்றிச் சேமிக்கும்
                     final_data.append({
                         "exam_id": int(exam_id),
                         "emis_no": str(row['emis_no']),
                         "subject_id": str(sub['subject_code']),
-                        "theory_mark": int(t_val),
-                        "internal_mark": int(i_val),
-                        "practical_mark": int(p_val),
-                        "total_mark": int(t_val + i_val + p_val)
+                        "theory_mark": 0 if is_abs else int(t_val),
+                        "internal_mark": 0 if is_abs else int(i_val),
+                        "practical_mark": 0 if is_abs else int(p_val),
+                        "total_mark": 0 if is_abs else int(t_val + i_val + p_val),
+                        "is_absent": bool(is_abs)
                     })
             if error_found: break
         if not error_found and final_data:
             supabase.table("marks").upsert(final_data, on_conflict="exam_id, emis_no, subject_id").execute()
-            st.success("மதிப்பெண்கள் சேமிக்கப்பட்டன!")
+            st.success("மதிப்பெண்கள் வெற்றிகரமாகச் சேமிக்கப்பட்டன!")
 
     # 3. Tabs அமைப்பு
     tab1, tab2, tab3 = st.tabs(["👨‍🏫 பாட ஆசிரியர்", "📂 வகுப்பு ஆசிரியர்", "🏢 வகுப்பின் அனைத்துப் பிரிவுகள்"])
@@ -119,7 +123,14 @@ if sel_exam_name != "-- தேர்வு செய்க --":
                                 st.session_state[state_key] = df
                                 st.rerun()
                 
-                edited_df = st.data_editor(df, use_container_width=True, key=f"editor_{state_key}")
+                # Column configurations for better UI
+                col_config = {
+                    f"Absent_{sel_s}": st.column_config.CheckboxColumn("வராதவர் (Abs)", default=False),
+                    "emis_no": st.column_config.TextColumn("EMIS No", disabled=True),
+                    "student_name": st.column_config.TextColumn("மாணவர் பெயர்", disabled=True)
+                }
+
+                edited_df = st.data_editor(df, use_container_width=True, key=f"editor_{state_key}", column_config=col_config)
                 st.session_state[state_key] = edited_df
                 if st.button("சேமி", key="save1"): save_to_supabase(edited_df, sel_c)
 
@@ -132,6 +143,7 @@ if sel_exam_name != "-- தேர்வு செய்க --":
             st.download_button("📥 வகுப்பு கோப்பைத் தரவிறக்கு", data=output.getvalue(), file_name=f"Marks_{sel_c2}.xlsx")
             up = st.file_uploader("பதிவேற்று:", type=["xlsx"], key="up2")
             if up and st.button("சேமி", key="save2"): save_to_supabase(pd.read_excel(up), sel_c2)
+
     with tab3:
         grade = st.text_input("வகுப்பு எண் (எ.கா: 11):")
         if grade:
@@ -139,7 +151,6 @@ if sel_exam_name != "-- தேர்வு செய்க --":
             output = BytesIO()
             with pd.ExcelWriter(output, engine='xlsxwriter') as writer:
                 for c in relevant: 
-                    # அந்தந்த வகுப்பின் தற்போதைய மதிப்பெண்களுடன் ஷீட்கள் உருவாகும்
                     generate_df(c).to_excel(writer, sheet_name=c, index=False)
             st.download_button("📥 அனைத்தையும் தரவிறக்கு", data=output.getvalue(), file_name=f"Marks_{grade}_All.xlsx")
             
