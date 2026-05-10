@@ -12,7 +12,10 @@ except Exception as e:
     st.stop()
 
 st.set_page_config(page_title="Student Management", layout="wide")
-st.title("🧑‍🎓 மாணவர் மேலாண்மை (நெகிழ்வான & வரிசைப்படுத்தப்பட்ட முறை)")
+st.title("🧑‍🎓 மாணவர் மேலாண்மை (இனம்/Community வசதியுடன்)")
+
+# இனம் சார்ந்த தேர்வுகள்
+COMMUNITY_OPTIONS = ["HINDU MBC", "HINDU BC-OTHERS", "HINDU SC", "HINDU ST", "MUSLIM BC", "CHRISTIAN BC", "BCM", "MBC/DNC", "OTHERS"]
 
 # ⚡ தரவுகளைப் பெறுதல் (Caching)
 @st.cache_data(ttl=60)
@@ -34,18 +37,24 @@ tab1, tab2 = st.tabs(["📝 தனித்தனியாகச் சேர்
 with tab1:
     with st.form("single_add", clear_on_submit=True):
         st.subheader("🆕 புதிய மாணவர் சேர்க்கை")
-        c1, c2, c3, c4 = st.columns([2, 3, 2, 2])
+        c1, c2 = st.columns(2)
         emis = c1.text_input("EMIS / சேர்க்கை எண்").strip()
         name = c2.text_input("மாணவர் பெயர்").upper().strip()
+        
+        c3, c4, c5 = st.columns(3)
         gender = c3.selectbox("பாலினம்", ["Male", "Female", "Transgender"])
         s_class = c4.selectbox("வகுப்பு", ["-- தேர்வு செய்க --"] + class_list)
+        community = c5.selectbox("இனம் (Community)", ["-- தேர்வு செய்க --"] + COMMUNITY_OPTIONS)
         
         if st.form_submit_button("💾 மாணவரைச் சேமி"):
-            if emis and name and s_class != "-- தேர்வு செய்க --":
+            if emis and name and s_class != "-- தேர்வு செய்க --" and community != "-- தேர்வு செய்க --":
                 try:
                     supabase.table("students").insert({
-                        "emis_no": emis, "student_name": name, 
-                        "gender": gender, "class_name": s_class
+                        "emis_no": emis, 
+                        "student_name": name, 
+                        "gender": gender, 
+                        "class_name": s_class,
+                        "community": community
                     }).execute()
                     st.success(f"மாணவர் {name} வெற்றிகரமாகச் சேர்க்கப்பட்டார்!")
                     st.cache_data.clear()
@@ -53,12 +62,12 @@ with tab1:
                 except Exception as e:
                     st.error(f"பிழை: {e}")
             else:
-                st.warning("அனைத்து விபரங்களையும் சரியாகப் பூர்த்தி செய்யவும்.")
+                st.warning("அனைத்து விபரங்களையும் (இனம் உட்பட) சரியாகப் பூர்த்தி செய்யவும்.")
 
 # --- Tab 2: Bulk Upload (Excel/CSV) ---
 with tab2:
-    st.subheader("📤 எக்செல்/CSV கோப்பை பதிவேற்றவும்")
-    st.info("தலைப்புகள்: **emis_no, student_name, gender, class_name** (சிறிய எழுத்துக்களில் இருக்க வேண்டும்)")
+    st.subheader("📤 எக்செல்/CSV மூலம் பதிவேற்றவும்")
+    st.info("தலைப்புகள்: **emis_no, student_name, gender, class_name, community**")
     
     upload_file = st.file_uploader("கோப்பைத் தேர்ந்தெடுக்கவும்", type=['csv', 'xlsx'])
     
@@ -69,7 +78,6 @@ with tab2:
             else:
                 df_up = pd.read_excel(upload_file, dtype={'emis_no': str})
             
-            # தலைப்புகளைச் சிறிய எழுத்துக்களுக்கு மாற்றுதல் (Error Prevention)
             df_up.columns = [c.lower().strip() for c in df_up.columns]
             
             st.write("தரவு மாதிரி:")
@@ -77,11 +85,15 @@ with tab2:
             
             if st.button("🚀 அனைத்தையும் பதிவேற்று"):
                 with st.spinner("சேமிக்கப்படுகிறது..."):
+                    # தரவுகளைச் சீரமைத்தல்
                     for col in df_up.columns:
                         df_up[col] = df_up[col].astype(str).str.strip()
                     
                     if 'student_name' in df_up.columns:
                         df_up['student_name'] = df_up['student_name'].str.upper()
+                    
+                    if 'community' in df_up.columns:
+                        df_up['community'] = df_up['community'].str.upper()
                     
                     data_list = df_up.to_dict(orient='records')
                     supabase.table("students").insert(data_list).execute()
@@ -100,32 +112,32 @@ if students_data:
     df_main = pd.DataFrame(students_data)
     st.subheader("📋 மாணவர் பட்டியல்")
     
-    # தேடுதல் மற்றும் வடிகட்டிகள்
-    col_f1, col_f2 = st.columns([2, 1])
-    search = col_f1.text_input("பெயர் அல்லது எண் மூலம் தேடுக:")
-    f_class = col_f2.selectbox("வகுப்பு வாரியாகப் பார்க்க:", ["All"] + class_list)
+    col_f1, col_f2, col_f3 = st.columns([2, 1, 1])
+    search = col_f1.text_input("பெயர் அல்லது EMIS மூலம் தேடுக:")
+    f_class = col_f2.selectbox("வகுப்பு வாரியாக:", ["All"] + class_list)
+    f_comm = col_f3.selectbox("இனம் வாரியாக:", ["All"] + COMMUNITY_OPTIONS)
     
-    # 1. வடித்தல் (Filtering)
+    # வடித்தல்
     final_df = df_main.copy()
     if f_class != "All":
         final_df = final_df[final_df['class_name'] == f_class]
+    if f_comm != "All":
+        final_df = final_df[final_df['community'] == f_comm]
     if search:
         final_df = final_df[
             final_df['student_name'].str.contains(search.upper(), na=False) | 
             final_df['emis_no'].str.contains(search, na=False)
         ]
 
-    # 2. வரிசைப்படுத்துதல் (Sorting) - முக்கியமான மாற்றம்
-    # முன்னுரிமை: 1.வகுப்பு, 2.பாலினம், 3.பெயர்
+    # வரிசைப்படுத்துதல்: வகுப்பு -> பாலினம் -> பெயர்
     final_df = final_df.sort_values(
         by=['class_name', 'gender', 'student_name'], 
         ascending=[True, True, True]
     )
     
-    # 3. அட்டவணையாகக் காட்டுதல்
-    st.info(f"காண்பிக்கப்படும் மாணவர்கள் எண்ணிக்கை: {len(final_df)}")
+    st.info(f"மாணவர்கள் எண்ணிக்கை: {len(final_df)}")
     st.dataframe(
-        final_df[['emis_no', 'student_name', 'gender', 'class_name']], 
+        final_df[['emis_no', 'student_name', 'gender', 'class_name', 'community']], 
         use_container_width=True, 
         hide_index=True
     )
@@ -133,7 +145,6 @@ if students_data:
     # --- 3. திருத்துதல் / நீக்குதல் ---
     st.divider()
     st.subheader("⚙️ மேலாண்மை (Edit/Delete)")
-    # EMIS மற்றும் பெயரை இணைத்துத் தேர்வுப் பட்டியலாகக் காட்டுதல்
     edit_options = final_df.apply(lambda x: f"{x['emis_no']} - {x['student_name']}", axis=1).tolist()
     sel_st = st.selectbox("மாணவரைத் தேர்வு செய்க:", ["-- தேர்வு செய்க --"] + edit_options)
     
@@ -146,8 +157,18 @@ if students_data:
             new_n = st.text_input("புதிய பெயர்:", value=s_row['student_name']).upper()
             new_c = st.selectbox("புதிய வகுப்பு:", class_list, 
                                 index=class_list.index(s_row['class_name']) if s_row['class_name'] in class_list else 0)
-            if st.button("🆙 Update"):
-                supabase.table("students").update({"student_name": new_n, "class_name": new_c}).eq("emis_no", s_emis).execute()
+            
+            # Community திருத்துதல்
+            current_comm = s_row.get('community', "-- தேர்வு செய்க --")
+            new_comm = st.selectbox("புதிய இனம்:", COMMUNITY_OPTIONS,
+                                   index=COMMUNITY_OPTIONS.index(current_comm) if current_comm in COMMUNITY_OPTIONS else 0)
+            
+            if st.button("🆙 Update Details"):
+                supabase.table("students").update({
+                    "student_name": new_n, 
+                    "class_name": new_c,
+                    "community": new_comm
+                }).eq("emis_no", s_emis).execute()
                 st.success("விபரங்கள் மாற்றப்பட்டன!")
                 st.cache_data.clear()
                 st.rerun()
