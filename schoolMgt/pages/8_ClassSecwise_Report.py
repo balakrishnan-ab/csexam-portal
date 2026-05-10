@@ -14,7 +14,7 @@ def get_supabase_client():
 
 supabase = get_supabase_client()
 
-# --- CSS ஸ்டைலிங் (Responsive Design) ---
+# --- CSS ஸ்டைலிங் (Dashboard & Cards) ---
 st.markdown("""
     <style>
     .stDataFrame td { font-weight: bold !important; font-size: 13px !important; white-space: pre !important; }
@@ -43,10 +43,16 @@ if sel_exam_name and sel_section != "-- தேர்வு செய்க --":
     exam_id = next(e['id'] for e in exams_data if e['exam_name'] == sel_exam_name)
     split_gender = st.toggle("🔍 ஆண் பெண் பிரித்து காட்டு", value=True)
 
-    studs = supabase.table("exam_mapping").select("exam_no, student_name, emis_no, gender").eq("exam_id", exam_id).eq("class_name", sel_section).execute().data
+    # exam_mapping-லிருந்து மாணவர்களைப் பெறுதல்
+    studs_mapping = supabase.table("exam_mapping").select("exam_no, student_name, emis_no, class_name").eq("exam_id", exam_id).eq("class_name", sel_section).execute().data
+    
+    # மாணவர்களின் பாலினத்தை students அட்டவணையிலிருந்து பெறுதல்
+    all_students_base = supabase.table("students").select("emis_no, gender").execute().data
+    gender_map = {str(st_b['emis_no']): str(st_b['gender']).strip() for st_b in all_students_base}
+
     c_info = next((c for c in classes_data if (c.get('class_n') == sel_section or c.get('class_name') == sel_section)), None)
     
-    if studs and c_info:
+    if studs_mapping and c_info:
         g_info = next((g for g in groups_data if g['group_name'] == c_info.get('group_name')), None)
         g_list = [s.strip() for s in g_info['subjects'].split(',')] if g_info else []
         marks_data = supabase.table("marks").select("*").eq("exam_id", exam_id).execute().data
@@ -57,10 +63,13 @@ if sel_exam_name and sel_section != "-- தேர்வு செய்க --":
         subject_stats = {sn: {"total": {"M": 0, "F": 0}, "app": {"M": 0, "F": 0}, "pass": {"M": 0, "F": 0}, "fail": {"M": 0, "F": 0}, "marks": [], "only_this": 0} for sn in g_list}
         fail_cats = {1: [], 2: [], 3: [], 4: [], 5: [], "All": []}
 
-        for s in studs:
-            # --- பாலினத்தைக் கண்டறியும் மேம்படுத்தப்பட்ட லாஜிக் ---
-            r_g = str(s.get('gender', '')).strip().lower()
-            if any(x in r_g for x in ['f', 'female', 'பெண்', 'girl']):
+        for s in studs_mapping:
+            # --- துல்லியமான பாலினக் கண்டறிதல் ---
+            emis_key = str(s['emis_no'])
+            raw_gen = gender_map.get(emis_key, 'Male').strip().lower()
+            
+            # நிபந்தனை: 'f' இல் தொடங்கினால் அல்லது 'பெண்' என இருந்தால் அது Female
+            if raw_gen.startswith('f') or 'பெண்' in raw_gen:
                 gen = 'F'
             else:
                 gen = 'M'
@@ -72,11 +81,13 @@ if sel_exam_name and sel_section != "-- தேர்வு செய்க --":
             for sn in g_list:
                 subject_stats[sn]["total"][gen] += 1
                 s_obj = sub_info_map.get(sn)
-                m = next((m for m in marks_data if m['emis_no'] == s['emis_no'] and m['subject_id'] == s_obj['subject_code']), None) if s_obj else None
+                m = next((m for m in marks_data if str(m['emis_no']) == emis_key and m['subject_id'] == s_obj['subject_code']), None) if s_obj else None
                 
                 if m:
+                    # is_absent 'None' (null) எனில் விலக்கு (Exempted)
                     is_abs = m.get('is_absent')
-                    if is_abs is None: # மாற்றுத்திறனாளி மாணவர் விலக்கு (Exempted)
+                    
+                    if is_abs is None:
                         row_raw[sn] = "EXEMPTED"
                         continue
 
@@ -101,14 +112,14 @@ if sel_exam_name and sel_section != "-- தேர்வு செய்க --":
                             if tot == 100: student_centums.append(sn)
                         else: 
                             subject_stats[sn]["fail"][gen] += 1; fails += 1; fail_subs.append(sn)
-                        
                         total_m += tot
                         row_raw[sn] = {"tot": tot, "tag": tag, "pass": is_subj_pass}
-                    else: # Absent மாணவர்
+                    else: # ABS (True)
                         row_raw[sn] = "ABS"; fails += 1; fail_subs.append(sn)
                         subject_stats[sn]["app"][gen] += 1
                         subject_stats[sn]["fail"][gen] += 1
-                else: row_raw[sn] = "-"
+                else:
+                    row_raw[sn] = "-"
 
             if wrote_any:
                 st_count["present"]["A"] += 1; st_count["present"][gen] += 1
@@ -120,7 +131,8 @@ if sel_exam_name and sel_section != "-- தேர்வு செய்க --":
                     if fails >= len(g_list): fail_cats["All"].append(txt)
                     elif fails in [1,2,3,4,5]: fail_cats[fails].append(txt)
                 if student_centums: centum_list.append(f"{s['student_name']} ({', '.join(student_centums)})")
-            else: absent_list.append(s['student_name'])
+            else:
+                absent_list.append(s['student_name'])
 
             row_raw.update({"மொத்தம்": total_m, "Fails": fails, "தோல்வி விவரம்": f"({', '.join(fail_subs)})" if fail_subs else ""})
             report_rows.append(row_raw)
@@ -205,21 +217,5 @@ if sel_exam_name and sel_section != "-- தேர்வு செய்க --":
             return ''
 
         st.dataframe(df_disp.style.map(highlight_cells), use_container_width=True, hide_index=True)
-
-        # --- தோல்வி அடைந்தவர்களின் விவரம் ---
-        st.divider()
-        st.markdown('<div class="responsive-subtitle">📉 தோல்வி அடைந்த மாணவர்களின் விவரம்</div>', unsafe_allow_html=True)
-        b1, b2 = st.columns(2)
-        with b1:
-            for n in [1, 2, 3]:
-                if fail_cats[n]:
-                    with st.expander(f"❌ {n} பாடத்தில் தோல்வி: {len(fail_cats[n])} பேர்"):
-                        for itm in fail_cats[n]: st.markdown(f'<div class="info-card" style="border-left-color:orange; background-color:#fffaf0;">⚠️ {itm}</div>', unsafe_allow_html=True)
-        with b2:
-            for n in [4, 5, "All"]:
-                if fail_cats[n]:
-                    lbl = f"{n} பாடத்தில் தோல்வி" if n != "All" else "அனைத்துப் பாடங்களிலும் தோல்வி"
-                    with st.expander(f"🔴 {lbl}: {len(fail_cats[n])} பேர்"):
-                        for itm in fail_cats[n]: st.markdown(f'<div class="info-card" style="border-left-color:red; background-color:#fff5f5;">🚩 {itm}</div>', unsafe_allow_html=True)
     else:
         st.warning("தேர்வுத் தரவுகள் கிடைக்கவில்லை.")
