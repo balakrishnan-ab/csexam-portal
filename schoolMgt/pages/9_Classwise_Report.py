@@ -37,9 +37,6 @@ classes_data = supabase.table("classes").select("*").execute().data
 groups_data = supabase.table("groups").select("*").execute().data
 subjects_data = supabase.table("subjects").select("*").execute().data
 
-# Subject Information Map (For sorting and code retrieval)
-sub_info_map = {s['subject_name']: s for s in subjects_data}
-
 # --- 5. தேர்வு மற்றும் வகுப்புத் தெரிவு ---
 col1, col2 = st.columns(2)
 sel_exam_name = col1.selectbox("1. தேர்வு (Exam):", [e['exam_name'] for e in exams_data])
@@ -48,7 +45,6 @@ exam_id = next((e['id'] for e in exams_data if e['exam_name'] == sel_exam_name),
 if exam_id:
     mapped_data = supabase.table("exam_mapping").select("class_name").eq("exam_id", exam_id).execute().data
     if mapped_data:
-        # 12-A1 -> 12 எனப் பிரித்தெடுத்தல்
         mapped_classes = sorted(list(set([str(m['class_name']).split('-')[0].strip() for m in mapped_data if m['class_name']])), key=lambda x: int(x) if x.isdigit() else x)
         sel_class_main = col2.selectbox("2. வகுப்பு (Class):", ["-- தேர்வு செய்க --"] + mapped_classes)
     else:
@@ -69,6 +65,9 @@ if sel_exam_name and sel_class_main != "-- தேர்வு செய்க --
     gender_map = {str(st_b['emis_no']): str(st_b['gender']).strip() for st_b in all_students_base}
     marks_data = supabase.table("marks").select("*").eq("exam_id", exam_id).execute().data
 
+    # EVAL_TYPE 'NILL' இல்லாத பாடங்களை மட்டும் வடிகட்டுதல்
+    valid_subjects_map = {s['subject_name']: s for s in subjects_data if str(s.get('eval_type', '')).upper() != 'NILL'}
+
     if studs_mapping:
         # பாடங்களை Subject Code அடிப்படையில் வரிசைப்படுத்துதல்
         raw_g_list = []
@@ -76,10 +75,13 @@ if sel_exam_name and sel_class_main != "-- தேர்வு செய்க --
             c_info = next((c for c in classes_data if (c.get('class_n') == sec or c.get('class_name') == sec)), None)
             if c_info:
                 g_info = next((g for g in groups_data if g['group_name'] == c_info.get('group_name')), None)
-                if g_info: raw_g_list.extend([s.strip() for s in g_info['subjects'].split(',')])
+                if g_info: 
+                    # குழுவில் உள்ள பாடங்களில் Valid பாடங்களை மட்டும் எடுத்தல்
+                    raw_g_list.extend([s.strip() for s in g_info['subjects'].split(',') if s.strip() in valid_subjects_map])
         
         unique_subs = list(set(raw_g_list))
-        g_list = sorted(unique_subs, key=lambda x: str(sub_info_map.get(x, {}).get('subject_code', '999')))
+        # Subject Code வரிசை
+        g_list = sorted(unique_subs, key=lambda x: str(valid_subjects_map.get(x, {}).get('subject_code', '999')))
 
         # கணக்கீட்டு மாறிகள்
         report_rows, centum_list, absent_list = [], [], []
@@ -97,8 +99,7 @@ if sel_exam_name and sel_class_main != "-- தேர்வு செய்க --
             total_m, fails, wrote_any, fail_subs, student_centums = 0, 0, False, [], []
 
             for sn in g_list:
-                s_obj = sub_info_map.get(sn)
-                if not s_obj: continue
+                s_obj = valid_subjects_map.get(sn)
                 m = next((m for m in marks_data if str(m['emis_no']) == emis_key and m['subject_id'] == s_obj['subject_code']), None)
                 
                 if m:
@@ -145,7 +146,7 @@ if sel_exam_name and sel_class_main != "-- தேர்வு செய்க --
             row_raw.update({"மொத்தம்": total_m, "Fails": fails, "தோல்வி விவரம்": f"({', '.join(fail_subs)})" if fail_subs else ""})
             report_rows.append(row_raw)
 
-        # --- 📱 Dashboard ---
+        # --- Dashboard Metrics ---
         st.markdown(f'<div class="responsive-subtitle">📊 {sel_class_main}-ஆம் வகுப்பு ஒட்டுமொத்தப் புள்ளிவிவரம்</div>', unsafe_allow_html=True)
         def get_gt(k): return f"<span class='gender-sub'>({st_count[k]['F']}F|{st_count[k]['M']}M)</span>" if split_gender else ""
         avg_overall = round(sum([r['மொத்தம்'] for r in report_rows if r['மொத்தம்'] > 0])/st_count['present']['A'], 1) if st_count['present']['A'] > 0 else 0
@@ -161,17 +162,8 @@ if sel_exam_name and sel_class_main != "-- தேர்வு செய்க --
             </div>
         """, unsafe_allow_html=True)
 
-        st.divider()
-        c_e1, c_e2 = st.columns(2)
-        with c_e1:
-            with st.expander(f"🏆 100/100 பெற்றவர்கள்: {len(centum_list)} பேர்"):
-                for itm in centum_list: st.markdown(f'<div class="info-card">🥇 {itm}</div>', unsafe_allow_html=True)
-        with c_e2:
-            with st.expander(f"🚶 தேர்வு எழுதாதவர்கள்: {len(absent_list)} பேர்"):
-                for itm in absent_list: st.markdown(f'<div class="info-card" style="border-left-color:red; background-color:#fff5f5;">❌ {itm}</div>', unsafe_allow_html=True)
-
         # --- 📈 பாடவாரி விரிவான பகுப்பாய்வு ---
-        st.markdown('<div class="responsive-subtitle">📈 பாடவாரி விரிவான பகுப்பாய்வு (By Subject Code)</div>', unsafe_allow_html=True)
+        st.markdown('<div class="responsive-subtitle">📈 பாடவாரி விரிவான பகுப்பாய்வு</div>', unsafe_allow_html=True)
         sub_df_list = []
         for sn in g_list:
             stt = subject_stats[sn]
@@ -186,7 +178,7 @@ if sel_exam_name and sel_class_main != "-- தேர்வு செய்க --
             })
         st.table(pd.DataFrame(sub_df_list))
 
-        # --- Toppers & Low Scorers ---
+        # Toppers Expander
         with st.expander("🏅 பாடவாரி முதல் மூன்று மற்றும் கடைசி இடங்கள்"):
             t_col1, t_col2 = st.columns(2)
             for i, sn in enumerate(g_list):
@@ -203,7 +195,6 @@ if sel_exam_name and sel_class_main != "-- தேர்வு செய்க --
         show_det = st.toggle("🔍 மதிப்பீட்டு விவரங்களைக் காட்டு", value=True)
         
         df_sorted = pd.DataFrame(report_rows).sort_values(by=["Fails", "மொத்தம்"], ascending=[True, False]).reset_index(drop=True)
-        # TypeError சரிசெய்தல்
         df_sorted["Rank"] = "-"
         df_sorted["Rank"] = df_sorted["Rank"].astype(object)
         
@@ -228,11 +219,10 @@ if sel_exam_name and sel_class_main != "-- தேர்வு செய்க --
             if '\n' in s and int(s.split('\n')[0]) < 35: return 'color: red'
             return 'color: blue' if 'EXEMPTED' in s else ''
 
-        # AttributeError சரிசெய்தல் (map() பயன்படுத்துதல்)
         st.dataframe(pd.DataFrame(final_disp).style.map(style_cells), use_container_width=True, hide_index=True)
 
-        # --- 📉 தோல்வி விவரம் ---
-        st.markdown('<div class="responsive-subtitle">📉 தோல்வி அடைந்தவர்களின் விவரம்</div>', unsafe_allow_html=True)
+        # Fail Details Expanders
+        st.markdown('<div class="responsive-subtitle">📉 தோல்வி விவரம்</div>', unsafe_allow_html=True)
         f_c1, f_c2 = st.columns(2)
         with f_c1:
             for n in [1, 2, 3]:
