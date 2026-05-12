@@ -1,6 +1,7 @@
 import streamlit as st
 import pandas as pd
 from supabase import create_client
+from io import BytesIO
 from utils import add_school_header 
 
 # --- 1. பக்க அமைப்பு ---
@@ -27,6 +28,7 @@ st.markdown("""
     .responsive-subtitle { font-size: 20px; font-weight: bold; color: #334155; border-bottom: 2px solid #e2e8f0; margin: 15px 0 10px 0; }
     .info-card { padding: 10px; border-radius: 6px; margin-bottom: 8px; border-left: 4px solid #10b981; background-color: #f0fdf4; font-size: 14px; font-weight: bold; }
     .topper-card { padding: 8px; border-radius: 5px; margin-bottom: 5px; background-color: #fffbeb; border-left: 4px solid #f59e0b; font-size: 13px; }
+    .community-topper { background-color: #f0f9ff; border-left-color: #0ea5e9; }
     </style>
     """, unsafe_allow_html=True)
 
@@ -57,18 +59,17 @@ if sel_exam_name and sel_class_main != "-- தேர்வு செய்க --
     split_gender = st.toggle("🔍 ஆண் பெண் பிரித்து காட்டு", value=True)
     st.divider()
 
-    # ⭐ முக்கிய மாற்றம்: eval_type 'NILL' அல்லது 'NIL' பாடங்களைத் தவிர்த்தல்
     valid_subjects_map = {s['subject_name']: s for s in subjects_data if str(s.get('eval_type', '')).upper() not in ['NILL', 'NIL']}
-    
     relevant_sections = sorted(list(set([m['class_name'] for m in mapped_data if str(m['class_name']).startswith(sel_class_main)])))
     
     studs_mapping = supabase.table("exam_mapping").select("exam_no, student_name, emis_no, class_name").eq("exam_id", exam_id).in_("class_name", relevant_sections).execute().data
-    all_students_base = supabase.table("students").select("emis_no, gender").execute().data
+    # Community தரவையும் சேர்த்துப் பெறுகிறோம்
+    all_students_base = supabase.table("students").select("emis_no, gender, community").execute().data
     gender_map = {str(st_b['emis_no']): str(st_b['gender']).strip() for st_b in all_students_base}
+    comm_map = {str(st_b['emis_no']): str(st_b.get('community', 'OTHERS')).strip() for st_b in all_students_base}
     marks_data = supabase.table("marks").select("*").eq("exam_id", exam_id).execute().data
 
     if studs_mapping:
-        # பாடங்களை Subject Code வரிசைப்படி தயார் செய்தல் (Valid பாடங்கள் மட்டும்)
         raw_g_list = []
         for sec in relevant_sections:
             c_info = next((c for c in classes_data if (c.get('class_n') == sec or c.get('class_name') == sec)), None)
@@ -80,7 +81,6 @@ if sel_exam_name and sel_class_main != "-- தேர்வு செய்க --
         unique_subs = list(set(raw_g_list))
         g_list = sorted(unique_subs, key=lambda x: str(valid_subjects_map.get(x, {}).get('subject_code', '999')))
 
-        # கணக்கீட்டு மாறிகள்
         report_rows, centum_list, absent_list = [], [], []
         st_count = {"total": {"A": 0, "M": 0, "F": 0}, "present": {"A": 0, "M": 0, "F": 0}, "pass": {"A": 0, "M": 0, "F": 0}, "fail": {"A": 0, "M": 0, "F": 0}}
         subject_stats = {sn: {"total": {"M": 0, "F": 0}, "app": {"M": 0, "F": 0}, "pass": {"M": 0, "F": 0}, "fail": {"M": 0, "F": 0}, "marks": [], "student_marks": []} for sn in g_list}
@@ -90,9 +90,10 @@ if sel_exam_name and sel_class_main != "-- தேர்வு செய்க --
             emis_key = str(s['emis_no'])
             r_g = gender_map.get(emis_key, 'Male').strip().lower()
             gen = 'F' if (r_g.startswith('f') or 'பெண்' in r_g) else 'M'
-            st_count["total"]["A"] += 1; st_count["total"][gen] += 1
+            comm = comm_map.get(emis_key, 'OTHERS')
             
-            row_raw = {"Rank": "-", "தேர்வு எண்": s.get('exam_no', '-'), "பெயர்": s['student_name'], "பிரிவு": s['class_name'], "gender": gen}
+            st_count["total"]["A"] += 1; st_count["total"][gen] += 1
+            row_raw = {"Rank": "-", "தேர்வு எண்": s.get('exam_no', '-'), "பெயர்": s['student_name'], "பிரிவு": s['class_name'], "gender": gen, "இனம்": comm}
             total_m, fails, wrote_any, fail_subs, student_centums = 0, 0, False, [], []
 
             for sn in g_list:
@@ -112,7 +113,9 @@ if sel_exam_name and sel_class_main != "-- தேர்வு செய்க --
                         
                         subject_stats[sn]["app"][gen] += 1
                         subject_stats[sn]["marks"].append(tot)
-                        subject_stats[sn]["student_marks"].append({"name": s['student_name'], "sec": s['class_name'], "mark": tot})
+                        subject_stats[sn]["student_marks"].append({
+                            "name": s['student_name'], "sec": s['class_name'], "mark": tot, "exam_no": s.get('exam_no', '-')
+                        })
                         if is_subj_pass: 
                             subject_stats[sn]["pass"][gen] += 1
                             if tot == 100: student_centums.append(sn)
@@ -164,7 +167,7 @@ if sel_exam_name and sel_class_main != "-- தேர்வு செய்க --
             with st.expander(f"🚶 தேர்வு எழுதாதவர்கள்: {len(absent_list)} பேர்"):
                 for itm in absent_list: st.markdown(f'<div class="info-card" style="border-left-color:red; background-color:#fff5f5;">{itm}</div>', unsafe_allow_html=True)
 
-        # --- பாடவாரி விரிவான பகுப்பாய்வு ---
+        # --- 📈 பாடவாரி விரிவான பகுப்பாய்வு ---
         st.markdown('<div class="responsive-subtitle">📈 பாடவாரி விரிவான பகுப்பாய்வு</div>', unsafe_allow_html=True)
         sub_df_list = []
         for sn in g_list:
@@ -177,14 +180,47 @@ if sel_exam_name and sel_class_main != "-- தேர்வு செய்க --
                 "Pass": f"{stt['pass']['F']+stt['pass']['M']} ({stt['pass']['F']}F|{stt['pass']['M']}M)", 
                 "Fail": f"{stt['fail']['F']+stt['fail']['M']} ({stt['fail']['F']}F|{stt['fail']['M']}M)",
                 "Pass%": f"{round((stt['pass']['F']+stt['pass']['M'])/(stt['app']['F']+stt['app']['M'])*100,1)}%",
-                "Min": min(stt["marks"]), "Max": max(stt["marks"]), "Avg": avg_s
+                "Min": min(stt["marks"]) if stt["marks"] else 0, "Max": max(stt["marks"]) if stt["marks"] else 0, "Avg": avg_s
             })
         st.table(pd.DataFrame(sub_df_list))
+
+        # --- 🏅 பாடவாரி முதல் 3 மற்றும் கடைசி இடங்கள் ---
+        with st.expander("🏅 பாடவாரியாக முதல் மூன்று இடங்கள் மற்றும் கடைசி இடம்"):
+            t_col1, t_col2 = st.columns(2)
+            for i, sn in enumerate(g_list):
+                target_col = t_col1 if i % 2 == 0 else t_col2
+                with target_col:
+                    st.write(f"**{sn}**")
+                    sorted_m = sorted(subject_stats[sn]["student_marks"], key=lambda x: x['mark'], reverse=True)
+                    if sorted_m:
+                        top3 = sorted_m[:3]
+                        for rank, sm in enumerate(top3, 1):
+                            st.markdown(f"<div class='topper-card'>#{rank} - {sm['name']} - {sm['sec']} (No: {sm['exam_no']}) -> <b>{sm['mark']}</b></div>", unsafe_allow_html=True)
+                        last = sorted_m[-1]
+                        st.markdown(f"<div class='topper-card' style='border-left-color:red; background-color:#fff5f5;'>🔻 கடைசி: {last['name']} - {last['sec']} ({last['mark']})</div>", unsafe_allow_html=True)
+
+        # --- 📋 இனம் வாரியாக முதல் மூன்று இடங்கள் ---
+        st.markdown('<div class="responsive-subtitle">🏢 இனம் வாரியாக முதல் மூன்று இடங்கள் (Community-wise Toppers)</div>', unsafe_allow_html=True)
+        df_overall = pd.DataFrame(report_rows)
+        with st.expander("🔍 இனம் வாரியான விவரங்களைக் காண இங்கே கிளிக் செய்யவும்"):
+            all_communities = sorted(df_overall['இனம்'].unique())
+            c_top_1, c_top_2 = st.columns(2)
+            for i, comm_name in enumerate(all_communities):
+                t_col = c_top_1 if i % 2 == 0 else c_top_2
+                with t_col:
+                    st.write(f"🔷 **{comm_name}**")
+                    comm_df = df_overall[df_overall['இனம்'] == comm_name].sort_values(by="மொத்தம்", ascending=False)
+                    if not comm_df.empty:
+                        for rank, (_, r_data) in enumerate(comm_df.head(3).iterrows(), 1):
+                            st.markdown(f"<div class='topper-card community-topper'>#{rank} - {r_data['பெயர்']} - {r_data['பிரிவு']} (No: {r_data['தேர்வு எண்']}) -> <b>{r_data['மொத்தம்']}</b></div>", unsafe_allow_html=True)
+                    else:
+                        st.write("தரவுகள் இல்லை.")
 
         # --- 📋 முழுமையான மதிப்பெண் பட்டியல் ---
         st.markdown('<div class="responsive-subtitle">📋 முழுமையான மதிப்பெண் பட்டியல்</div>', unsafe_allow_html=True)
         show_det = st.toggle("🔍 மதிப்பீட்டு விவரங்களைக் காட்டு", value=True)
-        df_sorted = pd.DataFrame(report_rows).sort_values(by=["Fails", "மொத்தம்"], ascending=[True, False]).reset_index(drop=True)
+        df_sorted = df_overall.sort_values(by=["Fails", "மொத்தம்"], ascending=[True, False]).reset_index(drop=True)
+        df_sorted["Rank"] = "-"
         df_sorted["Rank"] = df_sorted["Rank"].astype(object)
         rv = 1
         for idx, row in df_sorted.iterrows():
@@ -192,7 +228,7 @@ if sel_exam_name and sel_class_main != "-- தேர்வு செய்க --
         
         final_disp = []
         for _, r in df_sorted.iterrows():
-            d_row = {"Rank": r["Rank"], "பெயர்": r['பெயர்'], "பிரிவு": r['பிரிவு'], "மொத்தம்": r['மொத்தம்'], "Fails": r['Fails'], "தோல்வி விவரம்": r['தோல்வி விவரம்']}
+            d_row = {"Rank": r["Rank"], "பெயர்": r['பெயர்'], "பிரிவு": r['பிரிவு'], "இனம்": r['இனம்'], "மொத்தம்": r['மொத்தம்'], "Fails": r['Fails'], "தோல்வி விவரம்": r['தோல்வி விவரம்']}
             for sn in g_list:
                 v = r.get(sn)
                 if isinstance(v, dict): d_row[sn] = f"{v['tot']}\n{v['tag']}" if show_det else v['tot']
@@ -215,3 +251,5 @@ if sel_exam_name and sel_class_main != "-- தேர்வு செய்க --
                     lbl = f"{n} பாடத்தில் தோல்வி" if n!='All' else 'அனைத்து'
                     with st.expander(f"🔴 {lbl} பாடத்தில் தோல்வி: {len(fail_cats[n])} பேர்"):
                         for itm in fail_cats[n]: st.write(f"🚩 {itm}")
+    else:
+        st.warning("தரவுகள் இல்லை.")
