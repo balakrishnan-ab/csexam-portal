@@ -6,4 +6,3 @@ supabase
 plotly
 xlsxwriter
 pdfplumber
-re
