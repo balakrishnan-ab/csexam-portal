@@ -25,7 +25,7 @@ st.markdown("""
     </style>
     """, unsafe_allow_html=True)
 
-# --- 3. துல்லியமான பிடிஎஃப் (PDF Parsing) லாஜிக் ---
+# --- 3. அறிவியல் மற்றும் சமூக அறிவியல் பிரிவுகளைத் துல்லியமாகப் பிரிக்கும் லாஜிக் ---
 def parse_sslc_pdf(pdf_file):
     students_list = []
     
@@ -40,17 +40,16 @@ def parse_sslc_pdf(pdf_file):
             while i < len(lines):
                 line = lines[i].strip()
                 
-                # 7 இலக்க ரோல் நம்பர் கொண்டு ஆரம்பிக்கும் வரிகளை மட்டும் கண்டறிதல்
+                # 7 இலக்க ரோல் நம்பர் உள்ள வரிகளை மட்டும் எடுத்தல்
                 if re.match(r'^["\']?\d{7}\b', line):
                     try:
-                        # மேற்கோள் குறிகள், கமாக்களைச் சுத்தம் செய்தல்
                         clean_line = line.replace('"', '').replace("'", '').replace(',,', ',').replace(',', ' ')
                         tokens = clean_line.split()
                         
                         roll_no = tokens[0]
                         tmr_no = tokens[1]
                         
-                        # ஆங்கிலப் பெயரைப் பிரித்தெடுத்தல்
+                        # மாணவர் பெயர் பிரித்தல்
                         name_parts = []
                         idx = 2
                         while idx < len(tokens) and not (re.match(r'^\d{2}/\d{2}/\d{4}$', tokens[idx]) or tokens[idx] in ['M', 'F', 'T', 'E']):
@@ -58,46 +57,75 @@ def parse_sslc_pdf(pdf_file):
                             idx += 1
                         student_name = " ".join(name_parts)
                         
-                        # பாலினம் மற்றும் பிறந்த தேதி விவரம்
-                        dob, gender = "-", "M"
+                        # பாலினம் அறிதல்
+                        gender = "M"
                         for t in tokens[idx:]:
-                            if re.match(r'^\d{2}/\d{2}/\d{4}$', t):
-                                dob = t
-                            elif t in ['M', 'F']:
+                            if t in ['M', 'F']:
                                 gender = t
                         
-                        # மதிப்பெண்கள் மற்றும் ஒட்டுமொத்த விவரங்கள் (AAA, XXX அல்லது 3 இலக்க எண்கள்)
+                        # அனைத்து எண்கள்/மதிப்பெண் டோக்கன்களையும் எடுத்தல் (AAA, XXX அல்லது எண்கள்)
                         mark_tokens = [t for t in tokens if re.match(r'^\d{3}$|^AAA$|^XXX$', t)]
                         
-                        # SSLC பொதுத்தேர்வு முறைப்படி மதிப்பெண்களின் வரிசை
-                        if len(mark_tokens) >= 5:
+                        # அடிப்படைப் பாடங்கள் மேப்பிங்
+                        # வரிசை: 0-தமிழ், 1-ஆங்கிலம், 2-கணிதம், 3-அறிவியல் தியரி
+                        if len(mark_tokens) >= 4:
                             lang = mark_tokens[0]
                             eng = mark_tokens[1]
                             mat = mark_tokens[2]
-                            sci = mark_tokens[3]  # தியரி + ப்ராக்டிகல் கூட்டு மார்க்
-                            soc = mark_tokens[4]
+                            sci_theory = mark_tokens[3]
                         else:
                             i += 1
                             continue
+                        
+                        # அறிவியல் செய்முறை, மொத்தம் மற்றும் சமூக அறிவியல் மதிப்பெண்கள் அடுத்த வரியில் உடையும்
+                        # உங்களது PDF-ன் படி: செய்முறை (எ.கா: 025), அறிவியல் மொத்தம் (எ.கா: 087), சமூக அறிவியல் (எ.கா: 094)
+                        sci_practical, sci_total, soc_science = "000", "000", "000"
+                        
+                        # அடுத்த வரிகளில் இருந்து செய்முறை மற்றும் சமூக அறிவியல் மார்க்குகளைத் தேடுதல்
+                        lookahead = 1
+                        found_extra = False
+                        while lookahead <= 3 and (i + lookahead) < len(lines):
+                            next_line_clean = lines[i + lookahead].replace('"', '').replace("'", '').replace(',', ' ')
+                            next_tokens = next_line_clean.split()
                             
-                        # மொத்தம் மற்றும் பாஸ்/பெயில் குறியீடு (P / W)
+                            # 3 இலக்க மதிப்பெண்கள் உள்ளதா எனப் பார்த்தல்
+                            extra_marks = [t for t in next_tokens if re.match(r'^\d{3}$|^AAA$|^XXX$', t)]
+                            
+                            if len(extra_marks) >= 3:
+                                sci_practical = extra_marks[0]
+                                sci_total = extra_marks[1]
+                                soc_science = extra_marks[2]
+                                found_extra = True
+                                break
+                            lookahead += 1
+                        
+                        if not found_extra:
+                            # ஒருவேளை ஒரே வரியில் இருந்தால் Fallback
+                            if len(mark_tokens) >= 5:
+                                soc_science = mark_tokens[4]
+                                sci_total = sci_theory
+                        
+                        # மொத்தம் மற்றும் பாஸ்/பெயில் நிலை
                         total_mark = int(tokens[-2]) if tokens[-2].isdigit() else 0
                         res_char = tokens[-1]
                         result = "Pass" if res_char == "P" else "Fail"
                         
-                        # அடுத்த வரியில் இருந்து கம்யூனிட்டி (இனம்) கண்டறிதல்
-                        community = "BC"  # Default fallback
-                        if i + i < len(lines):
-                            next_line = lines[i+1].lower()
-                            if "mbc" in next_line: community = "MBC"
-                            elif "sc" in next_line: community = "SC"
-                            elif "st" in next_line: community = "ST"
-                            elif "bc" in next_line: community = "BC"
-                            elif "dnc" in next_line: community = "DNC"
+                        # இனம் (Community) கண்டறிதல்
+                        community = "BC"
+                        for k in range(1, 4):
+                            if (i + k) < len(lines):
+                                check_line = lines[i + k].lower()
+                                if "mbc" in check_line: community = "MBC"; break
+                                elif "sc" in check_line: community = "SC"; break
+                                elif "bc" in check_line: community = "BC"; break
+                                elif "st" in check_line: community = "ST"; break
                         
                         students_list.append({
                             "தேர்வு எண்": roll_no, "பெயர்": student_name, "பாலினம்": gender, "இனம்": community,
-                            "TAMIL": lang, "ENGLISH": eng, "MATHS": mat, "SCIENCE": sci, "SOCIAL SCIENCE": soc,
+                            "TAMIL": lang, "ENGLISH": eng, "MATHS": mat, 
+                            "SCIENCE": f"{sci_total} ({sci_theory}+{sci_practical})",  # தியரி + செய்முறை வடிவம்
+                            "sci_pure_total": sci_total,
+                            "SOCIAL SCIENCE": soc_science,
                             "மொத்தம்": total_mark, "Result": result, "பிரிவு": "10-A"
                         })
                     except Exception as e:
@@ -119,7 +147,6 @@ if uploaded_file:
         
         g_list = ["TAMIL", "ENGLISH", "MATHS", "SCIENCE", "SOCIAL SCIENCE"]
         
-        # புள்ளிவிவரக் கணக்கீட்டுப் பெட்டகங்கள்
         st_count = {
             "total": {"A": len(df_base), "M": len(df_base[df_base['பாலினம்']=='M']), "F": len(df_base[df_base['பாலினம்']=='F'])},
             "present": {"A": 0, "M": 0, "F": 0},
@@ -146,10 +173,17 @@ if uploaded_file:
             row_raw = {"Rank": "-", "தேர்வு எண்": roll, "பெயர்": name, "பிரிவு": sec, "gender": gen, "இனம்": comm}
             
             for sn in g_list:
-                mark_val = str(row[sn]).strip()
+                # அறிவியல் பாடத்திற்கு மட்டும் கூட்டு மதிப்பெண்ணில் இருந்து அசல் மதிப்பெண்ணைப் பிரித்தல்
+                if sn == "SCIENCE":
+                    mark_val = str(row["sci_pure_total"]).strip()
+                    display_val = row["SCIENCE"]
+                else:
+                    mark_val = str(row[sn]).strip()
+                    display_val = mark_val
+                    
                 subject_stats[sn]["total"][gen] += 1
                 
-                if mark_val in ["AAA", "XXX"]:
+                if mark_val in ["AAA", "XXX"] or "ABS" in mark_val:
                     row_raw[sn] = "ABS"
                     fails += 1
                     fail_subs.append(sn)
@@ -173,7 +207,7 @@ if uploaded_file:
                         fails += 1
                         fail_subs.append(sn)
                         
-                    row_raw[sn] = {"tot": mark_int, "tag": "", "pass": is_subj_pass}
+                    row_raw[sn] = display_val
                     
             if wrote_any:
                 st_count["present"]["A"] += 1; st_count["present"][gen] += 1
@@ -268,11 +302,10 @@ if uploaded_file:
                         for rank, (_, r_data) in enumerate(comm_df.head(3).iterrows(), 1):
                             st.markdown(f"<div class='topper-card community-topper'>#{rank} - {r_data['பெயர்']} - {r_data['பிரிவு']} (No: {r_data['தேர்வு எண்']}) -> <b>{r_data['மொத்தம்']}</b></div>", unsafe_allow_html=True)
 
-        # --- 9. 📋 முழுமையான மதிப்பெண் பட்டியல் ---
+        # --- 9. 📋 முழுமையான மதிப்பெண் பட்டியல் (அட்டவணை) ---
         st.markdown('<div class="responsive-subtitle">📋 முழுமையான மதிப்பெண் பட்டியல்</div>', unsafe_allow_html=True)
         df_sorted = df_overall.sort_values(by=["Fails", "மொத்தம்"], ascending=[True, False]).reset_index(drop=True)
         
-        # தானியங்கி ரேங்க் (தோல்வி இல்லாதவர்களுக்கு மட்டும்)
         df_sorted["Rank"] = "-"
         df_sorted["Rank"] = df_sorted["Rank"].astype(object)
         rv = 1
@@ -284,9 +317,7 @@ if uploaded_file:
         for _, r in df_sorted.iterrows():
             d_row = {"Rank": r["Rank"], "தேர்வு எண்": r["தேர்வு எண்"], "பெயர்": r['பெயர்'], "பிரிவு": r['பிரிவு'], "இனம்": r['இனம்'], "மொத்தம்": r['மொத்தம்'], "Fails": r['Fails'], "தோல்வி விவரம்": r['தோல்வி விவரம்']}
             for sn in g_list:
-                v = r.get(sn)
-                if isinstance(v, dict): d_row[sn] = v['tot']
-                else: d_row[sn] = v
+                d_row[sn] = r.get(sn)
             final_disp.append(d_row)
 
         st.dataframe(pd.DataFrame(final_disp).style.map(lambda v: 'color: red' if 'ABS' in str(v) or (isinstance(v, (int,float)) and 0<v<35) else ''), use_container_width=True, hide_index=True)
@@ -306,4 +337,4 @@ if uploaded_file:
                     with st.expander(f"🔴 {lbl} பாடத்தில் தோல்வி: {len(fail_cats[n])} பேர்"):
                         for itm in fail_cats[n]: st.write(f"🚩 {itm}")
     else:
-        st.error("PDF கோப்பில் இருந்து தரவுகளைப் பிரித்தெடுக்க முடியவில்லை. குறியீட்டின் Regex-ஐச் சரிபார்க்கவும்.")
+        st.error("PDF கோப்பில் இருந்து தரவுகளைப் பிரித்தெடுக்க முடியவில்லை. அமைப்பைச் சரிபார்க்கவும்.")
