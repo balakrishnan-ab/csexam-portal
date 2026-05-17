@@ -25,7 +25,7 @@ st.markdown("""
     </style>
     """, unsafe_allow_html=True)
 
-# --- 3. அறிவியல் மற்றும் சமூக அறிவியல் பிரிவுகளைத் துல்லியமாகப் பிரிக்கும் லாஜிக் ---
+# --- 3. பிடிஎஃப் (PDF Parsing) சீரமைக்கப்பட்ட லாஜிக் ---
 def parse_sslc_pdf(pdf_file):
     students_list = []
     
@@ -40,7 +40,7 @@ def parse_sslc_pdf(pdf_file):
             while i < len(lines):
                 line = lines[i].strip()
                 
-                # 7 இலக்க ரோல் நம்பர் உள்ள வரிகளை மட்டும் எடுத்தல்
+                # 7 இலக்க ரோல் நம்பர் கொண்டு ஆரம்பிக்கும் வரிகளைக் கண்டறிதல்
                 if re.match(r'^["\']?\d{7}\b', line):
                     try:
                         clean_line = line.replace('"', '').replace("'", '').replace(',,', ',').replace(',', ' ')
@@ -49,7 +49,7 @@ def parse_sslc_pdf(pdf_file):
                         roll_no = tokens[0]
                         tmr_no = tokens[1]
                         
-                        # மாணவர் பெயர் பிரித்தல்
+                        # ஆங்கில மாணவர் பெயரைப் பிரித்தல்
                         name_parts = []
                         idx = 2
                         while idx < len(tokens) and not (re.match(r'^\d{2}/\d{2}/\d{4}$', tokens[idx]) or tokens[idx] in ['M', 'F', 'T', 'E']):
@@ -57,17 +57,16 @@ def parse_sslc_pdf(pdf_file):
                             idx += 1
                         student_name = " ".join(name_parts)
                         
-                        # பாலினம் அறிதல்
+                        # பாலினம் கண்டறிதல்
                         gender = "M"
                         for t in tokens[idx:]:
                             if t in ['M', 'F']:
                                 gender = t
                         
-                        # அனைத்து எண்கள்/மதிப்பெண் டோக்கன்களையும் எடுத்தல் (AAA, XXX அல்லது எண்கள்)
-                        mark_tokens = [t for t in tokens if re.match(r'^\d{3}$|^AAA$|^XXX$', t)]
+                        # முதல் வரியில் உள்ள 3 இலக்க மதிப்பெண்களை மட்டும் பிரித்தல்
+                        # வரிசை: 0-TAMIL, 1-ENGLISH, 2-MATHS, 3-SCIENCE THEORY
+                        mark_tokens = [t for t in tokens[idx:] if re.match(r'^\d{3}$|^AAA$|^XXX$', t)]
                         
-                        # அடிப்படைப் பாடங்கள் மேப்பிங்
-                        # வரிசை: 0-தமிழ், 1-ஆங்கிலம், 2-கணிதம், 3-அறிவியல் தியரி
                         if len(mark_tokens) >= 4:
                             lang = mark_tokens[0]
                             eng = mark_tokens[1]
@@ -77,35 +76,29 @@ def parse_sslc_pdf(pdf_file):
                             i += 1
                             continue
                         
-                        # அறிவியல் செய்முறை, மொத்தம் மற்றும் சமூக அறிவியல் மதிப்பெண்கள் அடுத்த வரியில் உடையும்
-                        # உங்களது PDF-ன் படி: செய்முறை (எ.கா: 025), அறிவியல் மொத்தம் (எ.கா: 087), சமூக அறிவியல் (எ.கா: 094)
+                        # அறிவியல் செய்முறை (Practical), அறிவியல் மொத்தம் (Total), சமூக அறிவியல் (Social) மதிப்பெண்களை எடுத்தல்
                         sci_practical, sci_total, soc_science = "000", "000", "000"
-                        
-                        # அடுத்த வரிகளில் இருந்து செய்முறை மற்றும் சமூக அறிவியல் மார்க்குகளைத் தேடுதல்
-                        lookahead = 1
                         found_extra = False
-                        while lookahead <= 3 and (i + lookahead) < len(lines):
+                        
+                        # அடுத்த 4 வரிகளுக்குள் இந்தத் தரவுகளைத் தேடுதல்
+                        for lookahead in range(1, 5):
+                            if (i + lookahead) >= len(lines):
+                                break
                             next_line_clean = lines[i + lookahead].replace('"', '').replace("'", '').replace(',', ' ')
                             next_tokens = next_line_clean.split()
                             
-                            # 3 இலக்க மதிப்பெண்கள் உள்ளதா எனப் பார்த்தல்
+                            # அடுத்த வரிகளில் உள்ள மதிப்பெண் டோக்கன்கள் (3 இலக்க எண்கள் அல்லது AAA/XXX)
                             extra_marks = [t for t in next_tokens if re.match(r'^\d{3}$|^AAA$|^XXX$', t)]
                             
+                            # உங்களது PDF அமைப்பின்படி: [செய்முறை, அறிவியல் மொத்தம், சமூக அறிவியல் மொத்தம்]
                             if len(extra_marks) >= 3:
                                 sci_practical = extra_marks[0]
                                 sci_total = extra_marks[1]
                                 soc_science = extra_marks[2]
                                 found_extra = True
                                 break
-                            lookahead += 1
                         
-                        if not found_extra:
-                            # ஒருவேளை ஒரே வரியில் இருந்தால் Fallback
-                            if len(mark_tokens) >= 5:
-                                soc_science = mark_tokens[4]
-                                sci_total = sci_theory
-                        
-                        # மொத்தம் மற்றும் பாஸ்/பெயில் நிலை
+                        # மொத்தம் மற்றும் இறுதித் தேர்ச்சி முடிவு
                         total_mark = int(tokens[-2]) if tokens[-2].isdigit() else 0
                         res_char = tokens[-1]
                         result = "Pass" if res_char == "P" else "Fail"
@@ -119,11 +112,12 @@ def parse_sslc_pdf(pdf_file):
                                 elif "sc" in check_line: community = "SC"; break
                                 elif "bc" in check_line: community = "BC"; break
                                 elif "st" in check_line: community = "ST"; break
+                                elif "dnc" in check_line: community = "DNC"; break
                         
                         students_list.append({
                             "தேர்வு எண்": roll_no, "பெயர்": student_name, "பாலினம்": gender, "இனம்": community,
                             "TAMIL": lang, "ENGLISH": eng, "MATHS": mat, 
-                            "SCIENCE": f"{sci_total} ({sci_theory}+{sci_practical})",  # தியரி + செய்முறை வடிவம்
+                            "SCIENCE": f"{sci_total} ({sci_theory}+{sci_practical})", 
                             "sci_pure_total": sci_total,
                             "SOCIAL SCIENCE": soc_science,
                             "மொத்தம்": total_mark, "Result": result, "பிரிவு": "10-A"
@@ -173,7 +167,6 @@ if uploaded_file:
             row_raw = {"Rank": "-", "தேர்வு எண்": roll, "பெயர்": name, "பிரிவு": sec, "gender": gen, "இனம்": comm}
             
             for sn in g_list:
-                # அறிவியல் பாடத்திற்கு மட்டும் கூட்டு மதிப்பெண்ணில் இருந்து அசல் மதிப்பெண்ணைப் பிரித்தல்
                 if sn == "SCIENCE":
                     mark_val = str(row["sci_pure_total"]).strip()
                     display_val = row["SCIENCE"]
