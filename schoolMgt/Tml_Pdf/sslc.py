@@ -50,8 +50,9 @@ def parse_sslc_pdf(pdf_file):
             
             sorted_y = sorted(lines_dict.keys())
             
-            for idx, y in enumerate(sorted_y):
-                line_words = sorted(lines_dict[y], key=lambda x: x['x0'])
+            # UnboundLocalError பிழையைத் தவிர்க்க இண்டெக்ஸ் லூப் மாற்றப்பட்டுள்ளது
+            for idx in range(len(sorted_y)):
+                line_words = sorted(lines_dict[sorted_y[idx]], key=lambda x: x['x0'])
                 line_text = " ".join([w['text'] for w in line_words]).strip()
                 
                 # 7 இலக்க ரோல் நம்பர் கொண்டு ஆரம்பிக்கும் வரிகளைக் கண்டறிதல்
@@ -84,22 +85,21 @@ def parse_sslc_pdf(pdf_file):
                                 current_words = sorted(lines_dict[sorted_y[idx + lookahead]], key=lambda x: x['x0'])
                                 for lw in current_words:
                                     txt = lw['text'].strip()
-                                    # 3 இலக்க எண்கள், மதிப்பெண் குறியீடுகள் அல்லது தனித்தனி மார்க்குகளை எடுத்தல்
                                     if re.match(r'^\d{3}$|^AAA$|^XXX$|\b[PW]\b', txt) or (txt.isdigit() and len(txt) <= 3):
                                         all_marks_words.append(lw)
                         
-                        # --- புதுப்பிக்கப்பட்ட துல்லியமான X-Axis எல்லைகள் (Sourced from TML Layout) ---
+                        # துல்லியமான X-Axis எல்லைகள்
                         for mw in all_marks_words:
                             x = mw['x0']
                             txt = mw['text']
                             
-                            if 380 <= x < 440: lang = txt          # LANGUAGE (T / 087 போன்ற மதிப்பெண்கள்)
-                            elif 440 <= x < 500: eng = txt         # ENGLISH (094 போன்ற மதிப்பெண்கள்)
-                            elif 500 <= x < 570: mat = txt         # MATHS
-                            elif 570 <= x < 620: sci_theory = txt  # SCIENCE - THE
-                            elif 620 <= x < 655: sci_practical = txt # SCIENCE - PRA
-                            elif 655 <= x < 695: sci_total = txt    # SCIENCE - TOT
-                            elif 695 <= x < 765: soc_science = txt  # SOCIAL SCIENCE
+                            if 380 <= x < 440: lang = txt          
+                            elif 440 <= x < 500: eng = txt         
+                            elif 500 <= x < 570: mat = txt         
+                            elif 570 <= x < 620: sci_theory = txt  
+                            elif 620 <= x < 655: sci_practical = txt 
+                            elif 655 <= x < 695: sci_total = txt    
+                            elif 695 <= x < 765: soc_science = txt  
                         
                         # ஒட்டுமொத்த மொத்தம் மற்றும் தேர்ச்சி முடிவு கணக்கீடு
                         total_mark = 0
@@ -134,12 +134,10 @@ def parse_sslc_pdf(pdf_file):
                         })
                     except Exception as e:
                         pass
-                i += 1
-                
+                        
     return pd.DataFrame(students_list)
 
 # --- 4. முதன்மைப் பக்கம் மற்றும் கோப்புப் பதிவேற்றம் ---
-st.markdown('<div class="responsive-subtitle">📅 PDF Tabulated Mark List (TML) பகுப்பாய்வு</div>', unsafe_allow_html=True)
 uploaded_file = st.file_uploader("பள்ளி வாரியான SSLC TML PDF கோப்பைப் பதிவேற்றவும்:", type=["pdf"])
 
 if uploaded_file:
