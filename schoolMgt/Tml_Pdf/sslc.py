@@ -25,89 +25,103 @@ st.markdown("""
     </style>
     """, unsafe_allow_html=True)
 
-# --- 3. பிடிஎஃப் (PDF Parsing) சீரமைக்கப்பட்ட லாஜிக் ---
+# --- 3. X-Coordinates அடிப்படையிலான துல்லியமான PDF Parsing லாஜிக் ---
 def parse_sslc_pdf(pdf_file):
     students_list = []
     
     with pdfplumber.open(pdf_file) as pdf:
         for page in pdf.pages:
-            text = page.extract_text()
-            if not text:
+            # பிடிஎஃப் பக்கத்தில் உள்ள சொற்களை அவற்றின் எக்ஸ்-அச்சு (X-position) புள்ளிகளோடு எடுத்தல்
+            words = page.extract_words()
+            if not words:
                 continue
                 
-            lines = text.split('\n')
-            i = 0
-            while i < len(lines):
-                line = lines[i].strip()
+            # சொற்களை வரிகளாக (Y-position அடிப்படையில்) வகைப்படுத்துதல்
+            lines_dict = {}
+            for w in words:
+                y = round(w['top'], 1)  # ஒரே வரியில் உள்ளவற்றை இணைக்க
+                found = False
+                for existing_y in lines_dict.keys():
+                    if abs(y - existing_y) < 4:  # 4 பிக்சல் இடைவெளிக்குள் இருந்தால் ஒரே வரி
+                        lines_dict[existing_y].append(w)
+                        found = True
+                        break
+                if not found:
+                    lines_dict[y] = [w]
+            
+            # வரிகளை மேலிருந்து கீழாக வரிசைப்படுத்துதல்
+            sorted_y = sorted(lines_dict.keys())
+            
+            for idx, y in enumerate(sorted_y):
+                # சொற்களை இடமிருந்து வலமாக வரிசைப்படுத்துதல்
+                line_words = sorted(lines_dict[y], key=lambda x: x['x0'])
+                line_text = " ".join([w['text'] for w in line_words]).strip()
                 
-                # 7 இலக்க ரோல் நம்பர் கொண்டு ஆரம்பிக்கும் வரிகளைக் கண்டறிதல்
-                if re.match(r'^["\']?\d{7}\b', line):
+                # 7 இலக்க ரோல் நம்பர் உள்ள வரியைக் கண்டறிதல்
+                if re.match(r'^\d{7}\b', line_text):
                     try:
-                        clean_line = line.replace('"', '').replace("'", '').replace(',,', ',').replace(',', ' ')
-                        tokens = clean_line.split()
+                        roll_no = line_words[0]['text']
+                        tmr_no = line_words[1]['text']
                         
-                        roll_no = tokens[0]
-                        tmr_no = tokens[1]
-                        
-                        # ஆங்கில மாணவர் பெயரைப் பிரித்தல்
+                        # மாணவர் பெயர் பிரித்தல்
                         name_parts = []
-                        idx = 2
-                        while idx < len(tokens) and not (re.match(r'^\d{2}/\d{2}/\d{4}$', tokens[idx]) or tokens[idx] in ['M', 'F', 'T', 'E']):
-                            name_parts.append(tokens[idx])
-                            idx += 1
+                        w_idx = 2
+                        while w_idx < len(line_words) and not (re.match(r'^\d{2}/\d{2}/\d{4}$', line_words[w_idx]['text']) or line_words[w_idx]['text'] in ['M', 'F', 'T', 'E']):
+                            name_parts.append(line_words[w_idx]['text'])
+                            w_idx += 1
                         student_name = " ".join(name_parts)
                         
-                        # பாலினம் கண்டறிதல்
+                        # பாலினம் அறிதல்
                         gender = "M"
-                        for t in tokens[idx:]:
-                            if t in ['M', 'F']:
-                                gender = t
+                        for w in line_words[w_idx:]:
+                            if w['text'] in ['M', 'F']:
+                                gender = w['text']
                         
-                        # முதல் வரியில் உள்ள 3 இலக்க மதிப்பெண்களை மட்டும் பிரித்தல்
-                        # வரிசை: 0-TAMIL, 1-ENGLISH, 2-MATHS, 3-SCIENCE THEORY
-                        mark_tokens = [t for t in tokens[idx:] if re.match(r'^\d{3}$|^AAA$|^XXX$', t)]
+                        # X-Position (நெடுவரிசைப் புள்ளி) அடிப்படையில் மதிப்பெண்களை மட்டும் பிரித்தல்
+                        lang, eng, mat, sci_theory, sci_practical, sci_total, soc_science = "000", "000", "000", "000", "000", "000", "000"
                         
-                        if len(mark_tokens) >= 4:
-                            lang = mark_tokens[0]
-                            eng = mark_tokens[1]
-                            mat = mark_tokens[2]
-                            sci_theory = mark_tokens[3]
-                        else:
-                            i += 1
-                            continue
+                        # மதிப்பெண் மற்றும் ஒட்டுமொத்தக் குறியீடுகள் உள்ள அனைத்துச் சொற்களையும் அடுத்தடுத்த வரிகளில் இருந்தும் சேர்த்தல்
+                        all_marks_words = []
+                        for lookahead in range(0, 4):
+                            if (idx + lookahead) < len(sorted_y):
+                                current_words = sorted(lines_dict[sorted_y[idx + lookahead]], key=lambda x: x['x0'])
+                                for lw in current_words:
+                                    txt = lw['text'].strip()
+                                    # 3 இலக்க எண்கள் அல்லது AAA/XXX/P/W குறியீடுகளை மட்டும் எடுத்தல்
+                                    if re.match(r'^\d{3}$|^AAA$|^XXX$|\b[PW]\b', txt) or (txt.isdigit() and len(txt) <= 3):
+                                        all_marks_words.append(lw)
                         
-                        # அறிவியல் செய்முறை (Practical), அறிவியல் மொத்தம் (Total), சமூக அறிவியல் (Social) மதிப்பெண்களை எடுத்தல்
-                        sci_practical, sci_total, soc_science = "000", "000", "000"
-                        found_extra = False
-                        
-                        # அடுத்த 4 வரிகளுக்குள் இந்தத் தரவுகளைத் தேடுதல்
-                        for lookahead in range(1, 5):
-                            if (i + lookahead) >= len(lines):
-                                break
-                            next_line_clean = lines[i + lookahead].replace('"', '').replace("'", '').replace(',', ' ')
-                            next_tokens = next_line_clean.split()
+                        # எக்ஸ்-அச்சுப் புள்ளியின் (x0) எல்லைகளுக்குள் மதிப்பெண்களைச் சரியாக அமர்த்துதல்
+                        for mw in all_marks_words:
+                            x = mw['x0']
+                            txt = mw['text']
                             
-                            # அடுத்த வரிகளில் உள்ள மதிப்பெண் டோக்கன்கள் (3 இலக்க எண்கள் அல்லது AAA/XXX)
-                            extra_marks = [t for t in next_tokens if re.match(r'^\d{3}$|^AAA$|^XXX$', t)]
-                            
-                            # உங்களது PDF அமைப்பின்படி: [செய்முறை, அறிவியல் மொத்தம், சமூக அறிவியல் மொத்தம்]
-                            if len(extra_marks) >= 3:
-                                sci_practical = extra_marks[0]
-                                sci_total = extra_marks[1]
-                                soc_science = extra_marks[2]
-                                found_extra = True
-                                break
+                            if 400 < x < 450: lang = txt          # LANGUAGE 
+                            elif 450 < x < 510: eng = txt         # ENGLISH 
+                            elif 510 < x < 580: mat = txt         # MATHS 
+                            elif 580 < x < 625: sci_theory = txt  # SCIENCE - THE 
+                            elif 625 < x < 655: sci_practical = txt # SCIENCE - PRA 
+                            elif 655 < x < 695: sci_total = txt    # SCIENCE - TOT 
+                            elif 695 < x < 765: soc_science = txt  # SOCIAL SCIENCE 
                         
-                        # மொத்தம் மற்றும் இறுதித் தேர்ச்சி முடிவு
-                        total_mark = int(tokens[-2]) if tokens[-2].isdigit() else 0
-                        res_char = tokens[-1]
-                        result = "Pass" if res_char == "P" else "Fail"
+                        # ஒட்டுமொத்த மொத்தம் மற்றும் முடிவு
+                        total_mark = 0
+                        result = "Fail"
+                        
+                        # வரிசையில் உள்ள கடைசி டோக்கன்களைக் கொண்டு மொத்தம் மற்றும் முடிவை எடுத்தல்
+                        valid_tokens = [w['text'] for w in line_words if w['text'].isdigit() or w['text'] in ['P', 'W']]
+                        if len(valid_tokens) >= 2:
+                            for tok in reversed(valid_tokens):
+                                if tok == 'P': result = "Pass"
+                                elif tok.isdigit() and total_mark == 0:
+                                    total_mark = int(tok)
                         
                         # இனம் (Community) கண்டறிதல்
                         community = "BC"
                         for k in range(1, 4):
-                            if (i + k) < len(lines):
-                                check_line = lines[i + k].lower()
+                            if (idx + k) < len(sorted_y):
+                                check_words = sorted(lines_dict[sorted_y[idx + k]], key=lambda x: x['x0'])
+                                check_line = " ".join([cw['text'] for cw in check_words]).lower()
                                 if "mbc" in check_line: community = "MBC"; break
                                 elif "sc" in check_line: community = "SC"; break
                                 elif "bc" in check_line: community = "BC"; break
@@ -124,8 +138,7 @@ def parse_sslc_pdf(pdf_file):
                         })
                     except Exception as e:
                         pass
-                i += 1
-                
+                        
     return pd.DataFrame(students_list)
 
 # --- 4. முதன்மைப் பக்கம் மற்றும் கோப்புப் பதிவேற்றம் ---
@@ -176,7 +189,7 @@ if uploaded_file:
                     
                 subject_stats[sn]["total"][gen] += 1
                 
-                if mark_val in ["AAA", "XXX"] or "ABS" in mark_val:
+                if mark_val in ["AAA", "XXX"] or "ABS" in mark_val or mark_val == "000":
                     row_raw[sn] = "ABS"
                     fails += 1
                     fail_subs.append(sn)
