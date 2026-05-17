@@ -25,13 +25,12 @@ st.markdown("""
     </style>
     """, unsafe_allow_html=True)
 
-# --- 3. X-Coordinates அடிப்படையிலான துல்லியமான PDF Parsing லாஜிக் ---
+# --- 3. மேம்படுத்தப்பட்ட X-Coordinates PDF Parsing லாஜிக் ---
 def parse_sslc_pdf(pdf_file):
     students_list = []
     
     with pdfplumber.open(pdf_file) as pdf:
         for page in pdf.pages:
-            # பிடிஎஃப் பக்கத்தில் உள்ள சொற்களை அவற்றின் எக்ஸ்-அச்சு (X-position) புள்ளிகளோடு எடுத்தல்
             words = page.extract_words()
             if not words:
                 continue
@@ -39,31 +38,29 @@ def parse_sslc_pdf(pdf_file):
             # சொற்களை வரிகளாக (Y-position அடிப்படையில்) வகைப்படுத்துதல்
             lines_dict = {}
             for w in words:
-                y = round(w['top'], 1)  # ஒரே வரியில் உள்ளவற்றை இணைக்க
+                y = round(w['top'], 1)
                 found = False
                 for existing_y in lines_dict.keys():
-                    if abs(y - existing_y) < 4:  # 4 பிக்சல் இடைவெளிக்குள் இருந்தால் ஒரே வரி
+                    if abs(y - existing_y) < 4:
                         lines_dict[existing_y].append(w)
                         found = True
                         break
                 if not found:
                     lines_dict[y] = [w]
             
-            # வரிகளை மேலிருந்து கீழாக வரிசைப்படுத்துதல்
             sorted_y = sorted(lines_dict.keys())
             
             for idx, y in enumerate(sorted_y):
-                # சொற்களை இடமிருந்து வலமாக வரிசைப்படுத்துதல்
                 line_words = sorted(lines_dict[y], key=lambda x: x['x0'])
                 line_text = " ".join([w['text'] for w in line_words]).strip()
                 
-                # 7 இலக்க ரோல் நம்பர் உள்ள வரியைக் கண்டறிதல்
+                # 7 இலக்க ரோல் நம்பர் கொண்டு ஆரம்பிக்கும் வரிகளைக் கண்டறிதல்
                 if re.match(r'^\d{7}\b', line_text):
                     try:
                         roll_no = line_words[0]['text']
                         tmr_no = line_words[1]['text']
                         
-                        # மாணவர் பெயர் பிரித்தல்
+                        # மாணவர் பெயரைப் பிரித்தல்
                         name_parts = []
                         w_idx = 2
                         while w_idx < len(line_words) and not (re.match(r'^\d{2}/\d{2}/\d{4}$', line_words[w_idx]['text']) or line_words[w_idx]['text'] in ['M', 'F', 'T', 'E']):
@@ -71,44 +68,43 @@ def parse_sslc_pdf(pdf_file):
                             w_idx += 1
                         student_name = " ".join(name_parts)
                         
-                        # பாலினம் அறிதல்
+                        # பாலின விவரம்
                         gender = "M"
                         for w in line_words[w_idx:]:
                             if w['text'] in ['M', 'F']:
                                 gender = w['text']
                         
-                        # X-Position (நெடுவரிசைப் புள்ளி) அடிப்படையில் மதிப்பெண்களை மட்டும் பிரித்தல்
+                        # மதிப்பெண்கள் கண்டறியும் மாறிகள்
                         lang, eng, mat, sci_theory, sci_practical, sci_total, soc_science = "000", "000", "000", "000", "000", "000", "000"
                         
-                        # மதிப்பெண் மற்றும் ஒட்டுமொத்தக் குறியீடுகள் உள்ள அனைத்துச் சொற்களையும் அடுத்தடுத்த வரிகளில் இருந்தும் சேர்த்தல்
+                        # இந்த மாணவரின் பிளாக்கிற்குள் இருக்கும் அடுத்தடுத்த வரிகளின் மதிப்பெண் சொற்களைச் சேர்த்தல்
                         all_marks_words = []
                         for lookahead in range(0, 4):
                             if (idx + lookahead) < len(sorted_y):
                                 current_words = sorted(lines_dict[sorted_y[idx + lookahead]], key=lambda x: x['x0'])
                                 for lw in current_words:
                                     txt = lw['text'].strip()
-                                    # 3 இலக்க எண்கள் அல்லது AAA/XXX/P/W குறியீடுகளை மட்டும் எடுத்தல்
+                                    # 3 இலக்க எண்கள், மதிப்பெண் குறியீடுகள் அல்லது தனித்தனி மார்க்குகளை எடுத்தல்
                                     if re.match(r'^\d{3}$|^AAA$|^XXX$|\b[PW]\b', txt) or (txt.isdigit() and len(txt) <= 3):
                                         all_marks_words.append(lw)
                         
-                        # எக்ஸ்-அச்சுப் புள்ளியின் (x0) எல்லைகளுக்குள் மதிப்பெண்களைச் சரியாக அமர்த்துதல்
+                        # --- புதுப்பிக்கப்பட்ட துல்லியமான X-Axis எல்லைகள் (Sourced from TML Layout) ---
                         for mw in all_marks_words:
                             x = mw['x0']
                             txt = mw['text']
                             
-                            if 400 < x < 450: lang = txt          # LANGUAGE 
-                            elif 450 < x < 510: eng = txt         # ENGLISH 
-                            elif 510 < x < 580: mat = txt         # MATHS 
-                            elif 580 < x < 625: sci_theory = txt  # SCIENCE - THE 
-                            elif 625 < x < 655: sci_practical = txt # SCIENCE - PRA 
-                            elif 655 < x < 695: sci_total = txt    # SCIENCE - TOT 
-                            elif 695 < x < 765: soc_science = txt  # SOCIAL SCIENCE 
+                            if 380 <= x < 440: lang = txt          # LANGUAGE (T / 087 போன்ற மதிப்பெண்கள்)
+                            elif 440 <= x < 500: eng = txt         # ENGLISH (094 போன்ற மதிப்பெண்கள்)
+                            elif 500 <= x < 570: mat = txt         # MATHS
+                            elif 570 <= x < 620: sci_theory = txt  # SCIENCE - THE
+                            elif 620 <= x < 655: sci_practical = txt # SCIENCE - PRA
+                            elif 655 <= x < 695: sci_total = txt    # SCIENCE - TOT
+                            elif 695 <= x < 765: soc_science = txt  # SOCIAL SCIENCE
                         
-                        # ஒட்டுமொத்த மொத்தம் மற்றும் முடிவு
+                        # ஒட்டுமொத்த மொத்தம் மற்றும் தேர்ச்சி முடிவு கணக்கீடு
                         total_mark = 0
                         result = "Fail"
                         
-                        # வரிசையில் உள்ள கடைசி டோக்கன்களைக் கொண்டு மொத்தம் மற்றும் முடிவை எடுத்தல்
                         valid_tokens = [w['text'] for w in line_words if w['text'].isdigit() or w['text'] in ['P', 'W']]
                         if len(valid_tokens) >= 2:
                             for tok in reversed(valid_tokens):
@@ -138,7 +134,8 @@ def parse_sslc_pdf(pdf_file):
                         })
                     except Exception as e:
                         pass
-                        
+                i += 1
+                
     return pd.DataFrame(students_list)
 
 # --- 4. முதன்மைப் பக்கம் மற்றும் கோப்புப் பதிவேற்றம் ---
