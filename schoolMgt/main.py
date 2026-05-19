@@ -40,7 +40,9 @@ general_pages = [
     st.Page("pages/3_Classes.py", title="Classes"),
     st.Page("pages/11_1_Teacher Entry.py", title="Teacher Deatils"),
     st.Page("pages/4_Students.py", title="Students Entry"),
-    st.Page("Tml_Pdf/sslc.py", title="Tml Anlysis"),  # சரி
+    st.Page("Tml_Pdf/sslc.py", title="Tml Anlysis"), 
+    st.Page("Tml_Pdf/pdfToexcel.py", title="Tml pdf Anlysis"), 
+    
 ]
   
 
