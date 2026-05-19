@@ -204,4 +204,269 @@ if uploaded_file is not None:
                 disp_name = s['student_name_tam'] if s['student_name_tam'] else s['student_name']
                 
                 st_count["total"]["A"] += 1; st_count["total"][gen] += 1
-                row_raw = {"Rank": "-", "தேர்வு எண்": s['exam_no'], "பெயர்": disp_name, "ப
+                
+                # பிழை சரிசெய்யப்பட்ட தூய்மையான வரிசை (Line 207 Fix)
+                row_raw = {"Rank": "-", "தேர்வு எண்": s['exam_no'], "பெயர்": disp_name, "பிரிவு": s['class_name'], "gender": gen, "இனம்": comm}
+                
+                total_m, fails, wrote_any, fail_subs, student_centums = 0, 0, False, [], []
+
+                for sn in g_list:
+                    tot = s.get(sn)
+                    subject_stats[sn]["total"][gen] += 1
+                    
+                    if tot == "EXEMPTED":
+                        row_raw[sn] = "EXEMPTED"
+                    elif tot == "ABS":
+                        row_raw[sn] = "ABS"
+                        fails += 1; fail_subs.append(sn)
+                        subject_stats[sn]["fail"][gen] += 1
+                    else:
+                        wrote_any = True
+                        tot = int(tot)
+                        
+                        if sn == "SCIENCE":
+                            th = int(s.get("SCIENCE_THE", 0)) if str(s.get("SCIENCE_THE")).isdigit() else 0
+                            pr = int(s.get("SCIENCE_PRA", 0)) if str(s.get("SCIENCE_PRA")).isdigit() else 0
+                            is_subj_pass = (th >= 15 and pr >= 15 and tot >= 35)
+                            tag_str = f"({th}+{pr})"
+                        else:
+                            is_subj_pass = (tot >= 35)
+                            tag_str = ""
+                            
+                        subject_stats[sn]["app"][gen] += 1
+                        subject_stats[sn]["marks"].append(tot)
+                        subject_stats[sn]["student_marks"].append({"name": disp_name, "mark": tot, "exam_no": s['exam_no']})
+                        
+                        if is_subj_pass: 
+                            subject_stats[sn]["pass"][gen] += 1
+                            if tot == 100: student_centums.append(sn)
+                        else: 
+                            subject_stats[sn]["fail"][gen] += 1
+                            fails += 1; fail_subs.append(sn)
+                            
+                        total_m += tot
+                        row_raw[sn] = {"tot": tot, "tag": tag_str, "pass": is_subj_pass}
+
+                if wrote_any:
+                    st_count["present"]["A"] += 1; st_count["present"][gen] += 1
+                    if fails == 0: st_count["pass"]["A"] += 1; st_count["pass"][gen] += 1
+                    else:
+                        st_count["fail"]["A"] += 1; st_count["fail"][gen] += 1
+                        txt = f"{disp_name} - ({', '.join(fail_subs)})"
+                        if fails >= len(g_list): fail_cats["All"].append(txt)
+                        elif fails in [1,2,3,4,5]: fail_cats[fails].append(txt)
+                    if student_centums: centum_list.append(f"🥇 {disp_name} - {', '.join(student_centums)}")
+                else: 
+                    absent_list.append(f"❌ {disp_name}")
+
+                row_raw.update({"மொத்தம்": total_m, "Fails": fails, "தோல்வி விவரம்": f"({', '.join(fail_subs)})" if fail_subs else ""})
+                report_rows.append(row_raw)
+
+            # --- Dashboard Cards UI ---
+            st.markdown('<div class="responsive-subtitle">📊 PDF-லிருந்து பெறப்பட்ட பள்ளி ஒட்டுமொத்தப் புள்ளிவிவரம்</div>', unsafe_allow_html=True)
+            gt_total = f"<span class='gender-sub'>({st_count['total']['F']}F|{st_count['total']['M']}M)</span>" if split_gender else ""
+            gt_present = f"<span class='gender-sub'>({st_count['present']['F']}F|{st_count['present']['M']}M)</span>" if split_gender else ""
+            gt_pass = f"<span class='gender-sub'>({st_count['pass']['F']}F|{st_count['pass']['M']}M)</span>" if split_gender else ""
+            gt_fail = f"<span class='gender-sub'>({st_count['fail']['F']}F|{st_count['fail']['M']}M)</span>" if split_gender else ""
+            pass_percentage = round((st_count['pass']['A'] / st_count['present']['A']) * 100, 1) if st_count['present']['A'] > 0 else 0
+            avg_v = round(sum([r['மொத்தம்'] for r in report_rows if r['மொத்தம்'] > 0]) / st_count['present']['A'], 1) if st_count['present']['A'] > 0 else 0
+
+            html_dashboard = f"""
+                <div class="metric-container">
+                    <div class="metric-card"><div class="stat-label">Total</div><div class="stat-val">{st_count['total']['A']}{gt_total}</div></div>
+                    <div class="metric-card"><div class="stat-label">Present</div><div class="stat-val">{st_count['present']['A']}{gt_present}</div></div>
+                    <div class="metric-card"><div class="stat-label">Pass</div><div class="stat-val" style="color:green">{st_count['pass']['A']}{gt_pass}</div></div>
+                    <div class="metric-card"><div class="stat-label">Fail</div><div class="stat-val" style="color:red">{st_count['fail']['A']}{gt_fail}</div></div>
+                    <div class="metric-card"><div class="stat-label">Pass %</div><div class="stat-val" style="color:green">{pass_percentage}%</div></div>
+                    <div class="metric-card"><div class="stat-label">Avg</div><div class="stat-val" style="color:blue">{avg_v}</div></div>
+                </div>
+            """
+            st.markdown(html_dashboard, unsafe_allow_html=True)
+
+            # --- 📈 பாடவாரி விரிவான பகுப்பாய்வு அட்டவணை ---
+            st.markdown('<div class="responsive-subtitle">📈 பாடவாரி விரிவான பகுப்பாய்வு</div>', unsafe_allow_html=True)
+            sub_df_list = []
+            for sn in g_list:
+                stt = subject_stats[sn]
+                total_applied = stt['total']['F'] + stt['total']['M']
+                total_appeared = stt['app']['F'] + stt['app']['M']
+                total_passed = stt['pass']['F'] + stt['pass']['M']
+                total_failed = stt['fail']['F'] + stt['fail']['M']
+                
+                avg_s = round(sum(stt["marks"])/len(stt["marks"]),1) if stt["marks"] else 0
+                pass_perc = f"{round((total_passed / total_appeared) * 100, 1)}%" if total_appeared > 0 else "0.0%"
+                
+                sub_df_list.append({
+                    "Subject": sn, "Total (Applied)": f"{total_applied}", "Appeared (தேர்வு எழுதியோர்)": f"{total_appeared}",
+                    "Pass": f"{total_passed}", "Fail": f"{total_failed}", "Pass%": pass_perc, 
+                    "Min": min(stt["marks"]) if stt["marks"] else 0, "Max": max(stt["marks"]) if stt["marks"] else 0, "Avg": avg_s
+                })
+            st.table(pd.DataFrame(sub_df_list))
+
+            # --- Ranks sorting ---
+            df_sorted = pd.DataFrame(report_rows).sort_values(by=["Fails", "மொத்தம்"], ascending=[True, False]).reset_index(drop=True)
+            rv = 1
+            for idx, row in df_sorted.iterrows():
+                if int(row["Fails"]) == 0: 
+                    df_sorted.at[idx, "Rank"] = str(rv)
+                    rv += 1
+
+            # --- 🖨 nudge: PDF அறிக்கை உருவாக்கம் ---
+            st.markdown('<div class="responsive-subtitle">🖨️ அச்சிடக்கூடிய அறிக்கை (Printable PDF Report)</div>', unsafe_allow_html=True)
+            
+            sub_table_rows_html = ""
+            for item in sub_df_list:
+                sub_table_rows_html += f"<tr><td>{item['Subject']}</td><td>{item['Total (Applied)']}</td><td>{item['Appeared (தேர்வு எழுதியோர்)']}</td><td>{item['Pass']}</td><td>{item['Fail']}</td><td style='color:green;'>{item['Pass%']}</td><td>{item['Min']}</td><td>{item['Max']}</td><td>{item['Avg']}</td></tr>"
+
+            marks_table_rows_html = ""
+            for _, r in df_sorted.iterrows():
+                m_lang = r['LANGUAGE']['tot'] if isinstance(r['LANGUAGE'], dict) else r['LANGUAGE']
+                m_eng = r['ENGLISH']['tot'] if isinstance(r['ENGLISH'], dict) else r['ENGLISH']
+                m_math = r['MATHEMATICS']['tot'] if isinstance(r['MATHEMATICS'], dict) else r['MATHEMATICS']
+                m_sci = r['SCIENCE']['tot'] if isinstance(r['SCIENCE'], dict) else r['SCIENCE']
+                m_soc = r['SOCIAL SCIENCE']['tot'] if isinstance(r['SOCIAL SCIENCE'], dict) else r['SOCIAL SCIENCE']
+                
+                f_color = "red" if int(r['Fails']) > 0 else "black"
+                rank_val = r['Rank'] if r['Rank'] != "-" else ""
+                s_name = r['பெயர்']
+                s_exam_no = r['தேர்வு எண்']
+                s_total = r['மொத்தம்']
+                s_fails = r['Fails']
+                
+                marks_table_rows_html += f"""
+                <tr style='color: {f_color};'>
+                    <td>{rank_val}</td>
+                    <td>{s_exam_no}</td>
+                    <td style='text-align: left;'>{s_name}</td>
+                    <td>{m_lang}</td>
+                    <td>{m_eng}</td>
+                    <td>{m_math}</td>
+                    <td>{m_sci}</td>
+                    <td>{m_soc}</td>
+                    <td style='font-weight: bold;'>{s_total}</td>
+                    <td>{'PASS' if int(s_fails)==0 else 'FAIL'}</td>
+                </tr>
+                """
+
+            html_content = f"""
+            <html>
+            <head>
+                <style>
+                    @page {{ size: A4; margin: 15mm 12mm; }}
+                    body {{ font-family: 'Helvetica Neue', Helvetica, Arial, sans-serif; color: #1e293b; margin: 0; padding: 0; font-size: 11pt; }}
+                    .header {{ text-align: center; margin-bottom: 25px; border-bottom: 3px double #1e3a8a; padding-bottom: 10px; }}
+                    .school-title {{ font-size: 16pt; font-weight: bold; color: #1e3a8a; text-transform: uppercase; margin: 0; }}
+                    .report-title {{ font-size: 12pt; font-weight: bold; color: #475569; margin: 5px 0 0 0; letter-spacing: 1px; }}
+                    .section-title {{ font-size: 12pt; font-weight: bold; color: #1e3a8a; margin: 20px 0 10px 0; border-left: 4px solid #1e3a8a; padding-left: 8px; }}
+                    .stats-grid {{ display: table; width: 100%; margin-bottom: 20px; border-collapse: separate; border-spacing: 8px; }}
+                    .stats-card {{ display: table-cell; background-color: #f8fafc; border: 1px solid #e2e8f0; padding: 10px; text-align: center; border-radius: 6px; }}
+                    .card-label {{ font-size: 9pt; color: #64748b; font-weight: bold; text-transform: uppercase; }}
+                    .card-val {{ font-size: 16pt; font-weight: bold; margin-top: 3px; }}
+                    table {{ width: 100%; border-collapse: collapse; margin-top: 5px; font-size: 10pt; page-break-inside: auto; }}
+                    tr {{ page-break-inside: avoid; page-break-after: auto; }}
+                    th {{ background-color: #1e3a8a; color: white; font-weight: bold; text-align: center; padding: 6px 4px; border: 1px solid #cbd5e1; font-size: 9.5pt; }}
+                    td {{ border: 1px solid #cbd5e1; padding: 6px 4px; text-align: center; }}
+                    tr:nth-child(even) {{ background-color: #f8fafc; }}
+                    .footer {{ text-align: right; margin-top: 40px; font-size: 11pt; font-weight: bold; padding-right: 20px; }}
+                </style>
+            </head>
+            <body>
+                <div class="header">
+                    <div class="school-title">🏫 {st.session_state.school_name}</div>
+                    <div class="report-title">SSLC TML OVERALL PERFORMANCE ANALYSIS REPORT</div>
+                </div>
+
+                <div class="stats-grid">
+                    <div class="stats-card"><div class="card-label">Total Applied</div><div class="card-val">{st_count['total']['A']}</div></div>
+                    <div class="stats-card"><div class="card-label">Present</div><div class="card-val" style="color:#3b82f6;">{st_count['present']['A']}</div></div>
+                    <div class="stats-card"><div class="card-label">Passed</div><div class="card-val" style="color:green;">{st_count['pass']['A']}</div></div>
+                    <div class="stats-card"><div class="card-label">Failed</div><div class="card-val" style="color:red;">{st_count['fail']['A']}</div></div>
+                    <div class="stats-card"><div class="card-label">Pass %</div><div class="card-val" style="color:green;">{pass_percentage}%</div></div>
+                    <div class="stats-card"><div class="card-label">School Avg</div><div class="card-val" style="color:blue;">{avg_v}</div></div>
+                </div>
+
+                <div class="section-title">1. Subject-wise Performance Summary</div>
+                <table>
+                    <thead>
+                        <tr>
+                            <th>Subject Name</th>
+                            <th>Applied</th>
+                            <th>Appeared</th>
+                            <th>Passed</th>
+                            <th>Failed</th>
+                            <th>Pass %</th>
+                            <th>Min</th>
+                            <th>Max</th>
+                            <th>Avg</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {sub_table_rows_html}
+                    </tbody>
+                </table>
+
+                <div style="page-break-before: always;"></div>
+                <div class="header">
+                    <div class="school-title">🏫 {st.session_state.school_name}</div>
+                    <div class="report-title">COMPLETE STUDENT MARKSHEET REGISTER</div>
+                </div>
+                
+                <div class="section-title">2. Student-wise Consolidated Mark List</div>
+                <table>
+                    <thead>
+                        <tr>
+                            <th style="width: 5%;">Rank</th>
+                            <th style="width: 12%;">Roll No</th>
+                            <th style="text-align: left; width: 28%;">Student Name</th>
+                            <th style="width: 8%;">Lang</th>
+                            <th style="width: 8%;">Eng</th>
+                            <th style="width: 8%;">Math</th>
+                            <th style="width: 8%;">Sci</th>
+                            <th style="width: 8%;">Soc</th>
+                            <th style="width: 8%;">Total</th>
+                            <th style="width: 10%;">Result</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {marks_table_rows_html}
+                    </tbody>
+                </table>
+
+                <div class="footer">
+                    <br><br>
+                    <span>Headmaster / Principal Signature</span>
+                </div>
+            </body>
+            </html>
+            """
+            
+            try:
+                pdf_output_bytes = io.BytesIO()
+                HTML(string=html_content).write_pdf(pdf_output_bytes)
+                pdf_data = pdf_output_bytes.getvalue()
+                
+                st.download_button(
+                    label="🖨️ ஒட்டுமொத்த பகுப்பாய்வு அறிக்கையை PDF-ஆக பதிவிறக்கு (அச்சிடத் தயார் நிலை)",
+                    data=pdf_data,
+                    file_name=f"Official_Analysis_Report_{st.session_state.school_name.replace(' ', '_')}.pdf",
+                    mime="application/pdf",
+                    use_container_width=True
+                )
+                st.info("💡 இந்த PDF கோப்பைத் தரவிறக்கி நீங்கள் நேரடியாக பிரிண்டரில் அச்சிட்டுக் கொள்ளலாம் (A4 தாளிற்கு உகந்த வடிவம்).")
+            except Exception as e:
+                st.error(f"PDF அறிக்கை உருவாக்குவதில் பிழை: {e}")
+
+            # --- 📋 UI-இல் முழுமையான மதிப்பெண் பட்டியல் ---
+            st.markdown('<div class="responsive-subtitle">📋 முழுமையான மதிப்பெண் பட்டியல் (திரையில் பார்க்க)</div>', unsafe_allow_html=True)
+            show_det = st.toggle("🔍 மதிப்பீட்டு விவரங்களைக் காட்டு", value=True)
+            
+            final_disp = []
+            for _, r in df_sorted.iterrows():
+                d_row = {"Rank": r["Rank"], "தேர்வு எண்": r["தேர்வு எண்"], "பெயர்": r['பெயர்'], "இனம்": r['இனம்'], "மொத்தம்": r['மொத்தம்'], "Fails": r['Fails'], "தோல்வி விவரம்": r['தோல்வி விவரம்']}
+                for sn in g_list:
+                    v = r.get(sn)
+                    if isinstance(v, dict): d_row[sn] = f"{v['tot']}\n{v['tag']}" if show_det and v['tag'] else v['tot']
+                    else: d_row[sn] = v
+                final_disp.append(d_row)
+
+            st.dataframe(pd.DataFrame(final_disp).style.map(lambda v: 'color: red' if 'ABS' in str(v) or (isinstance(v, (int,float)) and 0<v<35) else ('color: blue' if 'EXEMPTED' in str(v) else '')), use_container_width=True, hide_index=True)
