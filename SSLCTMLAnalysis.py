@@ -37,7 +37,7 @@ def clean_txt(text):
     return " ".join(cleaned.split()).strip()
 
 # --- 3. PDF கோப்பைப் பதிவேற்றி தரவைப் பிரிக்கும் பகுதி ---
-st.markdown('<h3 style="color: #1E3A8A;">📊 SSLC TML PDF - நேரடி பகுப்பாய்வு தளம்</h3>', unsafe_allow_html=True)
+st.markdown('<h3 style="color: #1E3A8A;">📊 SSLC TML PDF - நேரடி பகுப்பாய்வு மற்றும் மாற்றி</h3>', unsafe_allow_html=True)
 uploaded_file = st.file_uploader("பகுப்பாய்வு செய்ய வேண்டிய தேர்வுத் துறை TML PDF கோப்பைத் தேர்ந்தெடுக்கவும்...", type=["pdf"])
 
 if uploaded_file is not None:
@@ -80,7 +80,6 @@ if uploaded_file is not None:
                             student_name_eng = " ".join(name_parts)
                             marks_tokens = tokens[tokens.index(dob)+1:] if dob in tokens else []
                             
-                            # பிழையைச் சரிசெய்ய மேம்படுத்தப்பட்ட பாதுகாப்பானget_m பங்க்ஷன்
                             def get_m(idx, default=0):
                                 if idx < len(marks_tokens):
                                     val = str(marks_tokens[idx]).strip()
@@ -101,7 +100,6 @@ if uploaded_file is not None:
                             sci_tot = get_m(7)
                             soc_mark = get_m(8)
                             
-                            # மொத்த மதிப்பெண் எடுத்தல்
                             total_val = marks_tokens[-2] if len(marks_tokens) > 2 else "0"
                             total_mark = int(total_val) if str(total_val).isdigit() else 0
                             result = marks_tokens[-1] if len(marks_tokens) > 1 else "F"
@@ -163,7 +161,6 @@ if uploaded_file is not None:
                     subject_stats[sn]["app"][gen] += 1; subject_stats[sn]["fail"][gen] += 1
                 else:
                     wrote_any = True
-                    # மார்க் ஒப்பீடு இப்போது பாதுகாப்பானது (அனைத்தும் எண்கள்)
                     if sn == "SCIENCE":
                         is_subj_pass = (int(s.get("SCIENCE_THE", 0)) >= 15 and int(s.get("SCIENCE_PRA", 0)) >= 15 and int(tot) >= 35)
                         tag_str = f"({s.get('SCIENCE_THE',0)}+{s.get('SCIENCE_PRA',0)})"
@@ -200,6 +197,33 @@ if uploaded_file is not None:
 
             row_raw.update({"மொத்தம்": total_m, "Fails": fails, "தோல்வி விவரம்": f"({', '.join(fail_subs)})" if fail_subs else ""})
             report_rows.append(row_raw)
+
+        # --- 5. பழையபடி விரிவான Excel கோப்பைத் தயார் செய்து பதிவிறக்கும் வசதி ---
+        st.markdown('<div class="responsive-subtitle">📥 எக்ஸ்ெல் கோப்பு பதிவிறக்கம் (Download Excel)</div>', unsafe_allow_html=True)
+        
+        flat_excel_rows = []
+        for s in all_students:
+            flat_excel_rows.append({
+                "Roll No": s["exam_no"], "TMR No": s["TMR No"], 
+                "Student Name (ENG)": s["student_name"], "Student Name (TAM)": s["student_name_tam"],
+                "Sex": s["gender"], "DOB": s["dob"], "Language": s["LANGUAGE"], "English": s["ENGLISH"],
+                "Maths": s["MATHEMATICS"], "Science THE": s["SCIENCE_THE"], "Science PRA": s["SCIENCE_PRA"],
+                "Science TOT": s["SCIENCE"], "Social Science": s["SOCIAL SCIENCE"], "Total": s["மொத்தம்"], "Result": s["Result"]
+            })
+            
+        df_download = pd.DataFrame(flat_excel_rows)
+        excel_buffer = io.BytesIO()
+        with pd.ExcelWriter(excel_buffer, engine='openpyxl') as writer:
+            df_download.to_excel(writer, sheet_name="SSLC TML Marks", index=False)
+        processed_data = excel_buffer.getvalue()
+        
+        st.download_button(
+            label="🟢 சுத்தமான எக்ஸ்ெல் கோப்பைப் பதிவிறக்கம் செய்ய இங்கே கிளிக் செய்யவும் (Download Processed Excel)",
+            data=processed_data,
+            file_name=f"Formatted_{uploaded_file.name.rsplit('.', 1)[0]}.xlsx",
+            mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+            use_container_width=True
+        )
 
         # --- Dashboard UI ---
         st.markdown(f'<div class="responsive-subtitle">📊 PDF-லிருந்து பெறப்பட்ட பள்ளி ஒட்டுமொத்தப் புள்ளிவிவரம்</div>', unsafe_allow_html=True)
@@ -263,11 +287,14 @@ if uploaded_file is not None:
         show_det = st.toggle("🔍 மதிப்பீட்டு விவரங்களைக் காட்டு", value=True)
         df_sorted = pd.DataFrame(report_rows).sort_values(by=["Fails", "மொத்தம்"], ascending=[True, False]).reset_index(drop=True)
         
+        # TypeError பிழையைச் சரி செய்ய Rank காலமை object வகையாகத் தெளிவுபடுத்துகிறோம்
         df_sorted["Rank"] = "-"
+        df_sorted["Rank"] = df_sorted["Rank"].astype(object)
+        
         rv = 1
         for idx, row in df_sorted.iterrows():
             if int(row["Fails"]) == 0: 
-                df_sorted.at[idx, "Rank"] = rv
+                df_sorted.at[idx, "Rank"] = str(rv) # என்ஜின் சிக்கலைத் தவிர்க்க String ஆக மாற்றப்படுகிறது
                 rv += 1
         
         final_disp = []
