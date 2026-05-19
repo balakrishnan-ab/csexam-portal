@@ -7,13 +7,6 @@ import re
 # --- 1. பக்க அமைப்பு ---
 st.set_page_config(page_title="Class-wise Overall Analysis from TML PDF", layout="wide")
 
-# utils கோப்பு இருந்தால் பயன்படுத்தும், இல்லையெனில் பிழை வராமல் தவிர்க்கும் அமைப்பு
-try:
-    from utils import add_school_header
-    add_school_header()
-except ModuleNotFoundError:
-    st.markdown("<h2 style='text-align: center; color: #1E3A8A;'>அரசு மேல்நிலைப்பள்ளி - தேவனாங்குறிச்சி</h2>", unsafe_allow_html=True)
-
 # --- 2. CSS ஸ்டைலிங் ---
 st.markdown("""
     <style>
@@ -36,13 +29,15 @@ def clean_txt(text):
     cleaned = re.sub(r'\(cid:\d+\)', '', text)
     return " ".join(cleaned.split()).strip()
 
-# --- 3. Session State மேனேஜ்மென்ட் (தரவுகள் அழியாமல் இருக்க) ---
+# --- 3. Session State மேனேஜ்மென்ட் ---
 if "parsed_students" not in st.session_state:
     st.session_state.parsed_students = None
 if "excel_data" not in st.session_state:
     st.session_state.excel_data = None
 if "pdf_file_name" not in st.session_state:
     st.session_state.pdf_file_name = ""
+if "school_name" not in st.session_state:
+    st.session_state.school_name = "அரசு மேல்நிலைப்பள்ளி"
 
 # --- 4. PDF கோப்பைப் பதிவேற்றும் பகுதி ---
 st.markdown('<h3 style="color: #1E3A8A;">📊 SSLC TML PDF - நேரடி பகுப்பாய்வு மற்றும் மாற்றி</h3>', unsafe_allow_html=True)
@@ -54,23 +49,24 @@ if uploaded_file is not None:
         st.session_state.parsed_students = None
         st.session_state.excel_data = None
         st.session_state.pdf_file_name = uploaded_file.name
+        st.session_state.school_name = "அரசு மேல்நிலைப்பள்ளி"
 
     st.success("✅ TML PDF வெற்றிகரமாகப் பதிவேற்றப்பட்டது!")
     split_gender = st.toggle("🔍 ஆண் பெண் பிரித்து காட்டு", value=True)
     
-    # --- இரண்டு தனித்தனி பொத்தான்களுக்கான லேஅவுட் (Columns) ---
+    # பொத்தான்களுக்கான லேஅவுட்
     col_btn1, col_btn2 = st.columns(2)
-    
     with col_btn1:
         process_analysis = st.button("📊 பள்ளி பகுப்பாய்வை மட்டும் காட்டு", type="primary", use_container_width=True)
-        
     with col_btn2:
         process_excel = st.button("📥 எக்ஸ்ெல் கோப்பை மட்டும் உருவாக்கு", type="secondary", use_container_width=True)
 
-    # --- பிரதான PDF Parsing லாஜிக் (ஏதேனும் ஒரு பொத்தான் அழுத்தப்பட்டால் மட்டும் இயங்கும்) ---
+    # --- பிரதான PDF Parsing லாஜிக் ---
     if (process_analysis or process_excel) and st.session_state.parsed_students is None:
         students_list = []
-        with st.spinner("PDF கோப்பு அலசப்படுகிறது... தயவுசெய்து காத்திருக்கவும்..."):
+        detected_school = ""
+        
+        with st.spinner("PDF கோப்பில் இருந்து பள்ளி பெயர், மாணவர் விவரங்கள் எடுக்கப்படுகின்றன..."):
             try:
                 pdf_bytes = io.BytesIO(uploaded_file.read())
                 current_student = None
@@ -83,6 +79,13 @@ if uploaded_file is not None:
                         
                         for line in lines:
                             line_str = line.strip()
+                            
+                            # பள்ளி பெயரைக் கண்டறிதல்
+                            if not detected_school and ("GOVT HR" in line_str or "SCHL" in line_str or "SCHOOL" in line_str):
+                                schl_match = re.search(r'(GOVT\s+HR\s+SEC\s+SCHOOL\s+.*)', line_str)
+                                if schl_match:
+                                    detected_school = clean_txt(schl_match.group(1))
+                                    st.session_state.school_name = detected_school
                             
                             # 1. முதல் வரி: Roll No, TMR No, English Name, Marks
                             first_line_match = re.match(r'^(\d{7})\s+([A-Z0-9]{8})\s+(.+)', line_str)
@@ -105,10 +108,11 @@ if uploaded_file is not None:
                                 student_name_eng = " ".join(name_parts)
                                 marks_tokens = tokens[tokens.index(dob)+1:] if dob in tokens else []
                                 
+                                # மேம்படுத்தப்பட்ட get_m - 'XXX' குறியீட்டையும் 0 என பாதுகாப்பாக மாற்றும்
                                 def get_m(idx, default=0):
                                     if idx < len(marks_tokens):
-                                        val = str(marks_tokens[idx]).strip()
-                                        if val in ['AAA', 'ABS', '-', '', '–', 'EX']: return 0
+                                        val = str(marks_tokens[idx]).strip().upper()
+                                        if val in ['AAA', 'ABS', '-', '', '–', 'EX', 'XXX']: return 0
                                         if val.isdigit(): return int(val)
                                         num_check = re.findall(r'\d+', val)
                                         if num_check: return int(num_check[0])
@@ -153,18 +157,26 @@ if uploaded_file is not None:
             except Exception as e:
                 st.error(f"❌ PDF கோப்பை பகுப்பதில் பிழை: {e}")
 
-    # --- 5. எக்ஸ்ெல் கோப்பு உருவாக்கம் மற்றும் டவுன்லோடு பகுதி ---
+    # --- பிரதான பள்ளிப் பெயர் தலைப்பு ரெண்டரிங் ---
+    st.markdown(f"<h2 style='text-align: center; color: #1E3A8A; font-weight: bold;'>🏫 {st.session_state.school_name}</h2>", unsafe_allow_html=True)
+
+    # --- 5. Excel கோப்பு பதிவிறக்கம் பகுதி ---
     if process_excel or st.session_state.excel_data is not None:
         if st.session_state.parsed_students:
             if st.session_state.excel_data is None:
                 flat_excel_rows = []
                 for s in st.session_state.parsed_students:
+                    # 0 மார்க் அல்லது XXX இருந்தால் எக்ஸ்ெல்லிலும் ABS என மாற்றுதல்
+                    def check_abs(val): return "ABS" if val == 0 else val
+                    
                     flat_excel_rows.append({
                         "Roll No": s.get("exam_no", ""), "TMR No": s.get("TMR No", ""), 
                         "Student Name (ENG)": s.get("student_name", ""), "Student Name (TAM)": s.get("student_name_tam", ""),
-                        "Sex": s.get("gender", ""), "DOB": s.get("dob", ""), "Language": s.get("LANGUAGE", 0), "English": s.get("ENGLISH", 0),
-                        "Maths": s.get("MATHEMATICS", 0), "Science THE": s.get("SCIENCE_THE", 0), "Science PRA": s.get("SCIENCE_PRA", 0),
-                        "Science TOT": s.get("SCIENCE", 0), "Social Science": s.get("SOCIAL SCIENCE", 0), "Total": s.get("மொத்தம்", 0), "Result": s.get("Result", "F")
+                        "Sex": s.get("gender", ""), "DOB": s.get("dob", ""), 
+                        "Language": check_abs(s.get("LANGUAGE", 0)), "English": check_abs(s.get("ENGLISH", 0)),
+                        "Maths": check_abs(s.get("MATHEMATICS", 0)), "Science THE": s.get("SCIENCE_THE", 0), "Science PRA": s.get("SCIENCE_PRA", 0),
+                        "Science TOT": check_abs(s.get("SCIENCE", 0)), "Social Science": check_abs(s.get("SOCIAL SCIENCE", 0)), 
+                        "Total": s.get("மொத்தம்", 0), "Result": "AAA" if s.get("Result") == "A" or s.get("மொத்தம்") == 0 else s.get("Result", "F")
                     })
                 df_download = pd.DataFrame(flat_excel_rows)
                 excel_buffer = io.BytesIO()
@@ -205,7 +217,8 @@ if uploaded_file is not None:
                     tot = s.get(sn, 0)
                     subject_stats[sn]["total"][gen] += 1
                     
-                    if tot == 0 and s['Result'] == 'A':
+                    # 0 மார்க், XXX, அல்லது 'A' இருந்தால் ஆப்சென்ட் (ABS) லாஜிக்
+                    if tot == 0 or s['Result'] == 'A' or s['Result'] == 'X':
                         row_raw[sn] = "ABS"; fails += 1; fail_subs.append(sn)
                         subject_stats[sn]["app"][gen] += 1; subject_stats[sn]["fail"][gen] += 1
                     else:
