@@ -32,10 +32,9 @@ st.markdown("""
     }
     
     /* அச்சிடக்கூடிய தாள்களுக்கான அட்டவணை வடிவமைப்பு */
-    .print-table { width: 100%; border-collapse: collapse; font-family: Arial, sans-serif; font-size: 10pt; margin-top: 15px; page-break-inside: auto; }
-    .print-table tr { page-break-inside: avoid; page-break-after: auto; }
-    .print-table th { background-color: #1e3a8a !important; color: white !important; -webkit-print-color-adjust: exact; print-color-adjust: exact; padding: 7px 4px; border: 1px solid #cbd5e1; font-size: 9.5pt; }
-    .print-table td { border: 1px solid #cbd5e1; padding: 6px 4px; text-align: center; font-weight: bold; }
+    .print-table { width: 100%; border-collapse: collapse; font-family: Arial, sans-serif; font-size: 10pt; margin-top: 15px; }
+    .print-table th { background-color: #1e3a8a !important; color: white !important; padding: 8px 5px; border: 1px solid #cbd5e1; font-size: 9.5pt; text-align: center; }
+    .print-table td { border: 1px solid #cbd5e1; padding: 7px 5px; text-align: center; font-weight: bold; color: #1e293b; }
     .print-table tr:nth-child(even) { background-color: #f8fafc; }
     .print-header { text-align: center; padding-bottom: 10px; border-bottom: 3px double #1e3a8a; margin-bottom: 20px; }
     </style>
@@ -279,24 +278,21 @@ if uploaded_file is not None:
 
             # --- Dashboard Cards UI ---
             st.markdown('<div class="responsive-subtitle">📊 PDF-லிருந்து பெறப்பட்ட பள்ளி ஒட்டுமொத்தப் புள்ளிவிவரம்</div>', unsafe_allow_html=True)
-            gt_total = f"<span class='gender-sub'>({st_count['total']['F']}F|{st_count['total']['M']}M)</span>" if split_gender else ""
-            gt_present = f"<span class='gender-sub'>({st_count['present']['F']}F|{st_count['present']['M']}M)</span>" if split_gender else ""
-            gt_pass = f"<span class='gender-sub'>({st_count['pass']['F']}F|{st_count['pass']['M']}M)</span>" if split_gender else ""
-            gt_fail = f"<span class='gender-sub'>({st_count['fail']['F']}F|{st_count['fail']['M']}M)</span>" if split_gender else ""
+            gt_total = f"({st_count['total']['F']}F|{st_count['total']['M']}M)" if split_gender else ""
+            gt_present = f"({st_count['present']['F']}F|{st_count['present']['M']}M)" if split_gender else ""
+            gt_pass = f"({st_count['pass']['F']}F|{st_count['pass']['M']}M)" if split_gender else ""
+            gt_fail = f"({st_count['fail']['F']}F|{st_count['fail']['M']}M)" if split_gender else ""
             pass_percentage = round((st_count['pass']['A'] / st_count['present']['A']) * 100, 1) if st_count['present']['A'] > 0 else 0
             avg_v = round(sum([r['மொத்தம்'] for r in report_rows if r['மொத்தம்'] > 0]) / st_count['present']['A'], 1) if st_count['present']['A'] > 0 else 0
 
-            html_dashboard = f"""
-                <div class="metric-container">
-                    <div class="metric-card"><div class="stat-label">Total</div><div class="stat-val">{st_count['total']['A']}{gt_total}</div></div>
-                    <div class="metric-card"><div class="stat-label">Present</div><div class="stat-val">{st_count['present']['A']}{gt_present}</div></div>
-                    <div class="metric-card"><div class="stat-label">Pass</div><div class="stat-val" style="color:green">{st_count['pass']['A']}{gt_pass}</div></div>
-                    <div class="metric-card"><div class="stat-label">Fail</div><div class="stat-val" style="color:red">{st_count['fail']['A']}{gt_fail}</div></div>
-                    <div class="metric-card"><div class="stat-label">Pass %</div><div class="stat-val" style="color:green">{pass_percentage}%</div></div>
-                    <div class="metric-card"><div class="stat-label">Avg</div><div class="stat-val" style="color:blue">{avg_v}</div></div>
-                </div>
-            """
-            st.markdown(html_dashboard, unsafe_allow_html=True)
+            # ஸ்ட்ரீம்லிட்டின் சொந்த மெட்ரிக் கொண்டு டேஷ்போர்டு கார்டுகள் அமைத்தல்
+            md_col1, md_col2, md_col3, md_col4, md_col5, md_col6 = st.columns(6)
+            md_col1.metric("Total Applied", f"{st_count['total']['A']}", gt_total)
+            md_col2.metric("Present", f"{st_count['present']['A']}", gt_present)
+            md_col3.metric("Passed", f"{st_count['pass']['A']}", gt_pass)
+            md_col4.metric("Failed", f"{st_count['fail']['A']}", gt_fail)
+            md_col5.metric("Pass %", f"{pass_percentage}%")
+            md_col6.metric("School Avg", f"{avg_v}")
 
             # --- 📈 பாடவாரி விரிவான பகுப்பாய்வு அட்டவணை ---
             st.markdown('<div class="responsive-subtitle">📈 பாடவாரி விரிவான பகுப்பாய்வு</div>', unsafe_allow_html=True)
@@ -326,9 +322,9 @@ if uploaded_file is not None:
                     df_sorted.at[idx, "Rank"] = str(rv)
                     rv += 1
 
-            # --- 🖨️ புதிய அம்சம்: அச்சிடுவதற்கான நேர்த்தி வடிவமைப்பு (Print Template) ---
-            st.markdown('<div class="responsive-subtitle">🖨️ அச்சிடக்கூடிய அறிக்கை வடிவம் (Printable Report)</div>', unsafe_allow_html=True)
-            st.info("💡 குறிப்பு: இந்த ரிப்போர்ட்டை அப்படியே பிரிண்ட் செய்ய உங்கள் விசைப்பலகையில் (Keyboard) **Ctrl + P** அழுத்தவும். பக்கத்தில் உள்ள தேவையற்ற பொத்தான்கள் தானாகவே மறைந்து, அறிக்கை மட்டும் A4 தாளில் அழகாக அச்சிடப்படும்.")
+            # --- 🖨️ அச்சிடக்கூடிய அறிக்கை வடிவம் (முழுமையான HTML பிக்ஸ்) ---
+            st.markdown('<div class="responsive-subtitle">🖨️ அச்சிடக்கூடிய அறிக்கை வடிவம் (Printable Report Layout)</div>', unsafe_allow_html=True)
+            st.info("💡 **பிரிண்ட் செய்யும் முறை:** இந்த ரிப்போர்ட்டை அப்படியே காகிதத்தில் அச்சிட அல்லது PDF ஆகச் சேமிக்க உங்கள் விசைப்பலகையில் (Keyboard) **Ctrl + P** அழுத்தவும். சைட் பார் மெனு மற்றும் தேவையற்ற பொத்தான்கள் தானாகவே மறைந்துவிடும்.")
             
             sub_table_rows_html = ""
             for item in sub_df_list:
@@ -349,23 +345,11 @@ if uploaded_file is not None:
                 s_total = r['மொத்தம்']
                 s_fails = r['Fails']
                 
-                marks_table_rows_html += f"""
-                <tr style='color: {f_color};'>
-                    <td>{rank_val}</td>
-                    <td>{s_exam_no}</td>
-                    <td style='text-align: left; padding-left:10px;'>{s_name}</td>
-                    <td>{m_lang}</td>
-                    <td>{m_eng}</td>
-                    <td>{m_math}</td>
-                    <td>{m_sci}</td>
-                    <td>{m_soc}</td>
-                    <td style='font-weight: bold;'>{s_total}</td>
-                    <td>{'PASS' if int(s_fails)==0 else 'FAIL'}</td>
-                </tr>
-                """
+                marks_table_rows_html += f"<tr><td>{rank_val}</td><td>{s_exam_no}</td><td style='text-align: left; padding-left:10px;'>{s_name}</td><td>{m_lang}</td><td>{m_eng}</td><td>{m_math}</td><td>{m_sci}</td><td>{m_soc}</td><td style='font-weight: bold;'>{s_total}</td><td>{'PASS' if int(s_fails)==0 else 'FAIL'}</td></tr>"
 
+            # HTML குறியீடு எங்கும் உடையாமல் இருக்க முழுமையாக வெளியே ஸ்ட்ரிங் இணைக்கப்படுகிறது
             full_report_html = f"""
-            <div style="background-color: white; padding: 20px; border: 1px solid #cbd5e1; border-radius: 8px;">
+            <div style="background-color: white; padding: 25px; border: 1px solid #cbd5e1; border-radius: 8px; color: #1e293b;">
                 <div class="print-header">
                     <div class="school-title">🏫 {st.session_state.school_name}</div>
                     <div style="font-size:13pt; font-weight:bold; color:#475569; margin-top:5px;">SSLC TML PERFORMANCE ANALYSIS REPORT</div>
@@ -396,7 +380,7 @@ if uploaded_file is not None:
                         <tr>
                             <th>Rank</th>
                             <th>Roll No</th>
-                            <th style="text-align:left; padding-left:10px;">Student Name</th>
+                            <th style="text-align: left; padding-left:10px;">Student Name</th>
                             <th>Lang</th>
                             <th>Eng</th>
                             <th>Math</th>
@@ -413,11 +397,12 @@ if uploaded_file is not None:
                 <div style="text-align:right; margin-top:60px; font-weight:bold; font-size:11pt; padding-right:15px;">Headmaster / Principal Signature</div>
             </div>
             """
-            # திரையில் அச்சிடக்கூடிய அறிக்கையைக் காட்டுதல்
+            
+            # மார்க் டவுன் மூலம் HTML-ஐ அப்படியே போர்ட்டலில் ரெண்டர் செய்தல்
             st.markdown(full_report_html, unsafe_allow_html=True)
             st.divider()
 
-            # --- 📋 UI-இல் முழுமையான மதிப்பெண் பட்டியல் (மாறி திரையில் பார்க்க) ---
+            # --- 📋 UI-இல் முழுமையான மதிப்பெண் பட்டியல் (திரையில் பார்க்க மட்டும்) ---
             st.markdown('<div class="responsive-subtitle">📋 முழுமையான மதிப்பெண் பட்டியல் (Interactive Screen View)</div>', unsafe_allow_html=True)
             show_det = st.toggle("🔍 மதிப்பீட்டு விவரங்களைக் காட்டு", value=True)
             
