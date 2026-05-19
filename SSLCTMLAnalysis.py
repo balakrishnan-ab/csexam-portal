@@ -293,7 +293,7 @@ if uploaded_file is not None:
             md_col5.metric("Pass %", f"{pass_percentage}%")
             md_col6.metric("School Avg", f"{avg_v}")
 
-            # --- 📈 பாடவாரி விரிவான பகுப்பாய்வு அட்டவணை ---
+            # --- 📈 பாடவாரி விரிவான பகுப்பாய்வு ---
             st.markdown('<div class="responsive-subtitle">📈 பாடவாரி விரிவான பகுப்பாய்வு</div>', unsafe_allow_html=True)
             sub_df_list = []
             for sn in g_list:
@@ -313,8 +313,108 @@ if uploaded_file is not None:
                 })
             st.table(pd.DataFrame(sub_df_list))
 
-            # --- Ranks sorting ---
+            # --- Ranks sorting (பிழை பிக்ஸ் செய்யப்பட்ட பகுதி) ---
             df_sorted = pd.DataFrame(report_rows).sort_values(by=["Fails", "மொத்தம்"], ascending=[True, False]).reset_index(drop=True)
+            df_sorted["Rank"] = "-"
+            df_sorted["Rank"] = df_sorted["Rank"].astype(object)
+            
             rv = 1
             for idx, row in df_sorted.iterrows():
-                if int(row["Fails"]) == 0:
+                # இண்டென்டேஷன் பிழை இங்கே முழுமையாகச் சீரமைக்கப்பட்டுள்ளது
+                if int(row["Fails"]) == 0: 
+                    df_sorted.at[idx, "Rank"] = str(rv)
+                    rv += 1
+
+            # --- 🖨️ அச்சிடக்கூடிய அறிக்கை வடிவம் ---
+            st.markdown('<div class="responsive-subtitle">🖨️ அச்சிடக்கூடிய அறிக்கை வடிவம் (Printable Report Layout)</div>', unsafe_allow_html=True)
+            st.info("💡 **பிரிண்ட் செய்யும் முறை:** இந்த ரிப்போர்ட்டை அப்படியே அச்சிட உங்கள் விசைப்பலகையில் **Ctrl + P** அழுத்தவும். சைட் பார் மற்றும் தேவையற்ற பொத்தான்கள் தானாகவே மறைந்துவிடும்.")
+            
+            sub_table_rows_html = ""
+            for item in sub_df_list:
+                sub_table_rows_html += f"<tr><td>{item['Subject']}</td><td>{item['Total (Applied)']}</td><td>{item['Appeared (தேர்வு எழுதியோர்)']}</td><td>{item['Pass']}</td><td>{item['Fail']}</td><td style='color:green;'>{item['Pass%']}</td><td>{item['Min']}</td><td>{item['Max']}</td><td>{item['Avg']}</td></tr>"
+
+            marks_table_rows_html = ""
+            for _, r in df_sorted.iterrows():
+                m_lang = r['LANGUAGE']['tot'] if isinstance(r['LANGUAGE'], dict) else r['LANGUAGE']
+                m_eng = r['ENGLISH']['tot'] if isinstance(r['ENGLISH'], dict) else r['ENGLISH']
+                m_math = r['MATHEMATICS']['tot'] if isinstance(r['MATHEMATICS'], dict) else r['MATHEMATICS']
+                m_sci = r['SCIENCE']['tot'] if isinstance(r['SCIENCE'], dict) else r['SCIENCE']
+                m_soc = r['SOCIAL SCIENCE']['tot'] if isinstance(r['SOCIAL SCIENCE'], dict) else r['SOCIAL SCIENCE']
+                
+                f_color = "red" if int(r['Fails']) > 0 else "black"
+                rank_val = r['Rank'] if r['Rank'] != "-" else ""
+                s_name = r['பெயர்']
+                s_exam_no = r['தேர்வு எண்']
+                s_total = r['மொத்தம்']
+                s_fails = r['Fails']
+                
+                marks_table_rows_html += f"<tr style='color: {f_color};'><td>{rank_val}</td><td>{s_exam_no}</td><td style='text-align: left; padding-left:10px;'>{s_name}</td><td>{m_lang}</td><td>{m_eng}</td><td>{m_math}</td><td>{m_sci}</td><td>{m_soc}</td><td style='font-weight: bold;'>{s_total}</td><td>{'PASS' if int(s_fails)==0 else 'FAIL'}</td></tr>"
+
+            full_report_html = f"""
+            <div style="background-color: white; padding: 25px; border: 1px solid #cbd5e1; border-radius: 8px; color: #1e293b;">
+                <div class="print-header">
+                    <div class="school-title">🏫 {st.session_state.school_name}</div>
+                    <div style="font-size:13pt; font-weight:bold; color:#475569; margin-top:5px;">SSLC TML PERFORMANCE ANALYSIS REPORT</div>
+                </div>
+                <table class="print-table">
+                    <thead>
+                        <tr>
+                            <th>Subject Name</th>
+                            <th>Applied</th>
+                            <th>Appeared</th>
+                            <th>Passed</th>
+                            <th>Failed</th>
+                            <th>Pass %</th>
+                            <th>Min</th>
+                            <th>Max</th>
+                            <th>Avg</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {sub_table_rows_html}
+                    </tbody>
+                </table>
+                <h4 style="margin-top:35px; color:#1e3a8a; border-bottom: 2px solid #e2e8f0; padding-bottom:5px;">Consolidated Student Mark Register</h4>
+                <table class="print-table">
+                    <thead>
+                        <tr>
+                            <th>Rank</th>
+                            <th>Roll No</th>
+                            <th style="text-align: left; padding-left:10px;">Student Name</th>
+                            <th>Lang</th>
+                            <th>Eng</th>
+                            <th>Math</th>
+                            <th>Sci</th>
+                            <th>Soc</th>
+                            <th>Total</th>
+                            <th>Result</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {marks_table_rows_html}
+                    </tbody>
+                </table>
+                <div style="text-align:right; margin-top:60px; font-weight:bold; font-size:11pt; padding-right:15px;">Headmaster / Principal Signature</div>
+            </div>
+            """
+            st.markdown(full_report_html, unsafe_allow_html=True)
+            st.divider()
+
+            # --- 📋 UI-இல் முழுமையான மதிப்பெண் பட்டியல் (திரையில் பார்க்க மட்டும்) ---
+            st.markdown('<div class="responsive-subtitle">📋 முழுமையான மதிப்பெண் பட்டியல் (Interactive Screen View)</div>', unsafe_allow_html=True)
+            show_det = st.toggle("🔍 மதிப்பீட்டு விவரங்களைக் காட்டு", value=True)
+            
+            final_disp = []
+            for _, r in df_sorted.iterrows():
+                d_row = {"Rank": r["Rank"], "தேர்வு எண்": r["தேர்வு எண்"], "பெயர்": r['பெயர்'], "இனம்": r['இனம்'], "மொத்தம்": r['மொத்தம்'], "Fails": r['Fails'], "தோல்வி விவரம்": r['தோல்வி விவரம்']}
+                for sn in g_list:
+                    v = r.get(sn)
+                    if isinstance(v, dict): d_row[sn] = f"{v['tot']}\n{v['tag']}" if show_det and v['tag'] else v['tot']
+                    else: d_row[sn] = v
+                final_disp.append(d_row)
+
+            st.dataframe(pd.DataFrame(final_disp).style.map(lambda v: 'color: red' if 'ABS' in str(v) or (isinstance(v, (int,float)) and 0<v<35) else ('color: blue' if 'EXEMPTED' in str(v) else '')), use_container_width=True, hide_index=True)
+        else:
+            st.warning("PDF-லிருந்து முறையான தரவுகள் கண்டறியப்படவில்லை.")
+else:
+    st.info("💡 பகுப்பாய்வைத் தொடங்க முதலில் ஒரு TML PDF கோப்பைப் பதிவேற்றவும்.")
