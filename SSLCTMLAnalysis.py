@@ -105,8 +105,8 @@ if uploaded_file is not None:
                             result = marks_tokens[-1] if len(marks_tokens) > 1 else "F"
                             
                             current_student = {
-                                "exam_no": roll_no, "student_name": student_name_eng, "student_name_tam": "",
-                                "gender": sex, "DOB": dob, "LANGUAGE": lang_mark, "ENGLISH": eng_mark,
+                                "exam_no": roll_no, "TMR No": tmr_no, "student_name": student_name_eng, "student_name_tam": "",
+                                "gender": sex, "dob": dob, "LANGUAGE": lang_mark, "ENGLISH": eng_mark,
                                 "MATHEMATICS": maths_mark, "SCIENCE_THE": sci_the, "SCIENCE_PRA": sci_pra,
                                 "SCIENCE": sci_tot, "SOCIAL SCIENCE": soc_mark, "மொத்தம்": total_mark, "Result": result,
                                 "class_name": "SSLC", "இனம்": "BC" if int(roll_no) % 2 == 0 else "MBC"
@@ -198,17 +198,27 @@ if uploaded_file is not None:
             row_raw.update({"மொத்தம்": total_m, "Fails": fails, "தோல்வி விவரம்": f"({', '.join(fail_subs)})" if fail_subs else ""})
             report_rows.append(row_raw)
 
-        # --- 5. பழையபடி விரிவான Excel கோப்பைத் தயார் செய்து பதிவிறக்கும் வசதி ---
+        # --- 5. Excel கோப்பு பதிவிறக்கம் (.get() பாதுகாப்புடன்) ---
         st.markdown('<div class="responsive-subtitle">📥 எக்ஸ்ெல் கோப்பு பதிவிறக்கம் (Download Excel)</div>', unsafe_allow_html=True)
         
         flat_excel_rows = []
         for s in all_students:
             flat_excel_rows.append({
-                "Roll No": s["exam_no"], "TMR No": s["TMR No"], 
-                "Student Name (ENG)": s["student_name"], "Student Name (TAM)": s["student_name_tam"],
-                "Sex": s["gender"], "DOB": s["dob"], "Language": s["LANGUAGE"], "English": s["ENGLISH"],
-                "Maths": s["MATHEMATICS"], "Science THE": s["SCIENCE_THE"], "Science PRA": s["SCIENCE_PRA"],
-                "Science TOT": s["SCIENCE"], "Social Science": s["SOCIAL SCIENCE"], "Total": s["மொத்தம்"], "Result": s["Result"]
+                "Roll No": s.get("exam_no", ""), 
+                "TMR No": s.get("TMR No", ""), 
+                "Student Name (ENG)": s.get("student_name", ""), 
+                "Student Name (TAM)": s.get("student_name_tam", ""),
+                "Sex": s.get("gender", ""), 
+                "DOB": s.get("dob", ""), 
+                "Language": s.get("LANGUAGE", 0), 
+                "English": s.get("ENGLISH", 0),
+                "Maths": s.get("MATHEMATICS", 0), 
+                "Science THE": s.get("SCIENCE_THE", 0), 
+                "Science PRA": s.get("SCIENCE_PRA", 0),
+                "Science TOT": s.get("SCIENCE", 0), 
+                "Social Science": s.get("SOCIAL SCIENCE", 0), 
+                "Total": s.get("மொத்தம்", 0), 
+                "Result": s.get("Result", "F")
             })
             
         df_download = pd.DataFrame(flat_excel_rows)
@@ -226,101 +236,9 @@ if uploaded_file is not None:
         )
 
         # --- Dashboard UI ---
-        st.markdown(f'<div class="responsive-subtitle">📊 PDF-லிருந்து பெறப்பட்ட பள்ளி ஒட்டுமொத்தப் புள்ளிவிவரம்</div>', unsafe_allow_html=True)
+        st.markdown(f'<div class="responsive-subtitle">📊 PDF-லிருந்து பெறப்பட்ட பள்ளி ஒட்டுமொத்தப் पुள்ளிவிவரம்</div>', unsafe_allow_html=True)
         def get_gt(k): return f"<span class='gender-sub'>({st_count[k]['F']}F|{st_count[k]['M']}M)</span>" if split_gender else ""
         avg_v = round(sum([r['மொத்தம்'] for r in report_rows if r['மொத்தம்'] > 0])/st_count['present']['A'], 1) if st_count['present']['A'] > 0 else 0
 
         st.markdown(f"""
             <div class="metric-container">
-                <div class="metric-card"><div class="stat-label">Total</div><div class="stat-val">{st_count['total']['A']}{get_gt('total')}</div></div>
-                <div class="metric-card"><div class="stat-label">Present</div><div class="stat-val">{st_count['present']['A']}{get_gt('present')}</div></div>
-                <div class="metric-card"><div class="stat-label">Pass</div><div class="stat-val" style="color:green">{st_count['pass']['A']}{get_gt('pass')}</div></div>
-                <div class="metric-card"><div class="stat-label">Fail</div><div class="stat-val" style="color:red">{st_count['fail']['A']}{get_gt('fail')}</div></div>
-                <div class="metric-card"><div class="stat-label">Pass %</div><div class="stat-val" style="color:green">{round((st_count['pass']['A']/st_count['present']['A'])*100,1) if st_count['present']['A']>0 else 0}%</div></div>
-                <div class="metric-card"><div class="stat-label">Avg</div><div class="stat-val" style="color:blue">{avg_v}</div></div>
-            </div>
-        """, unsafe_allow_html=True)
-
-        st.divider()
-        c_e1, c_e2 = st.columns(2)
-        with c_e1:
-            with st.expander(f"🏆 100/100 பெற்றவர்கள்: {len(centum_list)} பேர்"):
-                for itm in centum_list: st.markdown(f'<div class="info-card">{itm}</div>', unsafe_allow_html=True)
-        with c_e2:
-            with st.expander(f"🚶 தேர்வு எழுதாதவர்கள்: {len(absent_list)} பேர்"):
-                for itm in absent_list: st.markdown(f'<div class="info-card" style="border-left-color:red; background-color:#fff5f5;">{itm}</div>', unsafe_allow_html=True)
-
-        # --- 📈 பாடவாரி விரிவான பகுப்பாய்வு ---
-        st.markdown('<div class="responsive-subtitle">📈 பாடவாரி விரிவான பகுப்பாய்வு</div>', unsafe_allow_html=True)
-        sub_df_list = []
-        for sn in g_list:
-            stt = subject_stats[sn]
-            if not (stt['app']['F'] + stt['app']['M']) > 0: continue
-            avg_s = round(sum(stt["marks"])/len(stt["marks"]),1) if stt["marks"] else 0
-            sub_df_list.append({
-                "Subject": sn, "Total": f"{stt['total']['F']+stt['total']['M']} ({stt['total']['F']}F|{stt['total']['M']}M)", 
-                "App": f"{stt['app']['F']+stt['app']['M']} ({stt['app']['F']}F|{stt['app']['M']}M)",
-                "Pass": f"{stt['pass']['F']+stt['pass']['M']} ({stt['pass']['F']}F|{stt['pass']['M']}M)", 
-                "Fail": f"{stt['fail']['F']+stt['fail']['M']} ({stt['fail']['F']}F|{stt['fail']['M']}M)",
-                "Pass%": f"{round((stt['pass']['F']+stt['pass']['M'])/(stt['app']['F']+stt['app']['M'])*100,1)}%",
-                "Min": min(stt["marks"]) if stt["marks"] else 0, "Max": max(stt["marks"]) if stt["marks"] else 0, "Avg": avg_s
-            })
-        st.table(pd.DataFrame(sub_df_list))
-
-        # --- 🏅 பாடவாரி முதல் 3 இடங்கள் ---
-        with st.expander("🏅 பாடவாரியாக முதல் மூன்று இடங்கள் மற்றும் கடைசி இடம்"):
-            t_col1, t_col2 = st.columns(2)
-            for i, sn in enumerate(g_list):
-                target_col = t_col1 if i % 2 == 0 else t_col2
-                with target_col:
-                    st.write(f"**{sn}**")
-                    sorted_m = sorted(subject_stats[sn]["student_marks"], key=lambda x: x['mark'], reverse=True)
-                    if sorted_m:
-                        top3 = sorted_m[:3]
-                        for rank, sm in enumerate(top3, 1):
-                            st.markdown(f"<div class='topper-card'>#{rank} - {sm['name']} (No: {sm['exam_no']}) -> <b>{sm['mark']}</b></div>", unsafe_allow_html=True)
-                        last = sorted_m[-1]
-                        st.markdown(f"<div class='topper-card' style='border-left-color:red; background-color:#fff5f5;'>🔻 கடைசி: {last['name']} ({last['mark']})</div>", unsafe_allow_html=True)
-
-        # --- 📋 முழுமையான மதிப்பெண் பட்டியல் ---
-        st.markdown('<div class="responsive-subtitle">📋 முழுமையான மதிப்பெண் பட்டியல் (மாணவர் தமிழ் பெயர்களுடன்)</div>', unsafe_allow_html=True)
-        show_det = st.toggle("🔍 மதிப்பீட்டு விவரங்களைக் காட்டு", value=True)
-        df_sorted = pd.DataFrame(report_rows).sort_values(by=["Fails", "மொத்தம்"], ascending=[True, False]).reset_index(drop=True)
-        
-        # TypeError பிழையைச் சரி செய்ய Rank காலமை object வகையாகத் தெளிவுபடுத்துகிறோம்
-        df_sorted["Rank"] = "-"
-        df_sorted["Rank"] = df_sorted["Rank"].astype(object)
-        
-        rv = 1
-        for idx, row in df_sorted.iterrows():
-            if int(row["Fails"]) == 0: 
-                df_sorted.at[idx, "Rank"] = str(rv) # என்ஜின் சிக்கலைத் தவிர்க்க String ஆக மாற்றப்படுகிறது
-                rv += 1
-        
-        final_disp = []
-        for _, r in df_sorted.iterrows():
-            d_row = {"Rank": r["Rank"], "தேர்வு எண்": r["தேர்வு எண்"], "பெயர்": r['பெயர்'], "இனம்": r['இனம்'], "மொத்தம்": r['மொத்தம்'], "Fails": r['Fails'], "தோல்வி விவரம்": r['தோல்வி விவரம்']}
-            for sn in g_list:
-                v = r.get(sn)
-                if isinstance(v, dict): d_row[sn] = f"{v['tot']}\n{v['tag']}" if show_det and v['tag'] else v['tot']
-                else: d_row[sn] = v
-            final_disp.append(d_row)
-
-        st.dataframe(pd.DataFrame(final_disp).style.map(lambda v: 'color: red' if 'ABS' in str(v) or (isinstance(v, (int,float)) and 0<v<35) else ('color: blue' if 'EXEMPTED' in str(v) else '')), use_container_width=True, hide_index=True)
-
-        # --- 📉 தோல்வி விவரங்கள் ---
-        st.markdown('<div class="responsive-subtitle">📉 தோல்வி அடைந்த மாணவர்களின் விவரம்</div>', unsafe_allow_html=True)
-        f_c1, f_c2 = st.columns(2)
-        with f_c1:
-            for n in [1, 2, 3]:
-                if fail_cats[n]:
-                    with st.expander(f"❌ {n} பாடத்தில் தோல்வி: {len(fail_cats[n])} பேர்"):
-                        for itm in fail_cats[n]: st.write(f"⚠️ {itm}")
-        with f_c2:
-            for n in [4, 5, "All"]:
-                if fail_cats[n]:
-                    lbl = f"{n} பாடத்தில் தோல்வி" if n!='All' else 'அனைத்து'
-                    with st.expander(f"🔴 {lbl} பாடத்தில் தோல்வி: {len(fail_cats[n])} பேர்"):
-                        for itm in fail_cats[n]: st.write(f"🚩 {itm}")
-    else:
-        st.warning("PDF-லிருந்து முறையான தரவுகள் கண்டறியப்படவில்லை.")
