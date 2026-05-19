@@ -3,11 +3,12 @@ import pdfplumber
 import pandas as pd
 import io
 import re
+from weasyprint import HTML
 
 # --- 1. பக்க அமைப்பு ---
 st.set_page_config(page_title="Class-wise Overall Analysis from TML PDF", layout="wide")
 
-# --- 2. CSS ஸ்டைலிங் ---
+# --- 2. CSS ஸ்டைலிங் (Streamlit UI-க்காக) ---
 st.markdown("""
     <style>
     .stDataFrame td { font-weight: bold !important; font-size: 13px !important; white-space: pre !important; }
@@ -19,12 +20,10 @@ st.markdown("""
     .responsive-subtitle { font-size: 20px; font-weight: bold; color: #334155; border-bottom: 2px solid #e2e8f0; margin: 15px 0 10px 0; }
     .info-card { padding: 10px; border-radius: 6px; margin-bottom: 8px; border-left: 4px solid #10b981; background-color: #f0fdf4; font-size: 14px; font-weight: bold; }
     .topper-card { padding: 8px; border-radius: 5px; margin-bottom: 5px; background-color: #fffbeb; border-left: 4px solid #f59e0b; font-size: 13px; }
-    .community-topper { background-color: #f0f9ff; border-left-color: #0ea5e9; }
     </style>
     """, unsafe_allow_html=True)
 
 def clean_txt(text):
-    """PDF-ல் உள்ள வீண் இடைவெளிகள் மற்றும் சிதைந்த குறியீடுகளைச் சுத்தம் செய்ய"""
     if not text: return ""
     cleaned = re.sub(r'\(cid:\d+\)', '', text)
     return " ".join(cleaned.split()).strip()
@@ -104,7 +103,6 @@ if uploaded_file is not None:
                                 student_name_eng = " ".join(name_parts)
                                 marks_tokens = tokens[tokens.index(dob)+1:] if dob in tokens else []
                                 
-                                # உரை வடிவில் குறியீடு உள்ளதா எனப் பார்க்கும் மேம்படுத்தப்பட்ட get_m
                                 def get_m(idx, default=0):
                                     if idx < len(marks_tokens):
                                         val = str(marks_tokens[idx]).strip().upper()
@@ -189,7 +187,7 @@ if uploaded_file is not None:
                 use_container_width=True
             )
 
-    # --- 6. பள்ளி ஒட்டுமொத்தப் பகுப்பாய்வு UI ரெண்டரிங் ---
+    # --- 6. பள்ளி ஒட்டுமொத்தப் பகுப்பாய்வு UI & PDF ஜெனரேஷன் ---
     if process_analysis or (st.session_state.parsed_students is not None and not process_excel):
         if st.session_state.parsed_students:
             st.divider()
@@ -213,19 +211,12 @@ if uploaded_file is not None:
                     tot = s.get(sn)
                     subject_stats[sn]["total"][gen] += 1
                     
-                    # 1. விலக்கு அளிக்கப்பட்ட பாடம் (EXEMPTED)
                     if tot == "EXEMPTED":
                         row_raw[sn] = "EXEMPTED"
-                        
-                    # 2. தேர்வு எழுதாத பாடம் (ABS / 0 மதிப்பெண்)
                     elif tot == "ABS":
                         row_raw[sn] = "ABS"
-                        fails += 1
-                        fail_subs.append(sn)
-                        # ABS ஆனால், அப்ளை செய்தவர்களில் மட்டும் கணக்கில் வரும் (தோற்றியவர்களில் வராது, ஃபெயிலில் வரும்)
+                        fails += 1; fail_subs.append(sn)
                         subject_stats[sn]["fail"][gen] += 1
-                    
-                    # 3. தேர்வு எழுதிய பாடம்
                     else:
                         wrote_any = True
                         tot = int(tot)
@@ -248,8 +239,7 @@ if uploaded_file is not None:
                             if tot == 100: student_centums.append(sn)
                         else: 
                             subject_stats[sn]["fail"][gen] += 1
-                            fails += 1
-                            fail_subs.append(sn)
+                            fails += 1; fail_subs.append(sn)
                             
                         total_m += tot
                         row_raw[sn] = {"tot": tot, "tag": tag_str, "pass": is_subj_pass}
@@ -290,15 +280,6 @@ if uploaded_file is not None:
             """
             st.markdown(html_dashboard, unsafe_allow_html=True)
 
-            # --- Expander Panels ---
-            c_e1, c_e2 = st.columns(2)
-            with c_e1:
-                with st.expander(f"🏆 100/100 பெற்றவர்கள்: {len(centum_list)} பேர்"):
-                    for itm in centum_list: st.markdown(f'<div class="info-card">{itm}</div>', unsafe_allow_html=True)
-            with c_e2:
-                with st.expander(f"🚶 தேர்வு எழுதாதவர்கள்: {len(absent_list)} பேர்"):
-                    for itm in absent_list: st.markdown(f'<div class="info-card" style="border-left-color:red; background-color:#fff5f5;">{itm}</div>', unsafe_allow_html=True)
-
             # --- 📈 பாடவாரி விரிவான பகுப்பாய்வு அட்டவணை ---
             st.markdown('<div class="responsive-subtitle">📈 பாடவாரி விரிவான பகுப்பாய்வு</div>', unsafe_allow_html=True)
             sub_df_list = []
@@ -314,69 +295,86 @@ if uploaded_file is not None:
                 
                 sub_df_list.append({
                     "Subject": sn, 
-                    "Total (Applied)": f"{total_applied} ({stt['total']['F']}F|{stt['total']['M']}M)", 
-                    "Appeared (தேர்வு எழுதியோர்)": f"{total_appeared} ({stt['app']['F']}F|{stt['app']['M']}M)",
-                    "Pass": f"{total_passed} ({stt['pass']['F']}F|{stt['pass']['M']}M)", 
-                    "Fail (ABS சேர்த்துக் காட்டுகிறது)": f"{total_failed} ({stt['fail']['F']}F|{stt['fail']['M']}M)",
-                    "Pass% (Appeared மட்டும் வைத்து)": pass_perc,
-                    "Min": min(stt["marks"]) if stt["marks"] else 0, "Max": max(stt["marks"]) if stt["marks"] else 0, "Avg": avg_s
+                    "Total (Applied)": f"{total_applied}", 
+                    "Appeared (தேர்வு எழுதியோர்)": f"{total_appeared}",
+                    "Pass": f"{total_passed}", 
+                    "Fail": f"{total_failed}",
+                    "Pass%": pass_perc, "Min": min(stt["marks"]) if stt["marks"] else 0, "Max": max(stt["marks"]) if stt["marks"] else 0, "Avg": avg_s
                 })
             st.table(pd.DataFrame(sub_df_list))
 
-            # --- 🏅 முதல் 3 இடங்கள் ---
-            with st.expander("🏅 பாடவாரியாக முதல் மூன்று இடங்கள் மற்றும் கடைசி இடம்"):
-                t_col1, t_col2 = st.columns(2)
-                for i, sn in enumerate(g_list):
-                    target_col = t_col1 if i % 2 == 0 else t_col2
-                    with target_col:
-                        st.write(f"**{sn}**")
-                        sorted_m = sorted(subject_stats[sn]["student_marks"], key=lambda x: x['mark'], reverse=True)
-                        if sorted_m:
-                            top3 = sorted_m[:3]
-                            for rank, sm in enumerate(top3, 1):
-                                st.markdown(f"<div class='topper-card'>#{rank} - {sm['name']} (No: {sm['exam_no']}) -> <b>{sm['mark']}</b></div>", unsafe_allow_html=True)
-                            last = sorted_m[-1]
-                            st.markdown(f"<div class='topper-card' style='border-left-color:red; background-color:#fff5f5;'>🔻 கடைசி: {last['name']} ({last['mark']})</div>", unsafe_allow_html=True)
-
-            # --- 📋 முழுமையான மதிப்பெண் பட்டியல் ---
-            st.markdown('<div class="responsive-subtitle">📋 முழுமையான மதிப்பெண் பட்டியல் (தேர்வுத்துறை TML வடிவமைப்பு)</div>', unsafe_allow_html=True)
-            show_det = st.toggle("🔍 மதிப்பீட்டு விவரங்களைக் காட்டு", value=True)
+            # --- Ranks sorting ---
             df_sorted = pd.DataFrame(report_rows).sort_values(by=["Fails", "மொத்தம்"], ascending=[True, False]).reset_index(drop=True)
-            
-            df_sorted["Rank"] = "-"
-            df_sorted["Rank"] = df_sorted["Rank"].astype(object)
             rv = 1
             for idx, row in df_sorted.iterrows():
                 if int(row["Fails"]) == 0: 
                     df_sorted.at[idx, "Rank"] = str(rv)
                     rv += 1
+
+            # --- 🖨️ புதிய அம்சம்: அச்சிடக்கூடிய PDF அறிக்கை உருவாக்கம் ---
+            st.markdown('<div class="responsive-subtitle">🖨️ அச்சிடக்கூடிய அறிக்கை (Printable PDF Report)</div>', unsafe_allow_html=True)
             
-            final_disp = []
+            # Weasyprint-க்கான HTML ஸ்ட்ரிங் வடிவமைப்பு
+            sub_table_rows_html = ""
+            for item in sub_df_list:
+                sub_table_rows_html += f"<tr><td>{item['Subject']}</td><td>{item['Total (Applied)']}</td><td>{item['Appeared (தேர்வு எழுதியோர்)']}</td><td>{item['Pass']}</td><td>{item['Fail']}</td><td style='color:green;'>{item['Pass%']}</td><td>{item['Min']}</td><td>{item['Max']}</td><td>{item['Avg']}</td></tr>"
+
+            marks_table_rows_html = ""
             for _, r in df_sorted.iterrows():
-                d_row = {"Rank": r["Rank"], "தேர்வு எண்": r["தேர்வு எண்"], "பெயர்": r['பெயர்'], "இனம்": r['இனம்'], "மொத்தம்": r['மொத்தம்'], "Fails": r['Fails'], "தோல்வி விவரம்": r['தோல்வி விவரம்']}
-                for sn in g_list:
-                    v = r.get(sn)
-                    if isinstance(v, dict): d_row[sn] = f"{v['tot']}\n{v['tag']}" if show_det and v['tag'] else v['tot']
-                    else: d_row[sn] = v
-                final_disp.append(d_row)
+                m_lang = f"{r['LANGUAGE']['tot']}" if isinstance(r['LANGUAGE'], dict) else f"{r['LANGUAGE']}"
+                m_eng = f"{r['ENGLISH']['tot']}" if isinstance(r['ENGLISH'], dict) else f"{r['ENGLISH']}"
+                m_math = f"{r['MATHEMATICS']['tot']}" if isinstance(r['MATHEMATICS'], dict) else f"{r['MATHEMATICS']}"
+                m_sci = f"{r['SCIENCE']['tot']}" if isinstance(r['SCIENCE'], dict) else f"{r['SCIENCE']}"
+                m_soc = f"{r['SOCIAL SCIENCE']['tot']}" if isinstance(r['SOCIAL SCIENCE'], dict) else f"{r['SOCIAL SCIENCE']}"
+                
+                f_color = "red" if int(r['Fails']) > 0 else "black"
+                rank_val = r['Rank'] if r['Rank'] != "-" else ""
+                
+                marks_table_rows_html += f"""
+                <tr style='color: {f_color};'>
+                    <td>{rank_val}</td>
+                    <td>{r['தேர்வு எண்']}</td>
+                    <td style='text-align: left;'>{r['பெயர்']}</td>
+                    <td>{m_lang}</td>
+                    <td>{m_eng}</td>
+                    <td>{m_math}</td>
+                    <td>{m_sci}</td>
+                    <td>{m_soc}</td>
+                    <td style='font-weight: bold;'>{r['மொத்தம்']}</td>
+                    <td>{'PASS' if int(r['Fails'])==0 else f'FAIL ({r["Fails"]})'}</td>
+                </tr>
+                """
 
-            st.dataframe(pd.DataFrame(final_disp).style.map(lambda v: 'color: red' if 'ABS' in str(v) or (isinstance(v, (int,float)) and 0<v<35) else ('color: blue' if 'EXEMPTED' in str(v) else '')), use_container_width=True, hide_index=True)
+            html_content = f"""
+            <html>
+            <head>
+                <style>
+                    @page {{ size: A4; margin: 15mm 12mm; }}
+                    body {{ font-family: 'Helvetica Neue', Helvetica, Arial, sans-serif; color: #1e293b; margin: 0; padding: 0; font-size: 11pt; }}
+                    .header {{ text-align: center; margin-bottom: 25px; border-bottom: 3px double #1e3a8a; padding-bottom: 10px; }}
+                    .school-title {{ font-size: 16pt; font-weight: bold; color: #1e3a8a; text-transform: uppercase; margin: 0; }}
+                    .report-title {{ font-size: 12pt; font-weight: bold; color: #475569; margin: 5px 0 0 0; letter-spacing: 1px; }}
+                    .section-title {{ font-size: 12pt; font-weight: bold; color: #1e3a8a; margin: 20px 0 10px 0; border-left: 4px solid #1e3a8a; padding-left: 8px; }}
+                    .stats-grid {{ display: table; width: 100%; margin-bottom: 20px; border-collapse: separate; border-spacing: 8px; }}
+                    .stats-card {{ display: table-cell; background-color: #f8fafc; border: 1px solid #e2e8f0; padding: 10px; text-align: center; border-radius: 6px; }}
+                    .card-label {{ font-size: 9pt; color: #64748b; font-weight: bold; text-transform: uppercase; }}
+                    .card-val {{ font-size: 16pt; font-weight: bold; margin-top: 3px; }}
+                    table {{ width: 100%; border-collapse: collapse; margin-top: 5px; font-size: 10pt; page-break-inside: auto; }}
+                    tr {{ page-break-inside: avoid; page-break-after: auto; }}
+                    th {{ background-color: #1e3a8a; color: white; font-weight: bold; text-align: center; padding: 6px 4px; border: 1px solid #cbd5e1; font-size: 9.5pt; }}
+                    td {{ border: 1px solid #cbd5e1; padding: 6px 4px; text-align: center; }}
+                    tr:nth-child(even) {{ background-color: #f8fafc; }}
+                    .footer {{ text-align: right; margin-top: 40px; font-size: 11pt; font-weight: bold; padding-right: 20px; }}
+                </style>
+            </head>
+            <body>
+                <div class="header">
+                    <div class="school-title">🏫 {st.session_state.school_name}</div>
+                    <div class="report-title">SSLC TML OVERALL PERFORMANCE ANALYSIS REPORT</div>
+                </div>
 
-            # --- 10. 📉 தோல்வி விவரங்கள் ---
-            st.markdown('<div class="responsive-subtitle">📉 தோல்வி அடைந்த மாணவர்களின் விவரம்</div>', unsafe_allow_html=True)
-            f_c1, f_c2 = st.columns(2)
-            with f_c1:
-                for n in [1, 2, 3]:
-                    if fail_cats[n]:
-                        with st.expander(f"❌ {n} பாடத்தில் தோல்வி: {len(fail_cats[n])} பேர்"):
-                            for itm in fail_cats[n]: st.write(f"⚠️ {itm}")
-            with f_c2:
-                for n in [4, 5, "All"]:
-                    if fail_cats[n]:
-                        lbl = f"{n} பாடத்தில் தோல்வி" if n!='All' else 'அனைத்து'
-                        with st.expander(f"🔴 {lbl} பாடத்தில் தோல்வி: {len(fail_cats[n])} பேர்"):
-                            for itm in fail_cats[n]: st.write(f"🚩 {itm}")
-        else:
-            st.warning("PDF-லிருந்து முறையான தரவுகள் கண்டறியப்படவில்லை.")
-else:
-    st.info("💡 பகுப்பாய்வைத் தொடங்க முதலில் ஒரு TML PDF கோப்பைப் பதிவேற்றவும்.")
+                <div class="stats-grid">
+                    <div class="stats-card"><div class="card-label">Total Applied</div><div class="card-val" style="color:#1e293b;">{st_count['total']['A']}</div></div>
+                    <div class="stats-card"><div class="card-label">Present</div><div class="card-val" style="color:#3b82f6;">{st_count['present']['A']}</div></div>
+                    <div class="stats-card"><div class="card-label">Passed</div><div class="stats-val card-val" style="color:green;">{st_count['pass']['A']}</div></div>
+                    <div class="stats-card">
