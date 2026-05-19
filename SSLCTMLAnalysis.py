@@ -12,7 +12,7 @@ try:
     from utils import add_school_header
     add_school_header()
 except ModuleNotFoundError:
-    st.markdown("<h2 style='text-align: center; color: #1E3A8A;'>அரசு மேல்நிலைப்பள்ளி</h2>", unsafe_allow_html=True)
+    st.markdown("<h2 style='text-align: center; color: #1E3A8A;'>அரசு மேல்நிலைப்பள்ளி - தேவனாங்குறிச்சி</h2>", unsafe_allow_html=True)
 
 # --- 2. CSS ஸ்டைலிங் ---
 st.markdown("""
@@ -80,10 +80,17 @@ if uploaded_file is not None:
                             student_name_eng = " ".join(name_parts)
                             marks_tokens = tokens[tokens.index(dob)+1:] if dob in tokens else []
                             
+                            # பிழையைச் சரிசெய்ய மேம்படுத்தப்பட்ட பாதுகாப்பானget_m பங்க்ஷன்
                             def get_m(idx, default=0):
                                 if idx < len(marks_tokens):
-                                    val = marks_tokens[idx]
-                                    return 0 if val in ['AAA', 'ABS', '-'] else (int(val) if val.isdigit() else val)
+                                    val = str(marks_tokens[idx]).strip()
+                                    if val in ['AAA', 'ABS', '-', '', '–', 'EX']: 
+                                        return 0
+                                    if val.isdigit():
+                                        return int(val)
+                                    num_check = re.findall(r'\d+', val)
+                                    if num_check:
+                                        return int(num_check[0])
                                 return default
 
                             lang_mark = get_m(1)
@@ -94,7 +101,9 @@ if uploaded_file is not None:
                             sci_tot = get_m(7)
                             soc_mark = get_m(8)
                             
-                            total_mark = int(marks_tokens[-2]) if len(marks_tokens) > 2 and marks_tokens[-2].isdigit() else 0
+                            # மொத்த மதிப்பெண் எடுத்தல்
+                            total_val = marks_tokens[-2] if len(marks_tokens) > 2 else "0"
+                            total_mark = int(total_val) if str(total_val).isdigit() else 0
                             result = marks_tokens[-1] if len(marks_tokens) > 1 else "F"
                             
                             current_student = {
@@ -106,13 +115,11 @@ if uploaded_file is not None:
                             }
                             continue
                         
-                        # 2. இரண்டாம் வரி: தமிழ் பெயர் மற்றும் ஆங்கிலப் பெற்றோர் பெயர் கண்டறிதல்
+                        # 2. இரண்டாம் வரி: தமிழ் பெயர் கண்டறிதல்
                         if current_student and line_str.startswith("XM"):
-                            # 'XM...' மற்றும் 'Father's Name' இடைப்பட்ட பகுதியில் உள்ள தமிழ் பெயரைத் துல்லியமாக எடுத்தல்
                             reg_match = re.match(r'^XM[A-Z0-9]+\s+(.*?)\s+Father\'s Name\s*:', line_str)
                             if reg_match:
                                 t_name = reg_match.group(1)
-                                # (cid:) குறியீடுகளை முழுமையாக நீக்கி சுத்தமான தமிழ் பெயரைத் தருகிறது
                                 current_student["student_name_tam"] = clean_txt(t_name)
                             continue
                             
@@ -141,7 +148,6 @@ if uploaded_file is not None:
             gen = s['gender'] if s['gender'] in ['M', 'F'] else 'M'
             comm = s['இனம்']
             
-            # முன்னுரிமை: தமிழ் பெயர் இருந்தால் அதைக் காட்டும், இல்லையெனில் ஆங்கிலப் பெயர்
             disp_name = s['student_name_tam'] if s['student_name_tam'] else s['student_name']
             
             st_count["total"]["A"] += 1; st_count["total"][gen] += 1
@@ -157,26 +163,27 @@ if uploaded_file is not None:
                     subject_stats[sn]["app"][gen] += 1; subject_stats[sn]["fail"][gen] += 1
                 else:
                     wrote_any = True
+                    # மார்க் ஒப்பீடு இப்போது பாதுகாப்பானது (அனைத்தும் எண்கள்)
                     if sn == "SCIENCE":
-                        is_subj_pass = (s.get("SCIENCE_THE", 0) >= 15 and s.get("SCIENCE_PRA", 0) >= 15 and tot >= 35)
+                        is_subj_pass = (int(s.get("SCIENCE_THE", 0)) >= 15 and int(s.get("SCIENCE_PRA", 0)) >= 15 and int(tot) >= 35)
                         tag_str = f"({s.get('SCIENCE_THE',0)}+{s.get('SCIENCE_PRA',0)})"
                     else:
-                        is_subj_pass = (tot >= 35)
+                        is_subj_pass = (int(tot) >= 35)
                         tag_str = ""
                         
                     subject_stats[sn]["app"][gen] += 1
-                    subject_stats[sn]["marks"].append(tot)
+                    subject_stats[sn]["marks"].append(int(tot))
                     subject_stats[sn]["student_marks"].append({
-                        "name": disp_name, "mark": tot, "exam_no": s['exam_no']
+                        "name": disp_name, "mark": int(tot), "exam_no": s['exam_no']
                     })
                     
                     if is_subj_pass: 
                         subject_stats[sn]["pass"][gen] += 1
-                        if tot == 100: student_centums.append(sn)
+                        if int(tot) == 100: student_centums.append(sn)
                     else: 
                         subject_stats[sn]["fail"][gen] += 1; fails += 1; fail_subs.append(sn)
                         
-                    total_m += tot
+                    total_m += int(tot)
                     row_raw[sn] = {"tot": tot, "tag": tag_str, "pass": is_subj_pass}
 
             if wrote_any:
@@ -252,7 +259,7 @@ if uploaded_file is not None:
                         st.markdown(f"<div class='topper-card' style='border-left-color:red; background-color:#fff5f5;'>🔻 கடைசி: {last['name']} ({last['mark']})</div>", unsafe_allow_html=True)
 
         # --- 📋 முழுமையான மதிப்பெண் பட்டியல் ---
-        st.markdown('<div class="responsive-subtitle">📋 முழுமையான மதிப்பெண் பட்டியல் (மாணவர் பெயர்களுடன்)</div>', unsafe_allow_html=True)
+        st.markdown('<div class="responsive-subtitle">📋 முழுமையான மதிப்பெண் பட்டியல் (மாணவர் தமிழ் பெயர்களுடன்)</div>', unsafe_allow_html=True)
         show_det = st.toggle("🔍 மதிப்பீட்டு விவரங்களைக் காட்டு", value=True)
         df_sorted = pd.DataFrame(report_rows).sort_values(by=["Fails", "மொத்தம்"], ascending=[True, False]).reset_index(drop=True)
         
