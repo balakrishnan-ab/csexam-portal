@@ -3,12 +3,11 @@ import pdfplumber
 import pandas as pd
 import io
 import re
-from weasyprint import HTML
 
 # --- 1. பக்க அமைப்பு ---
 st.set_page_config(page_title="Class-wise Overall Analysis from TML PDF", layout="wide")
 
-# --- 2. CSS ஸ்டைலிங் (Streamlit UI-க்காக) ---
+# --- 2. CSS ஸ்டைலிங் (UI மற்றும் அச்சு வடிவமைப்பு) ---
 st.markdown("""
     <style>
     .stDataFrame td { font-weight: bold !important; font-size: 13px !important; white-space: pre !important; }
@@ -20,6 +19,25 @@ st.markdown("""
     .responsive-subtitle { font-size: 20px; font-weight: bold; color: #334155; border-bottom: 2px solid #e2e8f0; margin: 15px 0 10px 0; }
     .info-card { padding: 10px; border-radius: 6px; margin-bottom: 8px; border-left: 4px solid #10b981; background-color: #f0fdf4; font-size: 14px; font-weight: bold; }
     .topper-card { padding: 8px; border-radius: 5px; margin-bottom: 5px; background-color: #fffbeb; border-left: 4px solid #f59e0b; font-size: 13px; }
+    
+    /* பிரிண்டரில் அச்சிடும் போது தேவையில்லாத கூறுகளை மறைக்கும் CSS */
+    @media print {
+        header, [data-testid="stSidebar"], [data-testid="stHeader"], .stButton, [data-testid="stElementToolbar"], .stToggle, hr {
+            display: none !important;
+        }
+        .main .block-container {
+            padding-top: 0px !important;
+            padding-bottom: 0px !important;
+        }
+    }
+    
+    /* அச்சிடக்கூடிய தாள்களுக்கான அட்டவணை வடிவமைப்பு */
+    .print-table { width: 100%; border-collapse: collapse; font-family: Arial, sans-serif; font-size: 10pt; margin-top: 15px; page-break-inside: auto; }
+    .print-table tr { page-break-inside: avoid; page-break-after: auto; }
+    .print-table th { background-color: #1e3a8a !important; color: white !important; -webkit-print-color-adjust: exact; print-color-adjust: exact; padding: 7px 4px; border: 1px solid #cbd5e1; font-size: 9.5pt; }
+    .print-table td { border: 1px solid #cbd5e1; padding: 6px 4px; text-align: center; font-weight: bold; }
+    .print-table tr:nth-child(even) { background-color: #f8fafc; }
+    .print-header { text-align: center; padding-bottom: 10px; border-bottom: 3px double #1e3a8a; margin-bottom: 20px; }
     </style>
     """, unsafe_allow_html=True)
 
@@ -63,7 +81,7 @@ if uploaded_file is not None:
         students_list = []
         detected_school = ""
         
-        with st.spinner("PDF கோப்பில் இருந்து பள்ளி பெயர், மாணவர் விவரங்கள் எடுக்கப்படுகின்றன..."):
+        with st.spinner("PDF கோப்பில் இருந்து விவரங்கள் எடுக்கப்படுகின்றன..."):
             try:
                 pdf_bytes = io.BytesIO(uploaded_file.read())
                 current_student = None
@@ -187,7 +205,7 @@ if uploaded_file is not None:
                 use_container_width=True
             )
 
-    # --- 6. பள்ளி ஒட்டுமொத்தப் பகுப்பாய்வு UI & PDF ஜெனரேஷன் ---
+    # --- 6. பள்ளி ஒட்டுமொத்தப் பகுப்பாய்வு UI ரெண்டரிங் ---
     if process_analysis or (st.session_state.parsed_students is not None and not process_excel):
         if st.session_state.parsed_students:
             st.divider()
@@ -204,10 +222,7 @@ if uploaded_file is not None:
                 disp_name = s['student_name_tam'] if s['student_name_tam'] else s['student_name']
                 
                 st_count["total"]["A"] += 1; st_count["total"][gen] += 1
-                
-                # பிழை சரிசெய்யப்பட்ட தூய்மையான வரிசை (Line 207 Fix)
                 row_raw = {"Rank": "-", "தேர்வு எண்": s['exam_no'], "பெயர்": disp_name, "பிரிவு": s['class_name'], "gender": gen, "இனம்": comm}
-                
                 total_m, fails, wrote_any, fail_subs, student_centums = 0, 0, False, [], []
 
                 for sn in g_list:
@@ -311,8 +326,9 @@ if uploaded_file is not None:
                     df_sorted.at[idx, "Rank"] = str(rv)
                     rv += 1
 
-            # --- 🖨 nudge: PDF அறிக்கை உருவாக்கம் ---
-            st.markdown('<div class="responsive-subtitle">🖨️ அச்சிடக்கூடிய அறிக்கை (Printable PDF Report)</div>', unsafe_allow_html=True)
+            # --- 🖨️ புதிய அம்சம்: அச்சிடுவதற்கான நேர்த்தி வடிவமைப்பு (Print Template) ---
+            st.markdown('<div class="responsive-subtitle">🖨️ அச்சிடக்கூடிய அறிக்கை வடிவம் (Printable Report)</div>', unsafe_allow_html=True)
+            st.info("💡 குறிப்பு: இந்த ரிப்போர்ட்டை அப்படியே பிரிண்ட் செய்ய உங்கள் விசைப்பலகையில் (Keyboard) **Ctrl + P** அழுத்தவும். பக்கத்தில் உள்ள தேவையற்ற பொத்தான்கள் தானாகவே மறைந்து, அறிக்கை மட்டும் A4 தாளில் அழகாக அச்சிடப்படும்.")
             
             sub_table_rows_html = ""
             for item in sub_df_list:
@@ -337,7 +353,7 @@ if uploaded_file is not None:
                 <tr style='color: {f_color};'>
                     <td>{rank_val}</td>
                     <td>{s_exam_no}</td>
-                    <td style='text-align: left;'>{s_name}</td>
+                    <td style='text-align: left; padding-left:10px;'>{s_name}</td>
                     <td>{m_lang}</td>
                     <td>{m_eng}</td>
                     <td>{m_math}</td>
@@ -348,45 +364,14 @@ if uploaded_file is not None:
                 </tr>
                 """
 
-            html_content = f"""
-            <html>
-            <head>
-                <style>
-                    @page {{ size: A4; margin: 15mm 12mm; }}
-                    body {{ font-family: 'Helvetica Neue', Helvetica, Arial, sans-serif; color: #1e293b; margin: 0; padding: 0; font-size: 11pt; }}
-                    .header {{ text-align: center; margin-bottom: 25px; border-bottom: 3px double #1e3a8a; padding-bottom: 10px; }}
-                    .school-title {{ font-size: 16pt; font-weight: bold; color: #1e3a8a; text-transform: uppercase; margin: 0; }}
-                    .report-title {{ font-size: 12pt; font-weight: bold; color: #475569; margin: 5px 0 0 0; letter-spacing: 1px; }}
-                    .section-title {{ font-size: 12pt; font-weight: bold; color: #1e3a8a; margin: 20px 0 10px 0; border-left: 4px solid #1e3a8a; padding-left: 8px; }}
-                    .stats-grid {{ display: table; width: 100%; margin-bottom: 20px; border-collapse: separate; border-spacing: 8px; }}
-                    .stats-card {{ display: table-cell; background-color: #f8fafc; border: 1px solid #e2e8f0; padding: 10px; text-align: center; border-radius: 6px; }}
-                    .card-label {{ font-size: 9pt; color: #64748b; font-weight: bold; text-transform: uppercase; }}
-                    .card-val {{ font-size: 16pt; font-weight: bold; margin-top: 3px; }}
-                    table {{ width: 100%; border-collapse: collapse; margin-top: 5px; font-size: 10pt; page-break-inside: auto; }}
-                    tr {{ page-break-inside: avoid; page-break-after: auto; }}
-                    th {{ background-color: #1e3a8a; color: white; font-weight: bold; text-align: center; padding: 6px 4px; border: 1px solid #cbd5e1; font-size: 9.5pt; }}
-                    td {{ border: 1px solid #cbd5e1; padding: 6px 4px; text-align: center; }}
-                    tr:nth-child(even) {{ background-color: #f8fafc; }}
-                    .footer {{ text-align: right; margin-top: 40px; font-size: 11pt; font-weight: bold; padding-right: 20px; }}
-                </style>
-            </head>
-            <body>
-                <div class="header">
+            full_report_html = f"""
+            <div style="background-color: white; padding: 20px; border: 1px solid #cbd5e1; border-radius: 8px;">
+                <div class="print-header">
                     <div class="school-title">🏫 {st.session_state.school_name}</div>
-                    <div class="report-title">SSLC TML OVERALL PERFORMANCE ANALYSIS REPORT</div>
+                    <div style="font-size:13pt; font-weight:bold; color:#475569; margin-top:5px;">SSLC TML PERFORMANCE ANALYSIS REPORT</div>
                 </div>
-
-                <div class="stats-grid">
-                    <div class="stats-card"><div class="card-label">Total Applied</div><div class="card-val">{st_count['total']['A']}</div></div>
-                    <div class="stats-card"><div class="card-label">Present</div><div class="card-val" style="color:#3b82f6;">{st_count['present']['A']}</div></div>
-                    <div class="stats-card"><div class="card-label">Passed</div><div class="card-val" style="color:green;">{st_count['pass']['A']}</div></div>
-                    <div class="stats-card"><div class="card-label">Failed</div><div class="card-val" style="color:red;">{st_count['fail']['A']}</div></div>
-                    <div class="stats-card"><div class="card-label">Pass %</div><div class="card-val" style="color:green;">{pass_percentage}%</div></div>
-                    <div class="stats-card"><div class="card-label">School Avg</div><div class="card-val" style="color:blue;">{avg_v}</div></div>
-                </div>
-
-                <div class="section-title">1. Subject-wise Performance Summary</div>
-                <table>
+                
+                <table class="print-table">
                     <thead>
                         <tr>
                             <th>Subject Name</th>
@@ -404,60 +389,36 @@ if uploaded_file is not None:
                         {sub_table_rows_html}
                     </tbody>
                 </table>
-
-                <div style="page-break-before: always;"></div>
-                <div class="header">
-                    <div class="school-title">🏫 {st.session_state.school_name}</div>
-                    <div class="report-title">COMPLETE STUDENT MARKSHEET REGISTER</div>
-                </div>
                 
-                <div class="section-title">2. Student-wise Consolidated Mark List</div>
-                <table>
+                <h4 style="margin-top:35px; color:#1e3a8a; border-bottom: 2px solid #e2e8f0; padding-bottom:5px;">Consolidated Student Mark Register</h4>
+                <table class="print-table">
                     <thead>
                         <tr>
-                            <th style="width: 5%;">Rank</th>
-                            <th style="width: 12%;">Roll No</th>
-                            <th style="text-align: left; width: 28%;">Student Name</th>
-                            <th style="width: 8%;">Lang</th>
-                            <th style="width: 8%;">Eng</th>
-                            <th style="width: 8%;">Math</th>
-                            <th style="width: 8%;">Sci</th>
-                            <th style="width: 8%;">Soc</th>
-                            <th style="width: 8%;">Total</th>
-                            <th style="width: 10%;">Result</th>
+                            <th>Rank</th>
+                            <th>Roll No</th>
+                            <th style="text-align:left; padding-left:10px;">Student Name</th>
+                            <th>Lang</th>
+                            <th>Eng</th>
+                            <th>Math</th>
+                            <th>Sci</th>
+                            <th>Soc</th>
+                            <th>Total</th>
+                            <th>Result</th>
                         </tr>
                     </thead>
                     <tbody>
                         {marks_table_rows_html}
                     </tbody>
                 </table>
-
-                <div class="footer">
-                    <br><br>
-                    <span>Headmaster / Principal Signature</span>
-                </div>
-            </body>
-            </html>
+                <div style="text-align:right; margin-top:60px; font-weight:bold; font-size:11pt; padding-right:15px;">Headmaster / Principal Signature</div>
+            </div>
             """
-            
-            try:
-                pdf_output_bytes = io.BytesIO()
-                HTML(string=html_content).write_pdf(pdf_output_bytes)
-                pdf_data = pdf_output_bytes.getvalue()
-                
-                st.download_button(
-                    label="🖨️ ஒட்டுமொத்த பகுப்பாய்வு அறிக்கையை PDF-ஆக பதிவிறக்கு (அச்சிடத் தயார் நிலை)",
-                    data=pdf_data,
-                    file_name=f"Official_Analysis_Report_{st.session_state.school_name.replace(' ', '_')}.pdf",
-                    mime="application/pdf",
-                    use_container_width=True
-                )
-                st.info("💡 இந்த PDF கோப்பைத் தரவிறக்கி நீங்கள் நேரடியாக பிரிண்டரில் அச்சிட்டுக் கொள்ளலாம் (A4 தாளிற்கு உகந்த வடிவம்).")
-            except Exception as e:
-                st.error(f"PDF அறிக்கை உருவாக்குவதில் பிழை: {e}")
+            # திரையில் அச்சிடக்கூடிய அறிக்கையைக் காட்டுதல்
+            st.markdown(full_report_html, unsafe_allow_html=True)
+            st.divider()
 
-            # --- 📋 UI-இல் முழுமையான மதிப்பெண் பட்டியல் ---
-            st.markdown('<div class="responsive-subtitle">📋 முழுமையான மதிப்பெண் பட்டியல் (திரையில் பார்க்க)</div>', unsafe_allow_html=True)
+            # --- 📋 UI-இல் முழுமையான மதிப்பெண் பட்டியல் (மாறி திரையில் பார்க்க) ---
+            st.markdown('<div class="responsive-subtitle">📋 முழுமையான மதிப்பெண் பட்டியல் (Interactive Screen View)</div>', unsafe_allow_html=True)
             show_det = st.toggle("🔍 மதிப்பீட்டு விவரங்களைக் காட்டு", value=True)
             
             final_disp = []
