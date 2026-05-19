@@ -44,7 +44,6 @@ st.markdown('<h3 style="color: #1E3A8A;">📊 SSLC TML PDF - நேரடி ப
 uploaded_file = st.file_uploader("பகுப்பாய்வு செய்ய வேண்டிய தேர்வுத் துறை TML PDF கோப்பைத் தேர்ந்தெடுக்கவும்...", type=["pdf"])
 
 if uploaded_file is not None:
-    # புதிய கோப்பு பதிவேற்றப்பட்டால் பழைய ஸ்டேட்களை ரீசெட் செய்தல்
     if st.session_state.pdf_file_name != uploaded_file.name:
         st.session_state.parsed_students = None
         st.session_state.excel_data = None
@@ -54,7 +53,6 @@ if uploaded_file is not None:
     st.success("✅ TML PDF வெற்றிகரமாகப் பதிவேற்றப்பட்டது!")
     split_gender = st.toggle("🔍 ஆண் பெண் பிரித்து காட்டு", value=True)
     
-    # பொத்தான்களுக்கான லேஅவுட்
     col_btn1, col_btn2 = st.columns(2)
     with col_btn1:
         process_analysis = st.button("📊 பள்ளி பகுப்பாய்வை மட்டும் காட்டு", type="primary", use_container_width=True)
@@ -80,14 +78,12 @@ if uploaded_file is not None:
                         for line in lines:
                             line_str = line.strip()
                             
-                            # பள்ளி பெயரைக் கண்டறிதல்
                             if not detected_school and ("GOVT HR" in line_str or "SCHL" in line_str or "SCHOOL" in line_str):
                                 schl_match = re.search(r'(GOVT\s+HR\s+SEC\s+SCHOOL\s+.*)', line_str)
                                 if schl_match:
                                     detected_school = clean_txt(schl_match.group(1))
                                     st.session_state.school_name = detected_school
                             
-                            # 1. முதல் வரி: Roll No, TMR No, English Name, Marks
                             first_line_match = re.match(r'^(\d{7})\s+([A-Z0-9]{8})\s+(.+)', line_str)
                             if first_line_match:
                                 if current_student: 
@@ -108,14 +104,19 @@ if uploaded_file is not None:
                                 student_name_eng = " ".join(name_parts)
                                 marks_tokens = tokens[tokens.index(dob)+1:] if dob in tokens else []
                                 
-                                # மேம்படுத்தப்பட்ட get_m - 'XXX' குறியீட்டையும் 0 என பாதுகாப்பாக மாற்றும்
+                                # உரை வடிவில் குறியீடு உள்ளதா எனப் பார்க்கும் மேம்படுத்தப்பட்ட get_m
                                 def get_m(idx, default=0):
                                     if idx < len(marks_tokens):
                                         val = str(marks_tokens[idx]).strip().upper()
-                                        if val in ['AAA', 'ABS', '-', '', '–', 'EX', 'XXX']: return 0
-                                        if val.isdigit(): return int(val)
+                                        if val in ['AAA', 'ABS', '-', '', '–', 'EX']: return "ABS"
+                                        if val == "XXX": return "EXEMPTED"
+                                        if val.isdigit(): 
+                                            num = int(val)
+                                            return "ABS" if num == 0 else num
                                         num_check = re.findall(r'\d+', val)
-                                        if num_check: return int(num_check[0])
+                                        if num_check: 
+                                            num = int(num_check[0])
+                                            return "ABS" if num == 0 else num
                                     return default
 
                                 lang_mark = get_m(1)
@@ -139,7 +140,6 @@ if uploaded_file is not None:
                                 }
                                 continue
                             
-                            # 2. இரண்டாம் வரி: தமிழ் பெயர் கண்டறிதல்
                             if current_student and line_str.startswith("XM"):
                                 reg_match = re.match(r'^XM[A-Z0-9]+\s+(.*?)\s+Father\'s Name\s*:', line_str)
                                 if reg_match:
@@ -147,7 +147,6 @@ if uploaded_file is not None:
                                     current_student["student_name_tam"] = clean_txt(t_name)
                                 continue
                                 
-                            # 3. மூன்றாம் வரி: இறுதி செய்தல்
                             if current_student and "Father's Name" not in line_str and not line_str.startswith("XM") and not re.match(r'^\d{7}', line_str):
                                 students_list.append(current_student)
                                 current_student = None
@@ -157,7 +156,7 @@ if uploaded_file is not None:
             except Exception as e:
                 st.error(f"❌ PDF கோப்பை பகுப்பதில் பிழை: {e}")
 
-    # --- பிரதான பள்ளிப் பெயர் தலைப்பு ரெண்டரிங் ---
+    # --- பிரதான பள்ளிப் பெயர் தலைப்பு ---
     st.markdown(f"<h2 style='text-align: center; color: #1E3A8A; font-weight: bold;'>🏫 {st.session_state.school_name}</h2>", unsafe_allow_html=True)
 
     # --- 5. Excel கோப்பு பதிவிறக்கம் பகுதி ---
@@ -166,17 +165,14 @@ if uploaded_file is not None:
             if st.session_state.excel_data is None:
                 flat_excel_rows = []
                 for s in st.session_state.parsed_students:
-                    # 0 மார்க் அல்லது XXX இருந்தால் எக்ஸ்ெல்லிலும் ABS என மாற்றுதல்
-                    def check_abs(val): return "ABS" if val == 0 else val
-                    
                     flat_excel_rows.append({
                         "Roll No": s.get("exam_no", ""), "TMR No": s.get("TMR No", ""), 
                         "Student Name (ENG)": s.get("student_name", ""), "Student Name (TAM)": s.get("student_name_tam", ""),
                         "Sex": s.get("gender", ""), "DOB": s.get("dob", ""), 
-                        "Language": check_abs(s.get("LANGUAGE", 0)), "English": check_abs(s.get("ENGLISH", 0)),
-                        "Maths": check_abs(s.get("MATHEMATICS", 0)), "Science THE": s.get("SCIENCE_THE", 0), "Science PRA": s.get("SCIENCE_PRA", 0),
-                        "Science TOT": check_abs(s.get("SCIENCE", 0)), "Social Science": check_abs(s.get("SOCIAL SCIENCE", 0)), 
-                        "Total": s.get("மொத்தம்", 0), "Result": "AAA" if s.get("Result") == "A" or s.get("மொத்தம்") == 0 else s.get("Result", "F")
+                        "Language": s.get("LANGUAGE", "ABS"), "English": s.get("ENGLISH", "ABS"),
+                        "Maths": s.get("MATHEMATICS", "ABS"), "Science THE": s.get("SCIENCE_THE", 0), "Science PRA": s.get("SCIENCE_PRA", 0),
+                        "Science TOT": s.get("SCIENCE", "ABS"), "Social Science": s.get("SOCIAL SCIENCE", "ABS"), 
+                        "Total": s.get("மொத்தம்", 0), "Result": s.get("Result", "F")
                     })
                 df_download = pd.DataFrame(flat_excel_rows)
                 excel_buffer = io.BytesIO()
@@ -214,33 +210,48 @@ if uploaded_file is not None:
                 total_m, fails, wrote_any, fail_subs, student_centums = 0, 0, False, [], []
 
                 for sn in g_list:
-                    tot = s.get(sn, 0)
+                    tot = s.get(sn)
                     subject_stats[sn]["total"][gen] += 1
                     
-                    # 0 மார்க், XXX, அல்லது 'A' இருந்தால் ஆப்சென்ட் (ABS) லாஜிக்
-                    if tot == 0 or s['Result'] == 'A' or s['Result'] == 'X':
-                        row_raw[sn] = "ABS"; fails += 1; fail_subs.append(sn)
-                        subject_stats[sn]["app"][gen] += 1; subject_stats[sn]["fail"][gen] += 1
+                    # 1. விலக்கு அளிக்கப்பட்ட பாடம் (EXEMPTED)
+                    if tot == "EXEMPTED":
+                        row_raw[sn] = "EXEMPTED"
+                        
+                    # 2. தேர்வு எழுதாத பாடம் (ABS / 0 மதிப்பெண்)
+                    elif tot == "ABS":
+                        row_raw[sn] = "ABS"
+                        fails += 1
+                        fail_subs.append(sn)
+                        # ABS ஆனால், அப்ளை செய்தவர்களில் மட்டும் கணக்கில் வரும் (தோற்றியவர்களில் வராது, ஃபெயிலில் வரும்)
+                        subject_stats[sn]["fail"][gen] += 1
+                    
+                    # 3. தேர்வு எழுதிய பாடம்
                     else:
                         wrote_any = True
+                        tot = int(tot)
+                        
                         if sn == "SCIENCE":
-                            is_subj_pass = (int(s.get("SCIENCE_THE", 0)) >= 15 and int(s.get("SCIENCE_PRA", 0)) >= 15 and int(tot) >= 35)
-                            tag_str = f"({s.get('SCIENCE_THE',0)}+{s.get('SCIENCE_PRA',0)})"
+                            th = int(s.get("SCIENCE_THE", 0)) if str(s.get("SCIENCE_THE")).isdigit() else 0
+                            pr = int(s.get("SCIENCE_PRA", 0)) if str(s.get("SCIENCE_PRA")).isdigit() else 0
+                            is_subj_pass = (th >= 15 and pr >= 15 and tot >= 35)
+                            tag_str = f"({th}+{pr})"
                         else:
-                            is_subj_pass = (int(tot) >= 35)
+                            is_subj_pass = (tot >= 35)
                             tag_str = ""
                             
                         subject_stats[sn]["app"][gen] += 1
-                        subject_stats[sn]["marks"].append(int(tot))
-                        subject_stats[sn]["student_marks"].append({"name": disp_name, "mark": int(tot), "exam_no": s['exam_no']})
+                        subject_stats[sn]["marks"].append(tot)
+                        subject_stats[sn]["student_marks"].append({"name": disp_name, "mark": tot, "exam_no": s['exam_no']})
                         
                         if is_subj_pass: 
                             subject_stats[sn]["pass"][gen] += 1
-                            if int(tot) == 100: student_centums.append(sn)
+                            if tot == 100: student_centums.append(sn)
                         else: 
-                            subject_stats[sn]["fail"][gen] += 1; fails += 1; fail_subs.append(sn)
+                            subject_stats[sn]["fail"][gen] += 1
+                            fails += 1
+                            fail_subs.append(sn)
                             
-                        total_m += int(tot)
+                        total_m += tot
                         row_raw[sn] = {"tot": tot, "tag": tag_str, "pass": is_subj_pass}
 
                 if wrote_any:
@@ -279,7 +290,7 @@ if uploaded_file is not None:
             """
             st.markdown(html_dashboard, unsafe_allow_html=True)
 
-            # --- Centums & Absentees ---
+            # --- Expander Panels ---
             c_e1, c_e2 = st.columns(2)
             with c_e1:
                 with st.expander(f"🏆 100/100 பெற்றவர்கள்: {len(centum_list)} பேர்"):
@@ -293,14 +304,21 @@ if uploaded_file is not None:
             sub_df_list = []
             for sn in g_list:
                 stt = subject_stats[sn]
-                if not (stt['app']['F'] + stt['app']['M']) > 0: continue
+                total_applied = stt['total']['F'] + stt['total']['M']
+                total_appeared = stt['app']['F'] + stt['app']['M']
+                total_passed = stt['pass']['F'] + stt['pass']['M']
+                total_failed = stt['fail']['F'] + stt['fail']['M']
+                
                 avg_s = round(sum(stt["marks"])/len(stt["marks"]),1) if stt["marks"] else 0
+                pass_perc = f"{round((total_passed / total_appeared) * 100, 1)}%" if total_appeared > 0 else "0.0%"
+                
                 sub_df_list.append({
-                    "Subject": sn, "Total": f"{stt['total']['F']+stt['total']['M']} ({stt['total']['F']}F|{stt['total']['M']}M)", 
-                    "App": f"{stt['app']['F']+stt['app']['M']} ({stt['app']['F']}F|{stt['app']['M']}M)",
-                    "Pass": f"{stt['pass']['F']+stt['pass']['M']} ({stt['pass']['F']}F|{stt['pass']['M']}M)", 
-                    "Fail": f"{stt['fail']['F']+stt['fail']['M']} ({stt['fail']['F']}F|{stt['fail']['M']}M)",
-                    "Pass%": f"{round((stt['pass']['F']+stt['pass']['M'])/(stt['app']['F']+stt['app']['M'])*100,1)}%",
+                    "Subject": sn, 
+                    "Total (Applied)": f"{total_applied} ({stt['total']['F']}F|{stt['total']['M']}M)", 
+                    "Appeared (தேர்வு எழுதியோர்)": f"{total_appeared} ({stt['app']['F']}F|{stt['app']['M']}M)",
+                    "Pass": f"{total_passed} ({stt['pass']['F']}F|{stt['pass']['M']}M)", 
+                    "Fail (ABS சேர்த்துக் காட்டுகிறது)": f"{total_failed} ({stt['fail']['F']}F|{stt['fail']['M']}M)",
+                    "Pass% (Appeared மட்டும் வைத்து)": pass_perc,
                     "Min": min(stt["marks"]) if stt["marks"] else 0, "Max": max(stt["marks"]) if stt["marks"] else 0, "Avg": avg_s
                 })
             st.table(pd.DataFrame(sub_df_list))
@@ -321,7 +339,7 @@ if uploaded_file is not None:
                             st.markdown(f"<div class='topper-card' style='border-left-color:red; background-color:#fff5f5;'>🔻 கடைசி: {last['name']} ({last['mark']})</div>", unsafe_allow_html=True)
 
             # --- 📋 முழுமையான மதிப்பெண் பட்டியல் ---
-            st.markdown('<div class="responsive-subtitle">📋 முழுமையான மதிப்பெண் பட்டியல் (மாணவர் தமிழ் பெயர்களுடன்)</div>', unsafe_allow_html=True)
+            st.markdown('<div class="responsive-subtitle">📋 முழுமையான மதிப்பெண் பட்டியல் (தேர்வுத்துறை TML வடிவமைப்பு)</div>', unsafe_allow_html=True)
             show_det = st.toggle("🔍 மதிப்பீட்டு விவரங்களைக் காட்டு", value=True)
             df_sorted = pd.DataFrame(report_rows).sort_values(by=["Fails", "மொத்தம்"], ascending=[True, False]).reset_index(drop=True)
             
