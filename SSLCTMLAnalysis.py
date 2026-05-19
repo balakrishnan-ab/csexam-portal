@@ -17,12 +17,11 @@ st.markdown("""
     .stat-label { font-size: 11px; color: #64748b; font-weight: bold; text-transform: uppercase; }
     .gender-sub { font-size: 10px; color: #3b82f6; font-weight: bold; display: block; margin-top: 2px; }
     .responsive-subtitle { font-size: 20px; font-weight: bold; color: #334155; border-bottom: 2px solid #e2e8f0; margin: 15px 0 10px 0; }
-    .info-card { padding: 10px; border-radius: 6px; margin-bottom: 8px; border-left: 4px solid #10b981; background-color: #f0fdf4; font-size: 14px; font-weight: bold; }
-    .topper-card { padding: 8px; border-radius: 5px; margin-bottom: 5px; background-color: #fffbeb; border-left: 4px solid #f59e0b; font-size: 13px; }
+    .info-card { padding: 8px 12px; border-radius: 6px; margin-bottom: 8px; border-left: 4px solid #10b981; background-color: #f0fdf4; font-size: 13px; font-weight: bold; color: #1e293b; }
     
     /* பிரிண்டரில் அச்சிடும் போது தேவையில்லாத கூறுகளை மறைக்கும் CSS */
     @media print {
-        header, [data-testid="stSidebar"], [data-testid="stHeader"], .stButton, [data-testid="stElementToolbar"], .stToggle, hr {
+        header, [data-testid="stSidebar"], [data-testid="stHeader"], .stButton, [data-testid="stElementToolbar"], .stToggle, hr, .instructions-box {
             display: none !important;
         }
         .main .block-container {
@@ -32,11 +31,15 @@ st.markdown("""
     }
     
     /* அச்சிடக்கூடிய தாள்களுக்கான அட்டவணை வடிவமைப்பு */
-    .print-table { width: 100%; border-collapse: collapse; font-family: Arial, sans-serif; font-size: 10pt; margin-top: 15px; }
+    .print-table { width: 100%; border-collapse: collapse; font-family: Arial, sans-serif; font-size: 10pt; margin-top: 15px; margin-bottom: 25px; }
     .print-table th { background-color: #1e3a8a !important; color: white !important; padding: 8px 5px; border: 1px solid #cbd5e1; font-size: 9.5pt; text-align: center; }
     .print-table td { border: 1px solid #cbd5e1; padding: 7px 5px; text-align: center; font-weight: bold; color: #1e293b; }
     .print-table tr:nth-child(even) { background-color: #f8fafc; }
     .print-header { text-align: center; padding-bottom: 10px; border-bottom: 3px double #1e3a8a; margin-bottom: 20px; }
+    
+    /* தனித்துவ அச்சு அட்டைகள் */
+    .report-card-print { padding: 12px; border: 1px solid #cbd5e1; background-color: #f8fafc; border-radius: 6px; margin-bottom: 15px; font-family: Arial, sans-serif; font-size: 10.5pt; }
+    .report-card-print b { color: #1e3a8a; }
     </style>
     """, unsafe_allow_html=True)
 
@@ -211,9 +214,10 @@ if uploaded_file is not None:
             g_list = ["LANGUAGE", "ENGLISH", "MATHEMATICS", "SCIENCE", "SOCIAL SCIENCE"]
             
             report_rows, centum_list, absent_list = [], [], []
+            one_fail_list, two_fail_list = [], [] # ஒரு பாடம், இரு பாடம் தோல்வி பட்டியல்கள்
+            
             st_count = {"total": {"A": 0, "M": 0, "F": 0}, "present": {"A": 0, "M": 0, "F": 0}, "pass": {"A": 0, "M": 0, "F": 0}, "fail": {"A": 0, "M": 0, "F": 0}}
             subject_stats = {sn: {"total": {"M": 0, "F": 0}, "app": {"M": 0, "F": 0}, "pass": {"M": 0, "F": 0}, "fail": {"M": 0, "F": 0}, "marks": [], "student_marks": []} for sn in g_list}
-            fail_cats = {1: [], 2: [], 3: [], 4: [], 5: [], "All": []}
 
             for s in st.session_state.parsed_students:
                 gen = s['gender'] if s['gender'] in ['M', 'F'] else 'M'
@@ -261,22 +265,27 @@ if uploaded_file is not None:
                         total_m += tot
                         row_raw[sn] = {"tot": tot, "tag": tag_str, "pass": is_subj_pass}
 
+                # ஒரு பாடம், இரு பாடம் தோல்வி விவரங்களைச் சேகரித்தல்
+                student_desc = f"{disp_name} (தேர்வு எண்: {s['exam_no']}) - [{', '.join(fail_subs)}]"
+                if fails == 1:
+                    one_fail_list.append(student_desc)
+                elif fails == 2:
+                    two_fail_list.append(student_desc)
+
                 if wrote_any:
                     st_count["present"]["A"] += 1; st_count["present"][gen] += 1
                     if fails == 0: st_count["pass"]["A"] += 1; st_count["pass"][gen] += 1
-                    else:
-                        st_count["fail"]["A"] += 1; st_count["fail"][gen] += 1
-                        txt = f"{disp_name} - ({', '.join(fail_subs)})"
-                        if fails >= len(g_list): fail_cats["All"].append(txt)
-                        elif fails in [1,2,3,4,5]: fail_cats[fails].append(txt)
-                    if student_centums: centum_list.append(f"🥇 {disp_name} - {', '.join(student_centums)}")
+                    else: st_count["fail"]["A"] += 1; st_count["fail"][gen] += 1
+                    
+                    if student_centums: 
+                        centum_list.append(f"🥇 {disp_name} (தேர்வு எண்: {s['exam_no']}) - பாடங்கள்: {', '.join(student_centums)}")
                 else: 
-                    absent_list.append(f"❌ {disp_name}")
+                    absent_list.append(f"❌ {disp_name} (தேர்வு எண்: {s['exam_no']})")
 
                 row_raw.update({"மொத்தம்": total_m, "Fails": fails, "தோல்வி விவரம்": f"({', '.join(fail_subs)})" if fail_subs else ""})
                 report_rows.append(row_raw)
 
-            # --- Dashboard Cards UI ---
+            # --- Dashboard Metrics UI ---
             st.markdown('<div class="responsive-subtitle">📊 PDF-லிருந்து பெறப்பட்ட பள்ளி ஒட்டுமொத்தப் புள்ளிவிவரம்</div>', unsafe_allow_html=True)
             gt_total = f"({st_count['total']['F']}F|{st_count['total']['M']}M)" if split_gender else ""
             gt_present = f"({st_count['present']['F']}F|{st_count['present']['M']}M)" if split_gender else ""
@@ -294,7 +303,6 @@ if uploaded_file is not None:
             md_col6.metric("School Avg", f"{avg_v}")
 
             # --- 📈 பாடவாரி விரிவான பகுப்பாய்வு ---
-            st.markdown('<div class="responsive-subtitle">📈 பாடவாரி விரிவான பகுப்பாய்வு</div>', unsafe_allow_html=True)
             sub_df_list = []
             for sn in g_list:
                 stt = subject_stats[sn]
@@ -302,7 +310,6 @@ if uploaded_file is not None:
                 total_appeared = stt['app']['F'] + stt['app']['M']
                 total_passed = stt['pass']['F'] + stt['pass']['M']
                 total_failed = stt['fail']['F'] + stt['fail']['M']
-                
                 avg_s = round(sum(stt["marks"])/len(stt["marks"]),1) if stt["marks"] else 0
                 pass_perc = f"{round((total_passed / total_appeared) * 100, 1)}%" if total_appeared > 0 else "0.0%"
                 
@@ -311,24 +318,29 @@ if uploaded_file is not None:
                     "Pass": f"{total_passed}", "Fail": f"{total_failed}", "Pass%": pass_perc, 
                     "Min": min(stt["marks"]) if stt["marks"] else 0, "Max": max(stt["marks"]) if stt["marks"] else 0, "Avg": avg_s
                 })
-            st.table(pd.DataFrame(sub_df_list))
 
-            # --- Ranks sorting (பிழை பிக்ஸ் செய்யப்பட்ட பகுதி) ---
             df_sorted = pd.DataFrame(report_rows).sort_values(by=["Fails", "மொத்தம்"], ascending=[True, False]).reset_index(drop=True)
             df_sorted["Rank"] = "-"
             df_sorted["Rank"] = df_sorted["Rank"].astype(object)
-            
             rv = 1
             for idx, row in df_sorted.iterrows():
-                # இண்டென்டேஷன் பிழை இங்கே முழுமையாகச் சீரமைக்கப்பட்டுள்ளது
                 if int(row["Fails"]) == 0: 
                     df_sorted.at[idx, "Rank"] = str(rv)
                     rv += 1
 
-            # --- 🖨️ அச்சிடக்கூடிய அறிக்கை வடிவம் ---
-            st.markdown('<div class="responsive-subtitle">🖨️ அச்சிடக்கூடிய அறிக்கை வடிவம் (Printable Report Layout)</div>', unsafe_allow_html=True)
-            st.info("💡 **பிரிண்ட் செய்யும் முறை:** இந்த ரிப்போர்ட்டை அப்படியே அச்சிட உங்கள் விசைப்பலகையில் **Ctrl + P** அழுத்தவும். சைட் பார் மற்றும் தேவையற்ற பொத்தான்கள் தானாகவே மறைந்துவிடும்.")
+            # --- 🖨️ புதிய அம்சம்: அச்சிடக்கூடிய விரிவான அறிக்கை வடிவம் ---
+            st.markdown('<div class="responsive-subtitle">🖨️ அச்சிடக்கூடிய சிறப்பு அறிக்கை வடிவம் (Printable Report Layout)</div>', unsafe_allow_html=True)
+            st.info("💡 **பிரிண்ட் செய்ய:** உங்கள் கீபோர்டில் **Ctrl + P** அழுத்தவும். சைட் பார் மெனுக்கள் மறைந்து, கீழே உள்ள அறிக்கை மட்டும் அழகாக A4 தாளில் அச்சிடப்படும்.")
             
+            # 1. 100/100 மதிப்பெண் பெற்றவர்கள் HTML
+            centum_html = "".join([f"<div class='info-card'>{c}</div>" for c in centum_list]) if centum_list else "<p><i>யாரும் இல்லை</i></p>"
+            # 2. தேர்வு எழுதாதவர்கள் HTML
+            absent_html = "".join([f"<div class='info-card' style='border-left-color:red; background-color:#fff5f5;'>{a}</div>" for a in absent_list]) if absent_list else "<p><i>யாரும் இல்லை</i></p>"
+            # 3. ஒரு பாடத்தில் தோல்வி HTML
+            one_fail_html = "".join([f"<div class='info-card' style='border-left-color:#f59e0b; background-color:#fffbeb;'>⚠️ {o}</div>" for o in one_fail_list]) if one_fail_list else "<p><i>யாரும் இல்லை</i></p>"
+            # 4. இரு பாடங்களில் தோல்வி HTML
+            two_fail_html = "".join([f"<div class='info-card' style='border-left-color:#ef4444; background-color:#fef2f2;'>🚩 {t}</div>" for t in two_fail_list]) if two_fail_list else "<p><i>யாரும் இல்லை</i></p>"
+
             sub_table_rows_html = ""
             for item in sub_df_list:
                 sub_table_rows_html += f"<tr><td>{item['Subject']}</td><td>{item['Total (Applied)']}</td><td>{item['Appeared (தேர்வு எழுதியோர்)']}</td><td>{item['Pass']}</td><td>{item['Fail']}</td><td style='color:green;'>{item['Pass%']}</td><td>{item['Min']}</td><td>{item['Max']}</td><td>{item['Avg']}</td></tr>"
@@ -356,6 +368,31 @@ if uploaded_file is not None:
                     <div class="school-title">🏫 {st.session_state.school_name}</div>
                     <div style="font-size:13pt; font-weight:bold; color:#475569; margin-top:5px;">SSLC TML PERFORMANCE ANALYSIS REPORT</div>
                 </div>
+                
+                <h4 style="color:#1e3a8a; border-bottom: 2px solid #e2e8f0; padding-bottom:5px;">[பிரிவு 1] சிறப்புப் பட்டியல்கள் (Special Student Lists)</h4>
+                <div style="display: flex; gap: 15px; flex-wrap: wrap; margin-bottom: 20px;">
+                    <div style="flex: 1; min-width: 250px;">
+                        <h5 style="color:green; margin-bottom:5px;">🥇 100/100 மதிப்பெண் பெற்றவர்கள்:</h5>
+                        {centum_html}
+                    </div>
+                    <div style="flex: 1; min-width: 250px;">
+                        <h5 style="color:red; margin-bottom:5px;">❌ தேர்வு எழுத வராதவர்கள் (Absent):</h5>
+                        {absent_html}
+                    </div>
+                </div>
+                
+                <div style="display: flex; gap: 15px; flex-wrap: wrap; margin-bottom: 20px;">
+                    <div style="flex: 1; min-width: 250px;">
+                        <h5 style="color:#f59e0b; margin-bottom:5px;">⚠️ ஒரு பாடத்தில் மட்டும் தோல்வி அடைந்தவர்கள்:</h5>
+                        {one_fail_html}
+                    </div>
+                    <div style="flex: 1; min-width: 250px;">
+                        <h5 style="color:#ef4444; margin-bottom:5px;">🚩 இரு பாடங்களில் மட்டும் தோல்வி அடைந்தவர்கள்:</h5>
+                        {two_fail_html}
+                    </div>
+                </div>
+
+                <h4 style="margin-top:35px; color:#1e3a8a; border-bottom: 2px solid #e2e8f0; padding-bottom:5px;">[பிரிவு 2] பாடவாரி புள்ளிவிவரச் சுருக்கம்</h4>
                 <table class="print-table">
                     <thead>
                         <tr>
@@ -374,7 +411,8 @@ if uploaded_file is not None:
                         {sub_table_rows_html}
                     </tbody>
                 </table>
-                <h4 style="margin-top:35px; color:#1e3a8a; border-bottom: 2px solid #e2e8f0; padding-bottom:5px;">Consolidated Student Mark Register</h4>
+                
+                <h4 style="margin-top:35px; color:#1e3a8a; border-bottom: 2px solid #e2e8f0; padding-bottom:5px;">[பிரிவு 3] Consolidated Student Mark Register</h4>
                 <table class="print-table">
                     <thead>
                         <tr>
@@ -399,7 +437,7 @@ if uploaded_file is not None:
             """
             st.markdown(full_report_html, unsafe_allow_html=True)
             st.divider()
-
+            
             # --- 📋 UI-இல் முழுமையான மதிப்பெண் பட்டியல் (திரையில் பார்க்க மட்டும்) ---
             st.markdown('<div class="responsive-subtitle">📋 முழுமையான மதிப்பெண் பட்டியல் (Interactive Screen View)</div>', unsafe_allow_html=True)
             show_det = st.toggle("🔍 மதிப்பீட்டு விவரங்களைக் காட்டு", value=True)
