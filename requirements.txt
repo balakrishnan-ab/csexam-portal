@@ -6,3 +6,4 @@ supabase
 plotly
 xlsxwriter
 pdfplumber
+weasyprint
