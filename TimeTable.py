@@ -76,9 +76,9 @@ with tab1:
                 "Period": "பாடவேளை (Period)",
                 "Subject": "பாடம் (Subject)"
             })
-            
-            # தேவையற்ற Staff காலமை நீக்கிவிட்டு காட்டுதல்
-            st.dataframe(df_display[["Corporate/School Day", "வகுப்பு (Class)", "பாடவேளை (Period)", "பாடம் (Subject)"]], use_container_width=True)
+
+            # இங்கு "Corporate/School Day" என்பதற்குப் பதிலாக "கிழமை (Day)" என்று மாற்றப்பட்டுள்ளது
+            st.dataframe(df_display[["கிழமை (Day)", "வகுப்பு (Class)", "பாடவேளை (Period)", "பாடம் (Subject)"]], use_container_width=True)
         else:
             st.warning("குறிப்பிட்ட ஆசிரியருக்கான தேர்வுப் பணி விவரங்கள் தற்போதைய அட்டவணையில் இல்லை.")
 
