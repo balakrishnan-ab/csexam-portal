@@ -78,5 +78,5 @@ with tab2:
         })
         st.dataframe(df_class, use_container_width=True)
 
----
+
 st.caption("உருவாக்கப்பட்டது: கணினித் துறை போர்ட்டல் 2026")
